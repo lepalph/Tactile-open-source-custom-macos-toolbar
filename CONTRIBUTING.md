@@ -27,7 +27,8 @@ Si l'image est entièrement noire, l'écran était en veille : réveille-le et r
 Deux variables aident à capturer ce qu'on ne peut pas toucher :
 
 - `TACTILE_OUVRIR=1 target/release/tactile` présente directement la sous-barre n° 1 (premier slider ou groupe) ;
-- `TACTILE_MASQUER=1 target/release/tactile` rend la barre d'Apple 2 s après le lancement.
+- `TACTILE_MASQUER=1 target/release/tactile` rend la barre d'Apple 2 s après le lancement ;
+- `TACTILE_RETOUR=1` (avec la précédente) ramène la barre de Tactile à 4 s, par le même chemin qu'un toucher sur ✳.
 
 ## Commits
 

@@ -153,6 +153,7 @@ pub fn masquer() {
     let courante = COURANTE.get();
     if !courante.is_null() {
         unsafe { let _: () = msg_send![class!(NSTouchBar), minimizeSystemModalTouchBar: courante]; }
+        plateau::montrer_icone();
     }
 }
 
@@ -189,6 +190,9 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         installer(&config);
         if std::env::var("TACTILE_MASQUER").is_ok() {
             let _: () = msg_send![cible(), performSelector: sel!(masquerBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.0f64];
+        }
+        if std::env::var("TACTILE_RETOUR").is_ok() {
+            let _: () = msg_send![cible(), performSelector: sel!(afficherBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 4.0f64];
         }
 
         let _: Id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.1f64, target: cible(), selector: sel!(tic:), userInfo: std::ptr::null_mut::<AnyObject>(), repeats: Bool::YES];

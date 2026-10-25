@@ -88,6 +88,7 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 
 - `cargo test` : config, parsing des médias, et luminosité / volume réels (valeur changée, relue, restaurée). Avec `CI` défini, les tests matériels sortent tout de suite.
 - `TACTILE_OUVRIR=k target/release/tactile` présente directement la sous-barre `k` (1 = premier slider ou groupe) : utile pour la capturer.
-- `TACTILE_MASQUER=1` réduit la barre 2 s après le lancement, pour tester le retour à la barre d'Apple.
+- `TACTILE_MASQUER=1` réduit la barre 2 s après le lancement ; `TACTILE_RETOUR=1` la ramène à 4 s comme un toucher sur ✳.
+- Après une réduction, l'icône ✳ doit être réaffichée (`plateau::montrer_icone`) : le système l'oublie quand une barre système est présentée.
 - `screencapture -b barre.png` capture la Touch Bar.
 - `top -l 3 -s 3 -pid $(pgrep -x tactile) -stats cpu,mem` mesure la consommation au repos (cible : moins de 1 % de CPU).
