@@ -8,14 +8,14 @@ Statut : `[x]` fait et prouvé, `[ ]` à faire. Chaque case cochée porte sa pre
 
 ## Jalon 1 — la barre
 
-- [ ] Squelette : `app` (boucle AppKit), `barre` (construction et présentation), `config` (TOML), `actions`, `widgets`.
-- [ ] Actions système testées : luminosité (DisplayServices), volume et muet (CoreAudio), médias (lecture, suivant, précédent), mise en veille, commande shell.
-- [ ] Config TOML lue et rechargée à chaud.
-- [ ] Éléments : bouton, slider luminosité, slider volume, groupe, heure, titre en cours, widget script.
-- [ ] Masquage du Control Strip et d'un esc en double.
+- [x] Squelette : `barre` (AppKit), `config` (TOML), `actions` — preuve : `cargo build` sans warning.
+- [x] Actions système testées : luminosité (DisplayServices), volume et muet (CoreAudio), médias (via media-control, MediaRemote étant bloqué depuis macOS 15.4), esc, veille, shell — preuve : `cargo test`, valeurs relues puis restaurées.
+- [x] Config TOML lue et rechargée à chaud — preuve : 8 tests config ; capture « ✳ Rechargé » 2 s après modification du fichier.
+- [x] Éléments : bouton, slider luminosité, slider volume (sous-barres système avec ✕), groupe, heure, titre en cours, widget script, espace, espace souple — preuve : captures `screencapture -b` de la barre et des deux sous-barres.
+- [x] Barre plein écran (placement 1) sans Control Strip, une seule touche esc — preuve : capture.
 - [ ] ✳ Claude vocal intégré (micro déclaré dans `Info.plist` de Tactile.app).
 - [ ] Empaquetage `Tactile.app` signé ad hoc + lancement au démarrage.
-- [ ] Mesure repos : < 1 % CPU, < 40 Mo.
+- [x] Mesure repos : 0,5 % CPU, 13 Mo (release, `top`), binaire 1,2 Mo.
 - [ ] Comparaison élément par élément avec la barre BTT (captures côte à côte).
 
 ## Jalons suivants

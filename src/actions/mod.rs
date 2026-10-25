@@ -1,5 +1,6 @@
 //! Actions système, utilisables sans interface (testables en ligne de commande).
 
+pub mod clavier;
 pub mod luminosite;
 pub mod media;
 pub mod volume;
@@ -23,6 +24,7 @@ pub enum Action {
     Suivant,
     Precedent,
     Veille,
+    Echap,
     Shell(String),
 }
 
@@ -41,6 +43,7 @@ pub fn executer(action: &Action) -> Resultat<()> {
         Action::Suivant => media::suivant(),
         Action::Precedent => media::precedent(),
         Action::Veille => lancer("/usr/bin/pmset", &["sleepnow"]),
+        Action::Echap => clavier::touche(53),
         Action::Shell(commande) => lancer("/bin/zsh", &["-c", commande]),
     }
 }

@@ -41,6 +41,7 @@ struct Etat {
 thread_local! {
     static ETAT: RefCell<Option<Etat>> = const { RefCell::new(None) };
     static CIBLE: RefCell<Option<Retained<Cible>>> = const { RefCell::new(None) };
+    static RECHARGES: RefCell<Option<Receiver<Result<Barre, String>>>> = const { RefCell::new(None) };
 }
 
 define_class!(
@@ -73,6 +74,12 @@ define_class!(
 
         #[unsafe(method(tic:))]
         fn tic(&self, _minuteur: Id) {
+            let recharge = RECHARGES.with_borrow(|r| r.as_ref().and_then(|r| r.try_recv().ok()));
+            match recharge {
+                Some(Ok(config)) => installer(&config),
+                Some(Err(e)) => eprintln!("tactile : config ignorée, {e}"),
+                None => {}
+            }
             rafraichir();
         }
     }
@@ -221,6 +228,10 @@ fn barre_touch(identifiant: &str, items: Vec<Id>) -> Id {
         let idents: Id = msg_send![class!(NSMutableArray), array];
         let ensemble: Id = msg_send![class!(NSMutableSet), set];
         for item in items {
+            if item.is_null() {
+                let _: () = msg_send![idents, addObject: &*texte("NSTouchBarItemIdentifierFlexibleSpace")];
+                continue;
+            }
             let id: Id = msg_send![item, identifier];
             let _: () = msg_send![idents, addObject: id];
             let _: () = msg_send![ensemble, addObject: item];
@@ -285,6 +296,7 @@ fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -> Vec<Id> {
                 largeur_fixe(vue, *largeur);
                 item_vue(&ident, vue)
             }
+            Element::Souple => std::ptr::null_mut(),
             Element::Groupe { texte: t, symbole: s, elements: enfants } => {
                 let sous_items = construire(enfants, &ident, etat);
                 depliable(&ident, s.as_deref(), t.as_deref(), sous_items, etat)
@@ -366,29 +378,33 @@ fn presenter(barre: Id) {
     }
 }
 
-pub fn lancer(config: Barre) {
+fn installer(config: &Barre) {
+    let (envoi, reception) = channel();
+    let mut etat = Etat {
+        commandes: Vec::new(),
+        barres: vec![std::ptr::null_mut()],
+        rafraichis: Vec::new(),
+        prochain_media: Instant::now(),
+        envoi,
+        reception,
+    };
+    let items = construire(&config.elements, "fr.palph.tactile", &mut etat);
+    etat.barres[0] = barre_touch("fr.palph.tactile", items);
+    let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());
+    let principale = etat.barres[0];
+    ETAT.with_borrow_mut(|place| *place = Some(etat));
+    presenter(a_presenter.unwrap_or(principale));
+}
+
+pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
     unsafe {
         let app: Id = msg_send![class!(NSApplication), sharedApplication];
         let _: Bool = msg_send![app, setActivationPolicy: 1isize];
 
         let c: Retained<Cible> = msg_send![Cible::class(), new];
         CIBLE.with_borrow_mut(|place| *place = Some(c));
-
-        let (envoi, reception) = channel();
-        let mut etat = Etat {
-            commandes: Vec::new(),
-            barres: vec![std::ptr::null_mut()],
-            rafraichis: Vec::new(),
-            prochain_media: Instant::now(),
-            envoi,
-            reception,
-        };
-        let items = construire(&config.elements, "fr.palph.tactile", &mut etat);
-        etat.barres[0] = barre_touch("fr.palph.tactile", items);
-        let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());
-        let principale = etat.barres[0];
-        ETAT.with_borrow_mut(|place| *place = Some(etat));
-        presenter(a_presenter.unwrap_or(principale));
+        RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
+        installer(&config);
 
         let _: Id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.1f64, target: cible(), selector: sel!(tic:), userInfo: std::ptr::null_mut::<AnyObject>(), repeats: Bool::YES];
         rafraichir();

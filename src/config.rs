@@ -48,6 +48,7 @@ pub enum Element {
     Espace {
         largeur: f64,
     },
+    Souple,
     Groupe {
         texte: Option<String>,
         symbole: Option<String>,
@@ -185,6 +186,14 @@ mod tests {
         let attendu = Barre {
             masquer_control_strip: true,
             elements: vec![
+                Element::Bouton {
+                    texte: Some("esc".into()),
+                    symbole: None,
+                    couleur: None,
+                    largeur: Some(64.0),
+                    action: Some(Action::Echap),
+                    appui_long: None,
+                },
                 Element::Slider {
                     reglage: Reglage::Luminosite,
                     symbole: Some("sun.max.fill".into()),
@@ -193,6 +202,7 @@ mod tests {
                     reglage: Reglage::Volume,
                     symbole: Some("speaker.wave.2.fill".into()),
                 },
+                Element::Souple,
                 Element::Bouton {
                     texte: None,
                     symbole: Some("backward.fill".into()),
@@ -212,6 +222,7 @@ mod tests {
                     action: Some(Action::Suivant),
                     appui_long: None,
                 },
+                Element::Souple,
                 Element::Heure {
                     format: Some("HH:mm".into()),
                 },

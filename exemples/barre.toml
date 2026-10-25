@@ -4,6 +4,13 @@
 # Cache la bande de boutons système d'Apple, à droite.
 masquer_control_strip = true
 
+# Touche esc (la barre plein écran remplace celle du système).
+[[element]]
+type = "bouton"
+texte = "esc"
+largeur = 64
+action = "echap"
+
 # Curseur de luminosité de l'écran.
 [[element]]
 type = "slider"
@@ -15,6 +22,10 @@ symbole = "sun.max.fill"
 type = "slider"
 reglage = "volume"
 symbole = "speaker.wave.2.fill"
+
+# Espace souple : pousse la suite vers le centre.
+[[element]]
+type = "souple"
 
 # ⏪ Morceau précédent.
 [[element]]
@@ -32,6 +43,10 @@ largeur = 330
 type = "bouton"
 symbole = "forward.fill"
 action = "suivant"
+
+# Espace souple : pousse la suite vers la droite.
+[[element]]
+type = "souple"
 
 # Heure (HH = heures, mm = minutes).
 [[element]]
