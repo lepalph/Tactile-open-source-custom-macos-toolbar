@@ -457,6 +457,7 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         CIBLE.with_borrow_mut(|place| *place = Some(c));
         RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
         installer_plateau();
+        crate::menu::installer();
         installer(&config);
         if std::env::var("TACTILE_MASQUER").is_ok() {
             let _: () = msg_send![cible(), performSelector: sel!(masquerBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.0f64];
