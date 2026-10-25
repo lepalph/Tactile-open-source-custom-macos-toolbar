@@ -64,7 +64,7 @@ Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symb
 | `slider` | `reglage` (`"luminosite"` ou `"volume"`), `symbole` | Un bouton qui ouvre une sous-barre avec un curseur ; ✕ la referme. |
 | `heure` | `format` (format de date Apple, `"HH:mm"` par défaut) | L'heure, mise à jour en continu. |
 | `en_cours` | `largeur` | Le titre et l'artiste en cours de lecture (44 caractères au plus, rafraîchi toutes les 2 s) ; un appui met en pause ou relance. Demande `media-control`. |
-| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `largeur`, `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle. |
+| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle. Un texte plus large que l’élément est coupé. |
 | `espace` | `largeur` (obligatoire) | Un vide de largeur fixe. |
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
 | `groupe` | `texte`, `symbole`, puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
@@ -126,6 +126,7 @@ Compiler depuis les sources (Rust stable ; le dépôt fournit un `mise.toml`) :
 cargo build --release      # target/release/tactile, pour essayer
 cargo test                 # attention : règle puis restaure vraiment luminosité et volume
 scripts/empaqueter.sh      # target/Tactile.app universelle et target/Tactile.zip
+scripts/verifier.sh        # actionne chaque contrôle sur la vraie Touch Bar et vérifie l'effet (écran allumé)
 ```
 
 ## Limites connues

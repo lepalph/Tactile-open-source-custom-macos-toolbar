@@ -4,6 +4,7 @@
 //! est donc une sous-barre système à part entière, présentée à la place de la principale,
 //! avec un bouton ✕ qui ramène la principale.
 
+mod autotest;
 mod elements;
 mod plateau;
 mod rafraichi;
@@ -39,6 +40,8 @@ struct Etat {
     prochain_media: Instant,
     envoi: Sender<(usize, String)>,
     reception: Receiver<(usize, String)>,
+    /// Contrôles nommés (« ouvrir sun.max.fill », « fermer », « slider luminosite »…), pour l'autotest.
+    controles: Vec<(String, Id)>,
 }
 
 thread_local! {
@@ -87,6 +90,11 @@ define_class!(
             masquer();
         }
 
+        #[unsafe(method(etapeAutotest:))]
+        fn etape_autotest(&self, _envoyeur: Id) {
+            autotest::etape();
+        }
+
         #[unsafe(method(tic:))]
         fn tic(&self, _minuteur: Id) {
             let recharge = RECHARGES.with_borrow(|r| r.as_ref().and_then(|r| r.try_recv().ok()));
@@ -121,7 +129,7 @@ fn declencher(index: isize, long: bool) {
         Some((Commande::Systeme(Action::BarreApple), _)) => masquer(),
         Some((Commande::Systeme(action), _)) => signaler(actions::executer(&action)),
         Some((Commande::Ouvrir(k), barres)) => presenter(barres[k]),
-        Some((Commande::Fermer, barres)) => presenter(barres[0]),
+        Some((Commande::Fermer, barres)) => fermer_sous_barre(barres[0]),
         None => {}
     }
 }
@@ -141,10 +149,20 @@ fn presenter(barre: Id) {
 }
 
 
+/// Les barres système s'empilent : présenter à nouveau la principale ne la remet pas au-dessus
+/// d'une sous-barre ouverte. On retire donc la sous-barre avant.
+fn fermer_sous_barre(principale: Id) {
+    let courante = COURANTE.get();
+    if !courante.is_null() && courante != principale {
+        unsafe { let _: () = msg_send![class!(NSTouchBar), dismissSystemModalTouchBar: courante]; }
+    }
+    presenter(principale);
+}
+
 /// Remet la barre tactile à la place de celle d'Apple.
 pub fn afficher() {
     if let Some(principale) = ETAT.with_borrow(|e| e.as_ref().map(|e| e.barres[0])) {
-        presenter(principale);
+        fermer_sous_barre(principale);
     }
 }
 
@@ -163,6 +181,7 @@ fn installer(config: &Barre) {
     let (envoi, reception) = channel();
     let mut etat = Etat {
         commandes: Vec::new(),
+        controles: Vec::new(),
         barres: vec![std::ptr::null_mut()],
         rafraichis: Vec::new(),
         prochain_media: Instant::now(),
@@ -190,6 +209,9 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         installer(&config);
         if std::env::var("TACTILE_MASQUER").is_ok() {
             let _: () = msg_send![cible(), performSelector: sel!(masquerBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.0f64];
+        }
+        if std::env::var("TACTILE_AUTOTEST").is_ok() {
+            autotest::programmer();
         }
         if std::env::var("TACTILE_RETOUR").is_ok() {
             let _: () = msg_send![cible(), performSelector: sel!(afficherBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 4.0f64];

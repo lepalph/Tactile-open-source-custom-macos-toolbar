@@ -48,6 +48,7 @@ pub(super) fn bouton_texte(etat: &mut Etat, action: Option<Action>) -> Id {
 pub(super) fn depliable(identifiant: &str, nom: Option<&str>, libelle: Option<&str>, items: Vec<Id>, etat: &mut Etat) -> Id {
     let fermer = enregistrer(etat, Some(Commande::Fermer), None);
     let croix = bouton(None, Some("xmark"), fermer, false);
+    etat.controles.push(("fermer".into(), croix));
     largeur_fixe(croix, 64.0);
     let mut contenu = vec![item_vue(&format!("{identifiant}.fermer"), croix)];
     contenu.extend(items);
@@ -55,6 +56,7 @@ pub(super) fn depliable(identifiant: &str, nom: Option<&str>, libelle: Option<&s
     let ouvrir = enregistrer(etat, Some(Commande::Ouvrir(etat.barres.len() - 1)), None);
     let titre = format!("{}  ›", libelle.unwrap_or(""));
     let b = bouton(Some(titre.trim_start()), nom, ouvrir, false);
+    etat.controles.push((format!("ouvrir {}", nom.or(libelle).unwrap_or("")), b));
     largeur_fixe(b, 72.0);
     item_vue(identifiant, b)
 }
@@ -82,6 +84,8 @@ pub(super) fn slider(identifiant: &str, reglage: Reglage, nom: &str, etat: &mut 
         let _: () = msg_send![item, setAction: sel!(glisse:)];
         item
     };
+    let nom_reglage = if tag == 0 { "luminosite" } else { "volume" };
+    etat.controles.push((format!("slider {nom_reglage}"), item));
     depliable(identifiant, Some(nom), None, vec![item], etat)
 }
 
@@ -93,6 +97,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
             Element::Bouton { texte: t, symbole: s, couleur: c, largeur, action, appui_long } => {
                 let index = enregistrer(etat, action.clone().map(Commande::Systeme), appui_long.clone().map(Commande::Systeme));
                 let b = bouton(t.as_deref(), s.as_deref(), index, appui_long.is_some());
+                etat.controles.push((t.clone().or(s.clone()).unwrap_or_default(), b));
                 if let Some(col) = c.as_deref().and_then(couleur) {
                     unsafe { let _: () = msg_send![b, setBezelColor: col]; }
                 }
@@ -114,6 +119,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
             }
             Element::EnCours { largeur } => {
                 let b = bouton_texte(etat, Some(Action::LecturePause));
+                etat.controles.push(("en_cours".into(), b));
                 if let Some(l) = largeur {
                     largeur_fixe(b, *l);
                 }
@@ -122,9 +128,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
             }
             Element::Script { commande, intervalle, largeur, action } => {
                 let b = bouton_texte(etat, action.clone());
-                if let Some(l) = largeur {
-                    largeur_fixe(b, *l);
-                }
+                largeur_fixe(b, largeur_script(*largeur));
                 etat.rafraichis.push(Rafraichi::Script {
                     bouton: b,
                     commande: commande.clone(),
@@ -148,4 +152,23 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
         items.push(item);
     }
     items
+}
+
+/// Largeur d'un widget script sans `largeur` : sa sortie change, et une sortie qui grandit
+/// pousserait ses voisins hors de la barre (la Touch Bar retire ce qui dépasse).
+pub(super) const LARGEUR_SCRIPT: f64 = 120.0;
+
+pub(super) fn largeur_script(largeur: Option<f64>) -> f64 {
+    largeur.unwrap_or(LARGEUR_SCRIPT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn un_script_a_toujours_une_largeur_fixe() {
+        assert_eq!(largeur_script(None), LARGEUR_SCRIPT);
+        assert_eq!(largeur_script(Some(80.0)), 80.0);
+    }
 }

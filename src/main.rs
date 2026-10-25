@@ -3,14 +3,16 @@ mod barre;
 mod config;
 mod menu;
 
-/// Lancée depuis le Finder, l'app n'a pas de terminal : ses messages vont dans ~/Library/Logs/Tactile.log.
-fn journal_si_pas_de_terminal() {
-    use std::io::IsTerminal;
+/// Lancée depuis le Finder, la sortie d'erreur part dans /dev/null : on l'envoie dans ~/Library/Logs/Tactile.log.
+/// Un terminal ou une redirection choisie (script, test) est laissé tel quel.
+fn journal_si_sortie_perdue() {
     use std::os::fd::AsRawFd;
+    use std::os::unix::fs::MetadataExt;
     unsafe extern "C" {
         fn dup2(source: i32, cible: i32) -> i32;
     }
-    if std::io::stderr().is_terminal() {
+    let rdev = |chemin: &str| std::fs::metadata(chemin).map(|m| (m.dev(), m.ino(), m.rdev())).ok();
+    if rdev("/dev/fd/2") != rdev("/dev/null") {
         return;
     }
     let chemin = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default()).join("Library/Logs/Tactile.log");
@@ -21,7 +23,7 @@ fn journal_si_pas_de_terminal() {
 }
 
 fn main() {
-    journal_si_pas_de_terminal();
+    journal_si_sortie_perdue();
     let config = config::charger().unwrap_or_else(|e| {
         eprintln!("tactile : {e} ; barre par défaut");
         config::lire(include_str!("../exemples/barre.toml")).expect("exemple invalide")

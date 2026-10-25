@@ -77,6 +77,8 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 ## Pièges déjà rencontrés
 
 - Les popovers d'AppKit ne s'ouvrent pas dans une barre système. `NSPopoverTouchBarItem` s'affiche mais rien ne se passe au toucher. D'où les sous-barres (`depliable`) : on présente une autre barre système, avec un ✕ qui ramène la principale.
+- Les barres système s'empilent. Présenter à nouveau la barre principale ne la remet pas au-dessus d'une sous-barre ouverte : il faut d'abord retirer la sous-barre (`dismissSystemModalTouchBar:`, voir `fermer_sous_barre`). Ce bug ne se voyait qu'en capture : l'état interne disait « principale ».
+- Un élément dont le texte grandit pousse ses voisins hors de la barre : la Touch Bar retire ce qui dépasse. D'où la largeur fixe par défaut des widgets `script`.
 - Les touchers de la Touch Bar sont « directs ». Un `NSPressGestureRecognizer` doit avoir `setAllowedTouchTypes: 1` ; avec 2 (indirect), AppKit lève une exception.
 - objc2 vérifie les signatures à l'exécution. Un `msg_send!` qui annonce le mauvais type de retour panique (ex. `setActivationPolicy:` renvoie un `Bool`, pas `()`). La fonctionnalité `catch-all` d'objc2 transforme les exceptions Objective-C en panique lisible au lieu d'un arrêt muet.
 - MediaRemote ne répond plus aux apps tierces depuis macOS 15.4 : `MRMediaRemoteSendCommand` renvoie vrai sans rien faire. On passe par `media-control`, qui doit tourner en arm64 natif sur Apple Silicon (`arch -arm64`).
@@ -86,6 +88,7 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 
 ## Vérifier un changement
 
+- `scripts/verifier.sh` : la vérification complète. Lance Tactile avec `TACTILE_AUTOTEST=1`, qui actionne chaque contrôle par le même chemin qu'un doigt (`performClick:` sur le vrai bouton, message `glisse:` pour les sliders) et contrôle l'effet réel : sous-barres, luminosité et volume relus puis restaurés, barre d'Apple et retour par ✳, Claude vocal qui démarre et s'arrête, lecture/pause. Il capture la Touch Bar à chaque étape (`target/verification/`) et compare chaque capture à l'écran attendu. Un écran noir (Touch Bar inactive) est signalé comme non vérifiable, jamais comme réussi : touche le trackpad pendant la vérification.
 - `cargo test` : config, parsing des médias, et luminosité / volume réels (valeur changée, relue, restaurée). Avec `CI` défini, les tests matériels sortent tout de suite.
 - `TACTILE_OUVRIR=k target/release/tactile` présente directement la sous-barre `k` (1 = premier slider ou groupe) : utile pour la capturer.
 - `TACTILE_MASQUER=1` réduit la barre 2 s après le lancement ; `TACTILE_RETOUR=1` la ramène à 4 s comme un toucher sur ✳.

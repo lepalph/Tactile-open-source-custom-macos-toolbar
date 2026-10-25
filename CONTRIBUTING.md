@@ -14,6 +14,10 @@ Merci de ton intérêt. Commence par [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md
 
 Écris le test qui décrit le comportement attendu, regarde-le échouer, puis écris le code. Une action se prouve en relisant la valeur après l'avoir changée, puis en restaurant l'état d'origine (voir `src/actions/volume.rs`). `cargo test` doit passer avant toute demande de fusion.
 
+## Vérification complète
+
+Avant toute demande de fusion qui touche la barre, lance `scripts/verifier.sh`, écran allumé, en touchant le trackpad de temps en temps. Il actionne chaque contrôle comme un doigt, vérifie l'effet réel et compare chaque capture de la Touch Bar à l'écran attendu. Joins la sortie à ta demande.
+
 ## Changements visuels
 
 Tout changement visible dans la barre s'accompagne d'une capture de la Touch Bar, jointe à la demande de fusion :

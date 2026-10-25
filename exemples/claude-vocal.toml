@@ -6,6 +6,7 @@
 type = "script"
 commande = "cat /tmp/claude-voix/etat 2>/dev/null"
 intervalle = 0.3
+largeur = 130
 action = { shell = "~/.local/bin/claude-voix" }
 
 # Bouton ✳ Claude : un appui, court ou long, lance l'écoute ; un nouvel appui l'arrête, ou coupe la voix.
