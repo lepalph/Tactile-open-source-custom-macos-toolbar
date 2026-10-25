@@ -186,6 +186,14 @@ mod tests {
         let attendu = Barre {
             masquer_control_strip: true,
             elements: vec![
+                Element::Bouton {
+                    texte: None,
+                    symbole: Some("apple.logo".into()),
+                    couleur: None,
+                    largeur: Some(56.0),
+                    action: Some(Action::BarreApple),
+                    appui_long: None,
+                },
                 Element::Slider {
                     reglage: Reglage::Luminosite,
                     symbole: Some("sun.max.fill".into()),

@@ -25,6 +25,7 @@ pub enum Action {
     Precedent,
     Veille,
     Echap,
+    BarreApple,
     Shell(String),
 }
 
@@ -44,6 +45,7 @@ pub fn executer(action: &Action) -> Resultat<()> {
         Action::Precedent => media::precedent(),
         Action::Veille => lancer("/usr/bin/pmset", &["sleepnow"]),
         Action::Echap => clavier::touche(53),
+        Action::BarreApple => Err("barre_apple est géré par la barre, pas par les actions".into()),
         Action::Shell(commande) => lancer("/bin/zsh", &["-c", commande]),
     }
 }

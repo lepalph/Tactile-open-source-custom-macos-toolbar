@@ -4,6 +4,13 @@
 # Cache la bande de boutons système d'Apple, à droite.
 masquer_control_strip = true
 
+#  Rend la barre d.Apple (boutons propres à chaque app) ; l.icône ✳ du Control Strip ramène celle-ci.
+[[element]]
+type = "bouton"
+symbole = "apple.logo"
+largeur = 56
+action = "barre_apple"
+
 # Curseur de luminosité de l'écran.
 [[element]]
 type = "slider"

@@ -41,6 +41,7 @@ struct Etat {
 thread_local! {
     static ETAT: RefCell<Option<Etat>> = const { RefCell::new(None) };
     static CIBLE: RefCell<Option<Retained<Cible>>> = const { RefCell::new(None) };
+    static COURANTE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
     static RECHARGES: RefCell<Option<Receiver<Result<Barre, String>>>> = const { RefCell::new(None) };
 }
 
@@ -70,6 +71,16 @@ define_class!(
             let valeur: f64 = unsafe { msg_send![slider, doubleValue] };
             let action = if etiquette(slider) == 0 { Action::Luminosite(valeur as f32) } else { Action::Volume(valeur as f32) };
             signaler(actions::executer(&action));
+        }
+
+        #[unsafe(method(afficherBarre:))]
+        fn afficher_barre(&self, _envoyeur: Id) {
+            afficher();
+        }
+
+        #[unsafe(method(masquerBarre:))]
+        fn masquer_barre(&self, _envoyeur: Id) {
+            masquer();
         }
 
         #[unsafe(method(tic:))]
@@ -103,6 +114,7 @@ fn declencher(index: isize, long: bool) {
         Some((commande, etat.barres.clone()))
     });
     match trouve {
+        Some((Commande::Systeme(Action::BarreApple), _)) => masquer(),
         Some((Commande::Systeme(action), _)) => signaler(actions::executer(&action)),
         Some((Commande::Ouvrir(k), barres)) => presenter(barres[k]),
         Some((Commande::Fermer, barres)) => presenter(barres[0]),
@@ -372,9 +384,49 @@ fn rafraichir() {
 }
 
 fn presenter(barre: Id) {
+    COURANTE.set(barre);
     unsafe {
-        let plateau = texte("fr.palph.tactile.plateau");
+        let plateau = texte(PLATEAU);
         let _: () = msg_send![class!(NSTouchBar), presentSystemModalTouchBar: barre, placement: 1i64, systemTrayItemIdentifier: &*plateau];
+    }
+}
+
+const PLATEAU: &str = "fr.palph.tactile.plateau";
+
+/// Remet la barre tactile à la place de celle d'Apple.
+pub fn afficher() {
+    if let Some(principale) = ETAT.with_borrow(|e| e.as_ref().map(|e| e.barres[0])) {
+        presenter(principale);
+    }
+}
+
+/// Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la barre tactile.
+pub fn masquer() {
+    let courante = COURANTE.get();
+    if !courante.is_null() {
+        unsafe { let _: () = msg_send![class!(NSTouchBar), minimizeSystemModalTouchBar: courante]; }
+    }
+}
+
+/// Place l'icône ✳ dans le Control Strip d'Apple (API privées de DFRFoundation, comme MTMR).
+fn installer_plateau() {
+    unsafe extern "C" {
+        fn dlopen(chemin: *const std::ffi::c_char, mode: i32) -> *mut std::ffi::c_void;
+        fn dlsym(module: *mut std::ffi::c_void, nom: *const std::ffi::c_char) -> *mut std::ffi::c_void;
+    }
+    type Presence = unsafe extern "C" fn(Id, Bool);
+    unsafe {
+        let b: Id = msg_send![class!(NSButton), buttonWithTitle: &*texte("✳"), target: cible(), action: sel!(afficherBarre:)];
+        let item = item_vue(PLATEAU, b);
+        let _: () = msg_send![class!(NSTouchBarItem), addSystemTrayItem: item];
+        let module = dlopen(c"/System/Library/PrivateFrameworks/DFRFoundation.framework/DFRFoundation".as_ptr(), 2);
+        let f = dlsym(module, c"DFRElementSetControlStripPresenceForIdentifier".as_ptr());
+        if f.is_null() {
+            eprintln!("tactile : icône du Control Strip indisponible");
+            return;
+        }
+        let presence: Presence = std::mem::transmute(f);
+        presence(Retained::as_ptr(&texte(PLATEAU)) as Id, Bool::YES);
     }
 }
 
@@ -404,7 +456,11 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         let c: Retained<Cible> = msg_send![Cible::class(), new];
         CIBLE.with_borrow_mut(|place| *place = Some(c));
         RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
+        installer_plateau();
         installer(&config);
+        if std::env::var("TACTILE_MASQUER").is_ok() {
+            let _: () = msg_send![cible(), performSelector: sel!(masquerBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.0f64];
+        }
 
         let _: Id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.1f64, target: cible(), selector: sel!(tic:), userInfo: std::ptr::null_mut::<AnyObject>(), repeats: Bool::YES];
         rafraichir();
