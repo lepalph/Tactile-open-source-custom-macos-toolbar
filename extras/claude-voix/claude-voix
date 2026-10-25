@@ -1,0 +1,109 @@
+#!/bin/zsh
+# Claude vocal pour la Touch Bar (Tactile). Mode d'emploi : ~/.config/claude-voix/README.md
+#   claude-voix          appui sur ✳ Claude (écoute, ou arrêt de l'écoute / de la voix)
+#   claude-voix --test   rejoue une phrase synthétique à travers toute la chaîne
+CONF=~/.config/claude-voix
+DATA=~/.local/share/claude-voix
+T=/tmp/claude-voix                         # audio, état, conversation : effacés au redémarrage
+S=$T/etat
+CONV=$T/conversation.md
+VOIX=$DATA/voix/fr_FR-siwis-medium.onnx
+export PATH=/opt/homebrew/bin:$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+mkdir -p $T
+zmodload zsh/datetime zsh/stat
+
+etat() { print -rn -- "$1" >| $S }
+notif() { terminal-notifier -title Claude -group claude-voix "$@" >/dev/null 2>&1 &! }
+
+transcrire() {
+  whisper-cli -m $DATA/modeles/ggml-small-q5_1.bin -l fr -nt -np -f "$1" 2>/dev/null \
+    | tr -s ' \n' ' ' | sed 's/^ *//; s/ *$//'
+}
+
+# Les 3 derniers échanges, si la conversation date de moins de 10 minutes.
+contexte() {
+  [[ -f $CONV ]] || return
+  (( EPOCHSECONDS - $(zstat +mtime $CONV) < 600 )) || return
+  awk '/^## /{n++} {b[n]=b[n] $0 "\n"} END{for(i=(n>3?n-2:1);i<=n;i++) printf "%s", b[i]}' $CONV
+}
+
+demander() {
+  local q=$1 c=$(contexte)
+  [[ -n $c ]] && q="Échanges récents :
+$c
+Nouvelle demande : $q"
+  (cd ~ && claude -p "$q" \
+    --model sonnet --effort medium \
+    --settings $CONF/reglages.json --strict-mcp-config \
+    --permission-mode auto --no-session-persistence \
+    --append-system-prompt "$(<$CONF/prompt.md)" 2>/dev/null)
+}
+
+parler() {
+  piper -m $VOIX --output-raw 2>/dev/null <<<"$1" \
+    | play -q -t raw -r 22050 -e signed -b 16 -c 1 - 2>/dev/null
+}
+
+if [[ $1 == --test ]]; then
+  W=$T/test.wav
+  say -v Thomas -o $T/test.aiff "Combien de temps met la lumière du Soleil pour arriver jusqu'à la Terre ?" && sox $T/test.aiff -r 16000 -c 1 $W
+  s=$EPOCHREALTIME; q=$(transcrire $W);  printf '1. transcription (%.1f s) : %s\n' $((EPOCHREALTIME-s)) "$q"
+  [[ $q == *umi* ]] || { print "ÉCHEC : transcription"; exit 1 }
+  s=$EPOCHREALTIME; r=$(demander "$q"); printf '2. réponse (%.1f s) : %s\n' $((EPOCHREALTIME-s)) "$r"
+  [[ $r == *minute* ]] || { print "ÉCHEC : réponse"; exit 1 }
+  (( $(wc -w <<<"$r") <= 35 )) || { print "ÉCHEC : réponse trop longue"; exit 1 }
+  s=$EPOCHREALTIME; piper -m $VOIX -f $T/test-voix.wav 2>/dev/null <<<"$r"
+  printf '3. voix (%.1f s)\n' $((EPOCHREALTIME-s))
+  [[ -s $T/test-voix.wav ]] || { print "ÉCHEC : voix"; exit 1 }
+  print "OK"; exit 0
+fi
+
+case "$(<$S 2>/dev/null)" in
+  🎙*)  kill -INT "$(<$T/rec.pid)" 2>/dev/null; exit ;;
+  🔊*)  pkill -f "play -q -t raw -r 22050"; exit ;;
+  ⋯*)   exit ;;
+esac
+
+trap 'etat ""; rm -f $T/rec.pid' EXIT
+etat "🎙 Parle…"
+afplay /System/Library/Sounds/Tink.aiff &!
+
+# Vumètre : sox -S affiche « [  ==|==  ] » ; on garde les 6 derniers niveaux en onde.
+vumetre() {
+  local barres=(▁ ▂ ▃ ▄ ▅ ▆ ▇ █) onde="" l n dernier=0
+  while IFS= read -r -d $'\r' l; do
+    [[ $l == *'['*'|'*']'* ]] || continue
+    l=${l##*\[}; l=${l%%\]*}; l=${l//[^=!-]/}
+    n=$(( ${#l} * 7 / 12 ))
+    onde="${onde: -5}${barres[n+1]}"
+    (( EPOCHREALTIME - dernier > 0.12 )) || continue
+    dernier=$EPOCHREALTIME
+    [[ -f $T/rec.pid ]] && etat "🎙 $onde"
+  done
+}
+
+# Écoute jusqu'au prochain appui sur ✳ Claude, sans coupure au silence ; 5 minutes au maximum.
+# Le micro est celui de l'app qui lance le script (Tactile.app, ou le Terminal).
+rec -S -c 1 -r 16000 $T/question.wav gain 10 trim 0 300 2> >(vumetre) >/dev/null &
+rp=$!; print $rp >| $T/rec.pid
+wait $rp; rm -f $T/rec.pid
+
+etat "⋯ Je réfléchis"
+afplay /System/Library/Sounds/Pop.aiff &!
+q=$(transcrire $T/question.wav)
+if [[ -z $q || $q == *BLANK* || $q == '['* ]]; then
+  notif -message "Je n'ai rien entendu."
+  exit
+fi
+
+r=$(demander "$q")
+[[ -z $r ]] && r="Je n'ai pas de réponse, quelque chose a coincé."
+
+print -r -- "## $(date +%H:%M)
+**Toi :** $q
+**Claude :** $r
+" >> $CONV
+
+etat "🔊 Je réponds"
+notif -subtitle "$q" -message "$r" -open "file://$CONV"
+parler "$r"

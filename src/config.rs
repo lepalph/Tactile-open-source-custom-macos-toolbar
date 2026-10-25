@@ -182,7 +182,6 @@ mod tests {
 
     #[test]
     fn exemple_donne_la_barre_attendue() {
-        let claude = || Some(Action::Shell("~/.local/bin/claude-voix".into()));
         let attendu = Barre {
             masquer_control_strip: true,
             elements: vec![
@@ -225,20 +224,6 @@ mod tests {
                 Element::Souple,
                 Element::Heure {
                     format: Some("HH:mm".into()),
-                },
-                Element::Script {
-                    commande: "cat /tmp/claude-voix/etat 2>/dev/null".into(),
-                    intervalle: 0.3,
-                    largeur: None,
-                    action: claude(),
-                },
-                Element::Bouton {
-                    texte: Some("✳ Claude".into()),
-                    symbole: None,
-                    couleur: Some("#B4552F".into()),
-                    largeur: Some(120.0),
-                    action: claude(),
-                    appui_long: claude(),
                 },
             ],
         };
