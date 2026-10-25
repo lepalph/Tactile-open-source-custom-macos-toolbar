@@ -1,0 +1,38 @@
+{
+  "disableAllHooks": true,
+  "claudeMdExcludes": ["~/.claude/CLAUDE.md"],
+  "permissions": {
+    "deny": [
+      "Bash(sudo *)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean*)",
+      "Bash(diskutil *)",
+      "Bash(dd *)",
+      "Bash(mkfs*)",
+      "Bash(shutdown*)",
+      "Bash(reboot*)",
+      "Bash(halt*)",
+      "Bash(launchctl *)",
+      "Bash(crontab *)",
+      "Bash(security *)",
+      "Bash(csrutil *)",
+      "Bash(gh repo delete*)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(**/.env)",
+      "Read(**/.env.*)"
+    ]
+  },
+  "autoMode": {
+    "soft_deny": [
+      "$defaults",
+      "Supprimer, déplacer, renommer ou écraser un fichier ou un dossier, sauf si la demande le dit explicitement",
+      "git commit ou git push, sauf si la demande le dit explicitement",
+      "Envoyer quoi que ce soit à l'extérieur (mail, message, publication, upload), sauf si la demande le dit explicitement",
+      "Installer ou désinstaller un logiciel, sauf si la demande le dit explicitement"
+    ]
+  }
+}

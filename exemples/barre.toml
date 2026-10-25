@@ -1,10 +1,11 @@
-# Ma Touch Bar. Les éléments s'affichent de gauche à droite, dans l'ordre du fichier.
+# Barre par défaut de Tactile. Pour la modifier, copie ce fichier dans ~/.config/tactile/barre.toml.
+# Les éléments s'affichent de gauche à droite, dans l'ordre du fichier.
 # Tactile recharge ce fichier dès qu'il est enregistré.
 
 # Cache la bande de boutons système d'Apple, à droite.
 masquer_control_strip = true
 
-#  Rend la barre d.Apple (boutons propres à chaque app) ; l.icône ✳ du Control Strip ramène celle-ci.
+#  Rend la barre d'Apple (boutons propres à chaque app) ; l'icône ✳ du Control Strip ramène celle-ci.
 [[element]]
 type = "bouton"
 symbole = "apple.logo"
@@ -52,19 +53,3 @@ type = "souple"
 [[element]]
 type = "heure"
 format = "HH:mm"
-
-# État de Claude vocal : sortie de la commande, relue toutes les 0,3 s ; un appui lance Claude.
-[[element]]
-type = "script"
-commande = "cat /tmp/claude-voix/etat 2>/dev/null"
-intervalle = 0.3
-action = { shell = "~/.local/bin/claude-voix" }
-
-# Bouton ✳ Claude : un appui, court ou long, lance Claude vocal.
-[[element]]
-type = "bouton"
-texte = "✳ Claude"
-couleur = "#B4552F"
-largeur = 120
-action = { shell = "~/.local/bin/claude-voix" }
-appui_long = { shell = "~/.local/bin/claude-voix" }
