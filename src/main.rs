@@ -1,6 +1,7 @@
 mod actions;
 mod barre;
 mod config;
+mod menu;
 
 fn main() {
     let config = config::charger().unwrap_or_else(|e| {
