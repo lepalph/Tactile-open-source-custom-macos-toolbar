@@ -66,7 +66,7 @@ appui_long = { shell = "open -a 'Activity Monitor'" }
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
 | `groupe` | `texte`, `symbole`, puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
 
-Au niveau du fichier, `masquer_control_strip = true` est accepté, mais la barre occupe pour l'instant toujours toute la largeur, Control Strip compris.
+Au niveau du fichier, `masquer_control_strip = true` (par défaut) occupe toute la largeur ; `false` garde le Control Strip d'Apple à droite (pas encore vérifié sur machine réelle).
 
 ### Actions
 
@@ -106,7 +106,7 @@ Les tests de luminosité et de volume ne font rien quand la variable `CI` est d�
 - MacBook Pro Apple Silicon avec Touch Bar uniquement.
 - Tactile repose sur des API privées d'Apple (barre système, icône du Control Strip via DFRFoundation, luminosité via DisplayServices). Une mise à jour de macOS peut les casser.
 - L'app n'est pas notarisée : le premier lancement passe par clic droit → Ouvrir.
-- `masquer_control_strip` n'a pas encore d'effet (voir plus haut).
+- `masquer_control_strip = false` n'a pas encore été vérifié sur machine réelle.
 - Le curseur de luminosité règle l'écran intégré seulement.
 - Pas encore de gestes sur la Touch Bar, de raccourcis clavier ni de gestes trackpad : ce sont les modules suivants.
 

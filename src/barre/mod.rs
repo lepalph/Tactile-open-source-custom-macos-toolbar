@@ -41,6 +41,7 @@ struct Etat {
 thread_local! {
     static ETAT: RefCell<Option<Etat>> = const { RefCell::new(None) };
     static CIBLE: RefCell<Option<Retained<Cible>>> = const { RefCell::new(None) };
+    static PLEIN_ECRAN: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static COURANTE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
     static RECHARGES: RefCell<Option<Receiver<Result<Barre, String>>>> = const { RefCell::new(None) };
 }
@@ -387,7 +388,7 @@ fn presenter(barre: Id) {
     COURANTE.set(barre);
     unsafe {
         let plateau = texte(PLATEAU);
-        let _: () = msg_send![class!(NSTouchBar), presentSystemModalTouchBar: barre, placement: 1i64, systemTrayItemIdentifier: &*plateau];
+        let _: () = msg_send![class!(NSTouchBar), presentSystemModalTouchBar: barre, placement: if PLEIN_ECRAN.get() { 1i64 } else { 0i64 }, systemTrayItemIdentifier: &*plateau];
     }
 }
 
@@ -431,6 +432,7 @@ fn installer_plateau() {
 }
 
 fn installer(config: &Barre) {
+    PLEIN_ECRAN.set(config.masquer_control_strip);
     let (envoi, reception) = channel();
     let mut etat = Etat {
         commandes: Vec::new(),
