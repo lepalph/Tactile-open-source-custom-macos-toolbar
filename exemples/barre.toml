@@ -4,13 +4,6 @@
 # Cache la bande de boutons système d'Apple, à droite.
 masquer_control_strip = true
 
-# Touche esc (la barre plein écran remplace celle du système).
-[[element]]
-type = "bouton"
-texte = "esc"
-largeur = 64
-action = "echap"
-
 # Curseur de luminosité de l'écran.
 [[element]]
 type = "slider"
