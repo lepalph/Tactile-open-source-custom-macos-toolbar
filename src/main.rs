@@ -1,3 +1,6 @@
+mod actions;
+mod config;
+
 use objc2::runtime::AnyObject;
 use objc2::{class, msg_send, sel};
 use objc2_foundation::NSString;
