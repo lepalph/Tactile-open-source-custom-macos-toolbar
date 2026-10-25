@@ -1,8 +1,8 @@
 //! La Touch Bar : construction depuis la config, présentation en barre système, rafraîchissements.
 //!
 //! Les popovers d'AppKit ne s'ouvrent pas dans une barre système : un slider ou un groupe
-//! est donc une sous-barre système à part entière, présentée à la place de la principale,
-//! avec un bouton ✕ qui ramène la principale.
+//! est donc une sous-barre (✕ + contenu) dont le contenu remplace celui de la principale
+//! dans l'unique barre système.
 
 mod autotest;
 mod elements;
@@ -49,6 +49,7 @@ thread_local! {
     static CIBLE: RefCell<Option<Retained<Cible>>> = const { RefCell::new(None) };
     static PLEIN_ECRAN: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static COURANTE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
+    static MODALE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
     static RECHARGES: RefCell<Option<Receiver<Result<Barre, String>>>> = const { RefCell::new(None) };
 }
 
@@ -128,8 +129,8 @@ fn declencher(index: isize, long: bool) {
     match trouve {
         Some((Commande::Systeme(Action::BarreApple), _)) => masquer(),
         Some((Commande::Systeme(action), _)) => signaler(actions::executer(&action)),
-        Some((Commande::Ouvrir(k), barres)) => presenter(barres[k]),
-        Some((Commande::Fermer, barres)) => fermer_sous_barre(barres[0]),
+        Some((Commande::Ouvrir(k), barres)) => montrer(barres[k]),
+        Some((Commande::Fermer, barres)) => montrer(barres[0]),
         None => {}
     }
 }
@@ -140,37 +141,48 @@ fn cible() -> Id {
 }
 
 
-fn presenter(barre: Id) {
+/// L'unique barre système de Tactile. Présentée une seule fois ; ouvrir une sous-barre change son
+/// contenu au lieu de présenter une autre barre : les présentations d'Apple sont animées et
+/// asynchrones, et deux barres présentées à la suite s'empilent ou se croisent (vu en capture).
+fn modale() -> Id {
+    if MODALE.get().is_null() {
+        let barre: Id = unsafe { msg_send![class!(NSTouchBar), new] };
+        MODALE.set(barre);
+    }
+    MODALE.get()
+}
+
+/// Affiche le contenu de `barre` dans la barre système, sans nouvelle présentation.
+fn montrer(barre: Id) {
     COURANTE.set(barre);
     unsafe {
-        let plateau = texte(PLATEAU);
-        let _: () = msg_send![class!(NSTouchBar), presentSystemModalTouchBar: barre, placement: if PLEIN_ECRAN.get() { 1i64 } else { 0i64 }, systemTrayItemIdentifier: &*plateau];
+        let items: Id = msg_send![barre, templateItems];
+        let idents: Id = msg_send![barre, defaultItemIdentifiers];
+        let _: () = msg_send![modale(), setTemplateItems: items];
+        let _: () = msg_send![modale(), setDefaultItemIdentifiers: idents];
     }
 }
 
-
-/// Les barres système s'empilent : présenter à nouveau la principale ne la remet pas au-dessus
-/// d'une sous-barre ouverte. On retire donc la sous-barre avant.
-fn fermer_sous_barre(principale: Id) {
-    let courante = COURANTE.get();
-    if !courante.is_null() && courante != principale {
-        unsafe { let _: () = msg_send![class!(NSTouchBar), dismissSystemModalTouchBar: courante]; }
+/// Affiche `barre` et (re)présente la barre système : au lancement, après la barre d'Apple, au rechargement.
+fn presenter(barre: Id) {
+    montrer(barre);
+    unsafe {
+        let plateau = texte(PLATEAU);
+        let _: () = msg_send![class!(NSTouchBar), presentSystemModalTouchBar: modale(), placement: if PLEIN_ECRAN.get() { 1i64 } else { 0i64 }, systemTrayItemIdentifier: &*plateau];
     }
-    presenter(principale);
 }
 
 /// Remet la barre tactile à la place de celle d'Apple.
 pub fn afficher() {
     if let Some(principale) = ETAT.with_borrow(|e| e.as_ref().map(|e| e.barres[0])) {
-        fermer_sous_barre(principale);
+        presenter(principale);
     }
 }
 
 /// Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la barre tactile.
 pub fn masquer() {
-    let courante = COURANTE.get();
-    if !courante.is_null() {
-        unsafe { let _: () = msg_send![class!(NSTouchBar), minimizeSystemModalTouchBar: courante]; }
+    if !MODALE.get().is_null() {
+        unsafe { let _: () = msg_send![class!(NSTouchBar), minimizeSystemModalTouchBar: MODALE.get()]; }
         plateau::montrer_icone();
     }
 }

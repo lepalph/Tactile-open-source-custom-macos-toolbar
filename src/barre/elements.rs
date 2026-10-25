@@ -129,6 +129,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
             Element::Script { commande, intervalle, largeur, action } => {
                 let b = bouton_texte(etat, action.clone());
                 largeur_fixe(b, largeur_script(*largeur));
+                etat.controles.push((format!("script {commande}"), b));
                 etat.rafraichis.push(Rafraichi::Script {
                     bouton: b,
                     commande: commande.clone(),

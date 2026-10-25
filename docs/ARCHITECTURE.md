@@ -17,7 +17,8 @@ main.rs
 appui sur un bouton
  → TactileCible::appui (le tag du bouton = index dans Etat::commandes)
  → declencher : Commande::Systeme(action) → actions::executer
-                Commande::Ouvrir(k) / Fermer → présente la sous-barre k / la principale
+                Commande::Ouvrir(k) / Fermer → montre le contenu de la sous-barre k / de la principale
+                dans l'unique barre système
 ```
 
 Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une commande `script`, `media-control`) part dans un fil à part et renvoie son texte par un canal, relu au `tic` suivant.
@@ -77,7 +78,7 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 ## Pièges déjà rencontrés
 
 - Les popovers d'AppKit ne s'ouvrent pas dans une barre système. `NSPopoverTouchBarItem` s'affiche mais rien ne se passe au toucher. D'où les sous-barres (`depliable`) : on présente une autre barre système, avec un ✕ qui ramène la principale.
-- Les barres système s'empilent. Présenter à nouveau la barre principale ne la remet pas au-dessus d'une sous-barre ouverte : il faut d'abord retirer la sous-barre (`dismissSystemModalTouchBar:`, voir `fermer_sous_barre`). Ce bug ne se voyait qu'en capture : l'état interne disait « principale ».
+- Les présentations de barres système sont animées et asynchrones : présenter une sous-barre puis la principale les fait s'empiler ou se croiser, une fois sur deux. Tactile ne présente donc qu'une barre système (`modale()`) et change son contenu (`montrer`) pour ouvrir ou fermer une sous-barre, comme MTMR. Ce bug ne se voyait qu'en capture : l'état interne disait « principale ».
 - Un élément dont le texte grandit pousse ses voisins hors de la barre : la Touch Bar retire ce qui dépasse. D'où la largeur fixe par défaut des widgets `script`.
 - Les touchers de la Touch Bar sont « directs ». Un `NSPressGestureRecognizer` doit avoir `setAllowedTouchTypes: 1` ; avec 2 (indirect), AppKit lève une exception.
 - objc2 vérifie les signatures à l'exécution. Un `msg_send!` qui annonce le mauvais type de retour panique (ex. `setActivationPolicy:` renvoie un `Bool`, pas `()`). La fonctionnalité `catch-all` d'objc2 transforme les exceptions Objective-C en panique lisible au lieu d'un arrêt muet.

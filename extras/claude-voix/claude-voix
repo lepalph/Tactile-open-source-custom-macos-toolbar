@@ -2,6 +2,7 @@
 # Claude vocal pour la Touch Bar (Tactile). Mode d'emploi : ~/.config/claude-voix/README.md
 #   claude-voix          appui sur ✳ Claude (écoute, ou arrêt de l'écoute / de la voix)
 #   claude-voix --test   rejoue une phrase synthétique à travers toute la chaîne
+#   claude-voix --annuler  abandonne la question en cours : rien n'est transcrit ni envoyé
 CONF=~/.config/claude-voix
 DATA=~/.local/share/claude-voix
 T=/tmp/claude-voix                         # audio, état, conversation : effacés au redémarrage
@@ -32,11 +33,13 @@ demander() {
   [[ -n $c ]] && q="Échanges récents :
 $c
 Nouvelle demande : $q"
-  (cd ~ && claude -p "$q" \
+  (cd ~ && exec claude -p "$q" \
     --model sonnet --effort medium \
     --settings $CONF/reglages.json --strict-mcp-config \
     --permission-mode auto --no-session-persistence \
-    --append-system-prompt "$(<$CONF/prompt.md)" 2>/dev/null)
+    --append-system-prompt "$(<$CONF/prompt.md)" 2>/dev/null) &
+  print $! >| $T/claude.pid
+  wait $!
 }
 
 parler() {
@@ -58,13 +61,29 @@ if [[ $1 == --test ]]; then
   print "OK"; exit 0
 fi
 
+if [[ $1 == --annuler ]]; then
+  case "$(<$S 2>/dev/null)" in
+    🎙*|⋯*)
+      : >| $T/annule
+      [[ -f $T/rec.pid ]] && kill -INT "$(<$T/rec.pid)" 2>/dev/null
+      [[ -f $T/claude.pid ]] && kill "$(<$T/claude.pid)" 2>/dev/null
+      afplay /System/Library/Sounds/Funk.aiff &! ;;
+    🔊*) pkill -f "play -q -t raw -r 22050" ;;
+  esac
+  exit
+fi
+
 case "$(<$S 2>/dev/null)" in
   🎙*)  kill -INT "$(<$T/rec.pid)" 2>/dev/null; exit ;;
   🔊*)  pkill -f "play -q -t raw -r 22050"; exit ;;
   ⋯*)   exit ;;
 esac
 
-trap 'etat ""; rm -f $T/rec.pid' EXIT
+# Chaque écoute ne nettoie que ce qui lui appartient : une écoute annulée qui se termine
+# ne doit pas effacer l'état ou le rec.pid de l'écoute suivante (elle deviendrait impossible à arrêter).
+rm -f $T/annule
+print -n $$ >| $T/proprietaire
+trap '[[ "$(<$T/proprietaire)" == $$ ]] && { etat ""; rm -f $T/rec.pid $T/claude.pid $T/annule $T/proprietaire }' EXIT
 etat "🎙 Parle…"
 afplay /System/Library/Sounds/Tink.aiff &!
 
@@ -87,16 +106,19 @@ vumetre() {
 rec -S -c 1 -r 16000 $T/question.wav gain 10 trim 0 300 2> >(vumetre) >/dev/null &
 rp=$!; print $rp >| $T/rec.pid
 wait $rp; rm -f $T/rec.pid
+[[ -f $T/annule ]] && exit
 
 etat "⋯ Je réfléchis"
 afplay /System/Library/Sounds/Pop.aiff &!
 q=$(transcrire $T/question.wav)
+[[ -f $T/annule ]] && exit
 if [[ -z $q || $q == *BLANK* || $q == '['* ]]; then
   notif -message "Je n'ai rien entendu."
   exit
 fi
 
 r=$(demander "$q")
+[[ -f $T/annule ]] && exit
 [[ -z $r ]] && r="Je n'ai pas de réponse, quelque chose a coincé."
 
 print -r -- "## $(date +%H:%M)

@@ -45,7 +45,8 @@ Rejoue une phrase synthétique (voix « Thomas » de macOS) à travers toute la 
 
 ## Gestes
 
-- Appui court ou long sur ✳ Claude : écoute ; ré-appui pendant l'écoute = arrêt ; pendant la voix = silence.
+- Appui sur ✳ Claude : l'écoute démarre. Nouvel appui : la question part chez Claude. Pendant la réponse, un appui coupe la voix.
+- Pour annuler (rien n'est transcrit ni envoyé) : appui long sur ✳ Claude, ou toucher l'indicateur (🎙, ⋯) à sa gauche. Marche pendant l'écoute et pendant que Claude réfléchit. En ligne de commande : `claude-voix --annuler`.
 - L'écoute ne s'arrête pas au silence : elle dure jusqu'au prochain appui, 5 minutes au maximum.
 - Conversation : les 3 derniers échanges servent de contexte s'ils datent de moins de 10 minutes.
 

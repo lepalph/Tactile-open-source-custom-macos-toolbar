@@ -13,6 +13,7 @@ thread_local! {
     static ETAPE: Cell<usize> = const { Cell::new(0) };
     static ECHECS: Cell<usize> = const { Cell::new(0) };
     static LECTURE: Cell<Option<bool>> = const { Cell::new(None) };
+    static CONVERSATION: Cell<usize> = const { Cell::new(0) };
 }
 
 const ETAT_VOCAL: &str = "/tmp/claude-voix/etat";
@@ -66,6 +67,36 @@ fn etat_vocal() -> String {
     std::fs::read_to_string(ETAT_VOCAL).unwrap_or_default()
 }
 
+fn lignes_conversation() -> usize {
+    std::fs::read_to_string("/tmp/claude-voix/conversation.md").map(|t| t.lines().count()).unwrap_or(0)
+}
+
+fn verifier_ecoute(n: usize) {
+    let e = etat_vocal();
+    noter(n, e.starts_with('🎙'), &format!("Claude écoute (état « {e} »)"));
+}
+
+fn verifier_annule(n: usize, quoi: &str) {
+    let (e, lignes) = (etat_vocal(), lignes_conversation());
+    noter(n, e.is_empty() && lignes == CONVERSATION.get(), &format!("{quoi} (état « {e} », conversation inchangée : {})", lignes == CONVERSATION.get()));
+}
+
+fn cliquer_indicateur(n: usize) -> bool {
+    let nom = ETAT.with_borrow(|e| e.as_ref()?.controles.iter().find(|(c, _)| c.contains("claude-voix/etat")).map(|(c, _)| c.clone()));
+    match nom {
+        Some(nom) => cliquer(n, &nom),
+        None => { noter(n, false, "indicateur de Claude vocal introuvable"); false }
+    }
+}
+
+/// Même chemin qu'un appui long reconnu : la commande longue du bouton.
+fn appui_long(n: usize, nom: &str) -> bool {
+    match controle(nom) {
+        Some(b) => { super::declencher(super::etiquette(b), true); true }
+        None => { noter(n, false, &format!("contrôle « {nom} » introuvable")); false }
+    }
+}
+
 fn verifier_slider(n: usize, nom: &str, lire: fn() -> Result<f32, String>, vers_le_bas: bool) {
     let Ok(origine) = lire() else { return noter(n, false, &format!("{nom} illisible")) };
     let cible_ = if vers_le_bas || origine > 0.5 { (origine - 0.1).max(0.0) } else { origine + 0.1 };
@@ -102,22 +133,26 @@ pub(super) fn etape() {
         8 => { eprintln!("AUTOTEST {n} info barre d'Apple demandée (voir la capture : ✳ doit être dans le Control Strip)"); true }
         9 => { unsafe { let _: () = msg_send![cible(), afficherBarre: std::ptr::null_mut::<AnyObject>()]; } noter(n, COURANTE.get() == principale(), "✳ ramène la barre Tactile"); true }
         10 => match controle("✳ Claude") {
-            Some(_) => cliquer(n, "✳ Claude"),
-            None => { eprintln!("AUTOTEST {n} info pas de bouton ✳ Claude, étapes vocales sautées"); ETAPE.set(13); true }
+            Some(_) => { CONVERSATION.set(lignes_conversation()); cliquer(n, "✳ Claude") }
+            None => { eprintln!("AUTOTEST {n} info pas de bouton ✳ Claude, étapes vocales sautées"); ETAPE.set(17); true }
         },
-        11 => { let e = etat_vocal(); noter(n, e.starts_with('🎙'), &format!("Claude écoute (état « {e} »)")); cliquer(n, "✳ Claude") }
-        12 => { let e = etat_vocal(); noter(n, !e.starts_with('🎙'), &format!("second appui arrête l'écoute (état « {e} »)")); true }
-        13 => match media::en_cours() {
+        11 => { verifier_ecoute(n); cliquer_indicateur(n) }
+        12 => { verifier_annule(n, "toucher l'indicateur annule"); cliquer(n, "✳ Claude") }
+        13 => { verifier_ecoute(n); appui_long(n, "✳ Claude") }
+        14 => { verifier_annule(n, "appui long sur ✳ Claude annule"); cliquer(n, "✳ Claude") }
+        15 => { verifier_ecoute(n); cliquer(n, "✳ Claude") }
+        16 => { let e = etat_vocal(); noter(n, !e.starts_with('🎙'), &format!("second appui envoie la question (état « {e} »)")); true }
+        17 => match media::en_cours() {
             Ok(Some(m)) => { LECTURE.set(Some(m.en_lecture)); cliquer(n, "en_cours") }
-            _ => { eprintln!("AUTOTEST {n} info rien ne joue, étapes musique sautées"); ETAPE.set(15); true }
+            _ => { eprintln!("AUTOTEST {n} info rien ne joue, étapes musique sautées"); ETAPE.set(19); true }
         },
-        14 => {
+        18 => {
             let avant = LECTURE.get().unwrap_or(false);
             let apres = media::en_cours().ok().flatten().map(|m| m.en_lecture);
             noter(n, apres == Some(!avant), &format!("appui sur le titre : lecture {avant} → {apres:?}"));
             cliquer(n, "en_cours")
         }
-        15 => {
+        19 => {
             if let Some(avant) = LECTURE.get() {
                 let apres = media::en_cours().ok().flatten().map(|m| m.en_lecture);
                 noter(n, apres == Some(avant), &format!("second appui : lecture revenue à {avant}"));

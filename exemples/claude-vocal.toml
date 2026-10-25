@@ -1,19 +1,19 @@
 # Claude vocal dans la Touch Bar : deux éléments à coller à la fin de ~/.config/tactile/barre.toml.
 # Il faut d'abord installer l'extra : extras/claude-voix/installer.sh (voir son README).
 
-# État de Claude vocal (🎙 écoute, ⋯ réflexion, 🔊 réponse) : sortie de la commande, relue toutes les 0,3 s ; un appui lance Claude.
+# État de Claude vocal (🎙 écoute, ⋯ réflexion, 🔊 réponse), relu toutes les 0,3 s. Le toucher annule : rien n'est envoyé.
 [[element]]
 type = "script"
 commande = "cat /tmp/claude-voix/etat 2>/dev/null"
 intervalle = 0.3
 largeur = 130
-action = { shell = "~/.local/bin/claude-voix" }
+action = { shell = "~/.local/bin/claude-voix --annuler" }
 
-# Bouton ✳ Claude : un appui, court ou long, lance l'écoute ; un nouvel appui l'arrête, ou coupe la voix.
+# ✳ Claude : appui = lancer l'écoute, puis appui = envoyer la question (ou couper la voix). Appui long = annuler.
 [[element]]
 type = "bouton"
 texte = "✳ Claude"
 couleur = "#B4552F"
 largeur = 120
 action = { shell = "~/.local/bin/claude-voix" }
-appui_long = { shell = "~/.local/bin/claude-voix" }
+appui_long = { shell = "~/.local/bin/claude-voix --annuler" }
