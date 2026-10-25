@@ -1,47 +1,48 @@
 # Tactile
 
-Tactile remplace la Touch Bar des MacBook Pro par une barre que tu décris dans un fichier TOML. C'est une app native Apple Silicon écrite en Rust, sans icône dans le Dock, légère au repos (mesuré : 0,5 % de CPU et 13 Mo de RAM).
+**Une Touch Bar à ton goût, gratuite et open source.** Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : boutons, curseurs de luminosité et de volume, musique en cours, heure, commandes à toi. Tu passes de ta barre à celle d'Apple d'un toucher.
 
-![La barre par défaut : , luminosité, volume, ⏪, titre en cours, ⏩, heure](docs/barre.png)
+![La barre par défaut de Tactile](docs/barre.png)
 
-Ce qu'elle sait faire aujourd'hui :
+Au repos, Tactile consomme 0,5 % de CPU et 13 Mo de mémoire (mesuré). L'app est écrite en Rust et tourne nativement sur les Mac Intel comme Apple Silicon. Elle est sous licence MIT, sans compte, et n'envoie aucune donnée.
 
-- boutons avec texte, symbole SF et couleur, avec une action à l'appui et une autre à l'appui long ;
-- curseurs de luminosité et de volume, qui s'ouvrent en sous-barre (✕ pour revenir) ;
-- titre en cours de lecture, quelle que soit l'app (Spotify, Musique, Chrome…), avec ⏪ ⏯ ⏩ ;
-- heure, widget de script (sortie d'une commande, rafraîchie à intervalle régulier), groupes qui s'ouvrent en sous-barre ;
-- aller-retour avec la barre d'Apple : le bouton  rend la barre d'Apple (avec les boutons propres à chaque app), l'icône ✳ ajoutée au Control Strip ramène celle de Tactile ;
-- rechargement à chaud : le fichier de config est relu dès qu'il est enregistré.
+## Compatibilité
 
-Tactile ne couvre que la Touch Bar. BetterTouchTool en fait beaucoup plus (gestes, fenêtres, raccourcis…) ; Tactile est gratuit et open source, et ses autres modules viendront un par un (voir [SPEC.md](SPEC.md)).
+| | |
+|---|---|
+| Mac | MacBook Pro avec Touch Bar, Intel (2016 à 2020) ou Apple Silicon (M1 et M2, 13 pouces) |
+| macOS | 13 Ventura ou plus récent |
+| Vérifié sur | MacBook Pro M1 13 pouces, macOS 15.8. La version Intel a été testée sous Rosetta, pas encore sur un vrai Mac Intel : tes retours sont bienvenus. |
 
 ## Installation
 
-1. Télécharge `Tactile.zip` depuis la page [Releases](../../releases/latest) et décompresse-le.
-2. Glisse `Tactile.app` dans le dossier Applications.
-3. Premier lancement : clic droit sur `Tactile.app` → Ouvrir, puis Ouvrir dans la fenêtre d'avertissement. L'app n'est pas notarisée par Apple, un double-clic seul est refusé la première fois.
-4. Autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité. C'est nécessaire pour l'action `echap`, qui simule une frappe clavier.
+1. Télécharge `Tactile.zip` dans les [Releases](../../releases/latest) et décompresse-le.
+2. Glisse `Tactile.app` dans **Applications**.
+3. Premier lancement : **clic droit sur Tactile.app → Ouvrir**, puis **Ouvrir**. L'app n'est pas notarisée par Apple ; un double-clic seul est refusé la première fois.
+4. Ta Touch Bar change, et une icône apparaît dans la barre des menus, en haut de l'écran.
 
-Pour la lancer à l'ouverture de session : Réglages Système → Général → Ouverture, ajoute `Tactile.app`.
+Facultatif :
 
-### Titre en cours : `media-control` (optionnel)
+- Pour la musique en cours : `brew install media-control` (voir [pourquoi](#pourquoi-media-control)).
+- Pour la touche esc simulée (action `echap`), autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité.
 
-```
-brew install media-control
-```
+## Le menu de Tactile
 
-Depuis macOS 15.4, le framework privé MediaRemote refuse aux apps non autorisées de lire ce qui joue, et ses commandes répondent « vrai » sans rien faire. [media-control](https://github.com/ungive/media-control) passe par un binaire qu'Apple autorise encore. Tactile l'appelle à `/opt/homebrew/bin/media-control` pour l'élément `en_cours` et pour les actions `lecture_pause`, `suivant` et `precedent`. Sans lui, le titre reste vide et ces boutons ne font rien ; le reste de la barre marche.
+L'icône de la barre des menus donne accès à tout :
 
-## Configuration
+| Entrée | Effet |
+|---|---|
+| Afficher ma barre | Remet ta barre (si elle a disparu, c'est ici). |
+| Barre d'Apple | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la tienne. |
+| Ouvrir la configuration | Ouvre ton fichier de barre (il est créé s'il n'existe pas). |
+| Lancer au démarrage | Tactile s'ouvre avec ta session. |
+| Quitter Tactile | Rend la barre d'Apple et ferme l'app. |
 
-La barre se décrit dans `~/.config/tactile/barre.toml`. Tant que ce fichier n'existe pas, Tactile affiche la barre par défaut, [exemples/barre.toml](exemples/barre.toml) : copie-la à cet endroit pour partir d'elle.
+## Personnaliser ta barre
 
-```
-mkdir -p ~/.config/tactile
-cp exemples/barre.toml ~/.config/tactile/barre.toml
-```
+Dans le menu, choisis **Ouvrir la configuration**. Le fichier `~/.config/tactile/barre.toml` s'ouvre ; chaque bloc `[[element]]` est un élément de la barre, de gauche à droite. Enregistre : la barre change dans la seconde.
 
-Les éléments s'affichent de gauche à droite, dans l'ordre du fichier. Chaque modification est prise en compte dans la seconde. Si le fichier contient une erreur, Tactile garde la barre en place et écrit l'erreur, avec son numéro de ligne, sur sa sortie d'erreur (visible en lançant l'exécutable de `Tactile.app/Contents/MacOS/` depuis un terminal). Au démarrage, une config invalide donne la barre par défaut.
+Par exemple, pour ajouter un bouton qui met le Mac en veille, et ouvre le Moniteur d'activité si tu le tiens appuyé :
 
 ```toml
 [[element]]
@@ -53,7 +54,9 @@ action = "veille"
 appui_long = { shell = "open -a 'Activity Monitor'" }
 ```
 
-### Éléments
+Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symbols/)) : `moon.fill`, `play.fill`, `bolt.fill`… Si le fichier contient une erreur, ta barre actuelle reste en place et l'erreur, avec son numéro de ligne, s'écrit dans `~/Library/Logs/Tactile.log`.
+
+### Les éléments
 
 | `type` | Champs | Ce que ça affiche |
 |---|---|---|
@@ -66,9 +69,9 @@ appui_long = { shell = "open -a 'Activity Monitor'" }
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
 | `groupe` | `texte`, `symbole`, puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
 
-Au niveau du fichier, `masquer_control_strip = true` (par défaut) occupe toute la largeur ; `false` garde le Control Strip d'Apple à droite (pas encore vérifié sur machine réelle).
+En tête de fichier, `masquer_control_strip = true` (par défaut) donne toute la largeur à ta barre ; `false` garde le Control Strip d'Apple à droite (pas encore vérifié sur une vraie machine).
 
-### Actions
+### Les actions
 
 Une action s'écrit soit comme un mot (`action = "suivant"`), soit comme une table (`action = { volume = 0.3 }`).
 
@@ -87,51 +90,78 @@ Une action s'écrit soit comme un mot (`action = "suivant"`), soit comme une tab
 
 ### Extra : Claude vocal
 
-Un bouton ✳ Claude : tu parles, Claude Code répond à voix haute. Transcription (whisper.cpp) et voix (Piper) tournent en local. Installation et réglages : [extras/claude-voix](extras/claude-voix/README.md), éléments à ajouter à ta barre : [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
+Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La transcription (whisper.cpp) et la voix (Piper) tournent sur ton Mac. Installation : [extras/claude-voix](extras/claude-voix/README.md) ; éléments à ajouter à ta barre : [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
 
-## Compiler depuis les sources
+## Dépannage
 
-Il faut Rust stable (le dépôt fournit un `mise.toml` : `mise install`) et un Mac Apple Silicon.
+| Problème | Solution |
+|---|---|
+| macOS refuse d'ouvrir Tactile | Clic droit sur l'app → Ouvrir, une fois. |
+| Ma barre a disparu, je vois celle d'Apple | Touche l'icône ✳ dans la barre d'Apple, ou menu → Afficher ma barre. |
+| Ma modification n'apparaît pas | Il y a une erreur dans le fichier : regarde `~/Library/Logs/Tactile.log`. |
+| La musique en cours reste vide | Installe `media-control` (`brew install media-control`) ; il faut aussi que quelque chose joue. |
+| La touche esc ne fait rien | Autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité. |
+
+### Pourquoi media-control
+
+Depuis macOS 15.4, Apple empêche les apps de lire ce qui joue (le framework MediaRemote répond sans rien faire). [media-control](https://github.com/ungive/media-control) passe par un programme qu'Apple autorise encore. Sans lui, le titre reste vide et ⏪ ⏯ ⏩ ne font rien ; le reste de la barre marche.
+
+## Désinstaller
+
+1. Menu de Tactile → décoche **Lancer au démarrage**, puis **Quitter Tactile**.
+2. Mets `Tactile.app` à la corbeille.
+3. Supprime ta config et le journal : `rm -r ~/.config/tactile ~/Library/Logs/Tactile.log`.
+
+## Contribuer
+
+Le code est fait pour être repris :
+
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : où est quoi, comment ajouter une action ou un élément en quatre étapes, les API privées utilisées et les pièges déjà rencontrés.
+- [docs/DECISIONS.md](docs/DECISIONS.md) : pourquoi les choix qui surprennent ont été faits.
+- [CONTRIBUTING.md](CONTRIBUTING.md) : style, tests, captures, commits.
+
+Compiler depuis les sources (Rust stable ; le dépôt fournit un `mise.toml`) :
 
 ```
-cargo build --release      # binaire seul : target/release/tactile
-cargo test                 # règle puis restaure vraiment la luminosité et le volume
-scripts/empaqueter.sh      # target/Tactile.app et target/Tactile.zip
+cargo build --release      # target/release/tactile, pour essayer
+cargo test                 # attention : règle puis restaure vraiment luminosité et volume
+scripts/empaqueter.sh      # target/Tactile.app universelle et target/Tactile.zip
 ```
-
-Les tests de luminosité et de volume ne font rien quand la variable `CI` est définie (pas d'écran ni de son sur les machines d'intégration continue).
 
 ## Limites connues
 
-- MacBook Pro Apple Silicon avec Touch Bar uniquement.
-- Tactile repose sur des API privées d'Apple (barre système, icône du Control Strip via DFRFoundation, luminosité via DisplayServices). Une mise à jour de macOS peut les casser.
-- L'app n'est pas notarisée : le premier lancement passe par clic droit → Ouvrir.
-- `masquer_control_strip = false` n'a pas encore été vérifié sur machine réelle.
+- Tactile utilise des API privées d'Apple (barre système, Control Strip, luminosité). Une mise à jour de macOS peut les casser ; elles sont listées dans [ARCHITECTURE.md](docs/ARCHITECTURE.md#api-privées-utilisées).
+- Pas encore d'éditeur visuel : la barre se règle dans le fichier TOML.
 - Le curseur de luminosité règle l'écran intégré seulement.
-- Pas encore de gestes sur la Touch Bar, de raccourcis clavier ni de gestes trackpad : ce sont les modules suivants.
+- `masquer_control_strip = false` n'a pas encore été vérifié sur une vraie machine.
+- Gestes sur la Touch Bar, raccourcis clavier et gestes trackpad viendront ensuite (voir [SPEC.md](SPEC.md)).
 
 ## Remerciements
 
-[MTMR](https://github.com/Toxblh/MTMR) (licence MIT) a servi de référence pour l'approche des API privées de la Touch Bar : présentation d'une barre système et icône dans le Control Strip.
+[MTMR](https://github.com/Toxblh/MTMR) (licence MIT), dont l'approche des API privées de la Touch Bar a servi de référence.
 
 ## Licence
 
-[MIT](LICENSE).
+[MIT](LICENSE). Fais-en ce que tu veux.
 
 ---
 
 ## English
 
-Tactile replaces the MacBook Pro Touch Bar with a bar you describe in a TOML file. It is a native Apple Silicon app written in Rust, with no Dock icon and a small footprint at rest (measured: 0.5 % CPU, 13 MB RAM).
+**Your own Touch Bar, free and open source.** Tactile replaces your MacBook Pro Touch Bar with the bar you describe: buttons, brightness and volume sliders, now playing, a clock, your own commands. One tap switches between your bar and Apple's.
 
-It supports buttons (text, SF Symbol, color, tap and long-press actions), brightness and volume sliders in sub-bars, the track currently playing in any app with ⏪ ⏯ ⏩, a clock, script widgets, groups, and switching back and forth with Apple's own bar (the  button shows Apple's bar, the ✳ icon in the Control Strip brings Tactile back). The config file is reloaded as soon as it is saved.
+At rest it uses 0.5 % CPU and 13 MB of memory (measured). It is written in Rust and runs natively on Intel and Apple Silicon Macs. MIT licensed, no account, no data sent anywhere.
 
-**Install.** Download `Tactile.zip` from [Releases](../../releases/latest), move `Tactile.app` to Applications, and open it the first time with right-click → Open (the app is not notarized). Allow it under System Settings → Privacy & Security → Accessibility (needed by the `echap` action). For the now-playing title, `brew install media-control`: since macOS 15.4, MediaRemote no longer lets unapproved apps read what is playing.
+**Compatibility.** MacBook Pro with a Touch Bar (Intel 2016 to 2020, or Apple Silicon), macOS 13 or later. Tested on an M1 13-inch running macOS 15.8; the Intel build was tested under Rosetta only.
 
-**Configure.** Edit `~/.config/tactile/barre.toml`; start from [exemples/barre.toml](exemples/barre.toml). Element types and actions are listed in the French tables above (keys are French: `bouton` = button, `heure` = clock, `en_cours` = now playing, `souple` = flexible space, `groupe` = group).
+**Install.** Download `Tactile.zip` from [Releases](../../releases/latest), move `Tactile.app` to Applications, and open it the first time with right-click → Open (the app is not notarized). For now playing, `brew install media-control`: since macOS 15.4, Apple no longer lets apps read what is playing.
 
-**Build.** `cargo build --release`, `cargo test`, then `scripts/empaqueter.sh` to get `target/Tactile.app` and `target/Tactile.zip`.
+**Menu.** The menu bar icon offers: show my bar, Apple's bar, open the configuration, launch at login, quit.
 
-**Limits.** Apple Silicon MacBook Pro with a Touch Bar only; relies on private Apple APIs that a macOS update may break; not notarized.
+**Customize.** Menu → *Ouvrir la configuration* opens `~/.config/tactile/barre.toml`; save it and the bar updates within a second. Keys are French: `bouton` = button, `texte` = text, `symbole` = SF Symbol, `couleur` = colour, `appui_long` = long press, `heure` = clock, `en_cours` = now playing, `script` = command output, `espace` = fixed space, `souple` = flexible space, `groupe` = group. Errors are written to `~/Library/Logs/Tactile.log`.
 
-Thanks to [MTMR](https://github.com/Toxblh/MTMR) (MIT), whose approach to the private Touch Bar APIs served as a reference. MIT licensed.
+**Contribute.** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map, step-by-step recipes, private APIs, known pitfalls) and [docs/DECISIONS.md](docs/DECISIONS.md). Build with `cargo build --release`; `scripts/empaqueter.sh` produces the universal app.
+
+**Limits.** Relies on private Apple APIs that a macOS update may break; no visual editor yet; not notarized.
+
+Thanks to [MTMR](https://github.com/Toxblh/MTMR) (MIT). MIT licensed.

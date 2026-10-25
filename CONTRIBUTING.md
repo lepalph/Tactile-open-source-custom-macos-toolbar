@@ -1,6 +1,6 @@
 # Contribuer à Tactile
 
-Merci de ton intérêt. Quelques règles pour que le code reste homogène.
+Merci de ton intérêt. Commence par [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : la carte du code, les recettes pour ajouter une action ou un élément, et les pièges déjà rencontrés. Le pourquoi des choix est dans [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Style
 
@@ -23,6 +23,11 @@ screencapture -b barre.png
 ```
 
 Si l'image est entièrement noire, l'écran était en veille : réveille-le et recommence.
+
+Deux variables aident à capturer ce qu'on ne peut pas toucher :
+
+- `TACTILE_OUVRIR=1 target/release/tactile` présente directement la sous-barre n° 1 (premier slider ou groupe) ;
+- `TACTILE_MASQUER=1 target/release/tactile` rend la barre d'Apple 2 s après le lancement.
 
 ## Commits
 
