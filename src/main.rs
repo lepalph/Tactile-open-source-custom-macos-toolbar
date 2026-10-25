@@ -1,33 +1,37 @@
 mod actions;
+mod barre;
 mod config;
 
-use objc2::runtime::AnyObject;
-use objc2::{class, msg_send, sel};
-use objc2_foundation::NSString;
+use actions::Action;
+use config::{Barre, Element, Reglage};
+
+fn barre_provisoire() -> Barre {
+    let bouton = |symbole: &str, action: Action| Element::Bouton {
+        texte: None,
+        symbole: Some(symbole.into()),
+        couleur: None,
+        largeur: Some(56.0),
+        action: Some(action),
+        appui_long: None,
+    };
+    let claude = Action::Shell("~/.local/bin/claude-voix".into());
+    Barre {
+        masquer_control_strip: true,
+        elements: vec![
+            Element::Slider { reglage: Reglage::Luminosite, symbole: None },
+            Element::Slider { reglage: Reglage::Volume, symbole: None },
+            bouton("backward.fill", Action::Precedent),
+            Element::EnCours { largeur: Some(330.0) },
+            bouton("forward.fill", Action::Suivant),
+            Element::Heure { format: Some("HH:mm".into()) },
+            Element::Script { commande: "cat /tmp/claude-voix/etat 2>/dev/null".into(), intervalle: 0.3, largeur: None, action: Some(claude.clone()) },
+            Element::Bouton { texte: Some("✳ Claude".into()), symbole: None, couleur: Some("#B4552F".into()), largeur: Some(120.0), action: Some(claude.clone()), appui_long: Some(claude) },
+        ],
+    }
+}
 
 fn main() {
-    unsafe {
-        let app: *mut AnyObject = msg_send![class!(NSApplication), sharedApplication];
-        let _: objc2::runtime::Bool = msg_send![app, setActivationPolicy: 1isize];
-
-        let ident = NSString::from_str("fr.palph.tactile.essai");
-        let titre = NSString::from_str("✳ tactile");
-        let bouton: *mut AnyObject = msg_send![class!(NSButton), buttonWithTitle: &*titre, target: std::ptr::null_mut::<AnyObject>(), action: sel!(description)];
-        let item: *mut AnyObject = msg_send![class!(NSCustomTouchBarItem), alloc];
-        let item: *mut AnyObject = msg_send![item, initWithIdentifier: &*ident];
-        let _: () = msg_send![item, setView: bouton];
-
-        let barre: *mut AnyObject = msg_send![class!(NSTouchBar), new];
-        let idents: *mut AnyObject = msg_send![class!(NSArray), arrayWithObject: &*ident];
-        let _: () = msg_send![barre, setDefaultItemIdentifiers: idents];
-        let items: *mut AnyObject = msg_send![class!(NSSet), setWithObject: item];
-        let _: () = msg_send![barre, setTemplateItems: items];
-
-        let plateau = NSString::from_str("fr.palph.tactile.plateau");
-        let _: () = msg_send![class!(NSTouchBar), presentSystemModalTouchBar: barre, placement: 1i64, systemTrayItemIdentifier: &*plateau];
-
-        let _: () = msg_send![app, run];
-    }
+    barre::lancer(barre_provisoire());
 }
 
 #[link(name = "AppKit", kind = "framework")]
