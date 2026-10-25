@@ -1,0 +1,55 @@
+# Ma Touch Bar. Les éléments s'affichent de gauche à droite, dans l'ordre du fichier.
+# Tactile recharge ce fichier dès qu'il est enregistré.
+
+# Cache la bande de boutons système d'Apple, à droite.
+masquer_control_strip = true
+
+# Curseur de luminosité de l'écran.
+[[element]]
+type = "slider"
+reglage = "luminosite"
+symbole = "sun.max.fill"
+
+# Curseur du volume.
+[[element]]
+type = "slider"
+reglage = "volume"
+symbole = "speaker.wave.2.fill"
+
+# ⏪ Morceau précédent.
+[[element]]
+type = "bouton"
+symbole = "backward.fill"
+action = "precedent"
+
+# Titre en cours de lecture (largeur en points).
+[[element]]
+type = "en_cours"
+largeur = 330
+
+# ⏩ Morceau suivant.
+[[element]]
+type = "bouton"
+symbole = "forward.fill"
+action = "suivant"
+
+# Heure (HH = heures, mm = minutes).
+[[element]]
+type = "heure"
+format = "HH:mm"
+
+# État de Claude vocal : sortie de la commande, relue toutes les 0,3 s ; un appui lance Claude.
+[[element]]
+type = "script"
+commande = "cat /tmp/claude-voix/etat 2>/dev/null"
+intervalle = 0.3
+action = { shell = "~/.local/bin/claude-voix" }
+
+# Bouton ✳ Claude : un appui, court ou long, lance Claude vocal.
+[[element]]
+type = "bouton"
+texte = "✳ Claude"
+couleur = "#B4552F"
+largeur = 120
+action = { shell = "~/.local/bin/claude-voix" }
+appui_long = { shell = "~/.local/bin/claude-voix" }

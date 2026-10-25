@@ -10,7 +10,7 @@ use std::process::Command;
 pub type Resultat<T> = Result<T, String>;
 
 #[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(rename_all = "snake_case", tag = "action", content = "valeur")]
+#[serde(rename_all = "snake_case")]
 pub enum Action {
     LuminositePlus,
     LuminositeMoins,
