@@ -19,10 +19,23 @@ struct Brut {
 }
 
 // Depuis macOS 15.4, MediaRemote refuse aux apps non autorisées de lire ce qui joue, et MRMediaRemoteSendCommand
-// répond « vrai » sans effet : media-control passe par un binaire autorisé. Il échoue sous Rosetta, d'où arch -arm64.
+// répond « vrai » sans effet : media-control passe par un binaire autorisé. Sur Apple Silicon il échoue sous Rosetta,
+// d'où arch -arm64 ; sur Intel, Homebrew l'installe dans /usr/local.
+fn programme(existe: impl Fn(&str) -> bool) -> Option<Vec<&'static str>> {
+    if existe("/opt/homebrew/bin/media-control") {
+        Some(vec!["/usr/bin/arch", "-arm64", "/opt/homebrew/bin/media-control"])
+    } else if existe("/usr/local/bin/media-control") {
+        Some(vec!["/usr/local/bin/media-control"])
+    } else {
+        None
+    }
+}
+
 fn media_control(args: &[&str]) -> Resultat<Vec<u8>> {
-    let sortie = Command::new("/usr/bin/arch")
-        .args(["-arm64", "/opt/homebrew/bin/media-control"])
+    let commande = programme(|chemin| std::path::Path::new(chemin).exists())
+        .ok_or("média : media-control introuvable, installe-le avec « brew install media-control »")?;
+    let sortie = Command::new(commande[0])
+        .args(&commande[1..])
         .args(args)
         .output()
         .map_err(|e| format!("média : impossible de lancer media-control ({e})"))?;
@@ -64,6 +77,15 @@ mod tests {
     use super::*;
     use std::thread::sleep;
     use std::time::Duration;
+
+    #[test]
+    fn programme_selon_le_mac() {
+        let apple_silicon = programme(|c| c.starts_with("/opt/homebrew")).unwrap();
+        assert_eq!(apple_silicon, ["/usr/bin/arch", "-arm64", "/opt/homebrew/bin/media-control"]);
+        let intel = programme(|c| c.starts_with("/usr/local")).unwrap();
+        assert_eq!(intel, ["/usr/local/bin/media-control"]);
+        assert!(programme(|_| false).is_none());
+    }
 
     #[test]
     fn analyse_lecture() {
