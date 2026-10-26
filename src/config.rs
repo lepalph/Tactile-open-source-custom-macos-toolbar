@@ -1,7 +1,7 @@
-//! Description de la barre, lue depuis ~/.config/tactile/barre.toml.
+//! Description de la barre, lue depuis ~/.config/tactile/barre.toml (ou `TACTILE_CONFIG`).
 
 use crate::actions::Action;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 /// Barre utilisée tant que l'utilisateur n'a pas écrit la sienne.
 const PAR_DEFAUT: &str = include_str!("../exemples/barre.toml");
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Barre {
     #[serde(default)]
@@ -18,7 +18,7 @@ pub struct Barre {
     pub elements: Vec<Element>,
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", deny_unknown_fields)]
 pub enum Element {
     Bouton {
@@ -57,16 +57,30 @@ pub enum Element {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Reglage {
     Luminosite,
     Volume,
 }
 
+/// `TACTILE_CONFIG=chemin` remplace ~/.config/tactile/barre.toml (essais sans toucher sa vraie barre).
 pub fn chemin() -> PathBuf {
+    if let Some(chemin) = std::env::var_os("TACTILE_CONFIG").filter(|c| !c.is_empty()) {
+        return PathBuf::from(chemin);
+    }
     let maison = std::env::var("HOME").unwrap_or_default();
     PathBuf::from(maison).join(".config/tactile/barre.toml")
+}
+
+/// Le fichier complet tel que l'éditeur l'écrit : un en-tête fixe, puis la barre en TOML.
+pub fn ecrire(barre: &Barre) -> Result<String, String> {
+    let corps = toml::to_string_pretty(barre).map_err(|e| format!("écriture TOML : {e}"))?;
+    Ok(format!(
+        "# Ta barre Tactile, de gauche à droite. Écrite par « Personnaliser ma barre ».\n\
+         # Tu peux aussi la modifier à la main : Tactile la recharge dès qu'elle est enregistrée.\n\
+         # Les types d'éléments et les actions sont décrits dans le README.\n\n{corps}"
+    ))
 }
 
 pub fn lire(texte: &str) -> Result<Barre, String> {
@@ -344,6 +358,30 @@ symbole = "speaker.wave.2.fill"
                 ],
             }
         );
+    }
+
+    #[test]
+    fn aller_retour_toml() {
+        for texte in [
+            PAR_DEFAUT,
+            include_str!("../exemples/claude-vocal.toml"),
+            include_str!("../exemples/simple.toml"),
+            include_str!("../exemples/developpeur.toml"),
+        ] {
+            let barre = lire(texte).unwrap();
+            let ecrit = ecrire(&barre).unwrap();
+            assert_eq!(lire(&ecrit), Ok(barre), "{ecrit}");
+        }
+    }
+
+    #[test]
+    fn chemin_suit_tactile_config() {
+        // Lue à chaque appel : posée puis retirée, sans effet sur les autres tests.
+        unsafe { std::env::set_var("TACTILE_CONFIG", "/tmp/essai-tactile/barre.toml") };
+        let essai = chemin();
+        unsafe { std::env::remove_var("TACTILE_CONFIG") };
+        assert_eq!(essai, PathBuf::from("/tmp/essai-tactile/barre.toml"));
+        assert!(chemin().ends_with(".config/tactile/barre.toml"));
     }
 
     #[test]

@@ -1,0 +1,38 @@
+# Barre « Simple » : luminosité, volume, l'heure. Préréglage de « Personnaliser ma barre ».
+# Les éléments s'affichent de gauche à droite, dans l'ordre du fichier.
+
+masquer_control_strip = true
+
+# Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène celle-ci.
+[[element]]
+type = "bouton"
+symbole = "apple.logo"
+largeur = 56
+action = "barre_apple"
+
+# Curseur de luminosité de l'écran.
+[[element]]
+type = "slider"
+reglage = "luminosite"
+symbole = "sun.max.fill"
+
+# Curseur du volume.
+[[element]]
+type = "slider"
+reglage = "volume"
+symbole = "speaker.wave.2.fill"
+
+# Coupe ou rétablit le son.
+[[element]]
+type = "bouton"
+symbole = "speaker.slash.fill"
+action = "basculer_muet"
+
+# Espace souple : pousse l'heure à droite.
+[[element]]
+type = "souple"
+
+# Heure (HH = heures, mm = minutes).
+[[element]]
+type = "heure"
+format = "HH:mm"

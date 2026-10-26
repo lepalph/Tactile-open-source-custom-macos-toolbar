@@ -1,0 +1,67 @@
+# Barre « Développeur » : esc, Terminal, batterie, musique, heure avec secondes. Préréglage de « Personnaliser ma barre ».
+# Les éléments s'affichent de gauche à droite, dans l'ordre du fichier.
+
+masquer_control_strip = true
+
+# Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène celle-ci.
+[[element]]
+type = "bouton"
+symbole = "apple.logo"
+largeur = 56
+action = "barre_apple"
+
+# La touche esc, que la barre d'Apple a et la tienne non (demande l'autorisation Accessibilité).
+[[element]]
+type = "bouton"
+texte = "esc"
+largeur = 64
+action = "echap"
+
+# Ouvre le Terminal ; appui long = Moniteur d'activité.
+[[element]]
+type = "bouton"
+symbole = "terminal.fill"
+action = { shell = "open -a 'Terminal'" }
+appui_long = { shell = "open -a 'Activity Monitor'" }
+
+# Luminosité et volume dans un groupe, pour garder de la place.
+[[element]]
+type = "groupe"
+symbole = "slider.horizontal.3"
+  [[element.element]]
+  type = "slider"
+  reglage = "luminosite"
+  symbole = "sun.max.fill"
+
+  [[element.element]]
+  type = "slider"
+  reglage = "volume"
+  symbole = "speaker.wave.2.fill"
+
+[[element]]
+type = "souple"
+
+# Lecture / pause et titre en cours.
+[[element]]
+type = "bouton"
+symbole = "playpause.fill"
+action = "lecture_pause"
+
+[[element]]
+type = "en_cours"
+largeur = 260
+
+[[element]]
+type = "souple"
+
+# Charge de la batterie, relue toutes les 30 s.
+[[element]]
+type = "script"
+commande = "pmset -g batt | grep -o '[0-9]*%'"
+intervalle = 30
+largeur = 60
+
+# Heure avec les secondes.
+[[element]]
+type = "heure"
+format = "HH:mm:ss"
