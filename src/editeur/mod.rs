@@ -44,6 +44,11 @@ define_class!(
         #[unsafe(method(userContentController:didReceiveScriptMessage:))]
         fn message(&self, _controleur: Id, message: Id) {
             let corps: Id = unsafe { msg_send![message, body] };
+            // La page envoie du JSON en texte ; un objet (dictionnaire) ferait planter la conversion en NSString.
+            let est_texte: Bool = unsafe { msg_send![corps, isKindOfClass: class!(NSString)] };
+            if corps.is_null() || !est_texte.as_bool() {
+                return eprintln!("tactile : message de l'éditeur ignoré, il doit être une chaîne JSON");
+            }
             let texte = unsafe { (*(corps as *const NSString)).to_string() };
             match serde_json::from_str::<Value>(&texte) {
                 Ok(v) => recevoir(v),
