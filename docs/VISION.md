@@ -15,3 +15,7 @@ Tactile doit devenir un outil libre qui permet de tout personnaliser sur la Touc
 - Une barre importée est une entrée non fiable : elle est vérifiée, et ce qu'elle exécute est montré avant d'être accepté.
 - L'éditeur et le fichier disent la même chose : tout ce que fait l'éditeur s'écrit dans le TOML, et le TOML se lit sans l'éditeur.
 - Ouvert aux contributions : README anglais, CONTRIBUTING, gabarits d'issues, « good first issues », releases régulières.
+
+## Priorités (décidé le 2026-10-26)
+
+L'outil est fait d'abord pour son auteur ; l'open source sert au partage du code, pas à la course à l'adoption. Priorité à la puissance de personnalisation, à la fluidité et à la solidité. Pas d'effort dédié à la notarisation, à un site vitrine ou au marketing ; la galerie communautaire passe après les briques.
