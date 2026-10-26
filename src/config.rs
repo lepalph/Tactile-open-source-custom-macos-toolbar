@@ -80,7 +80,7 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
     })
 }
 
-/// Début du premier [[element]] invalide : serde ne situe pas les erreurs internes
+/// Début du premier `[[element]]` invalide : serde ne situe pas les erreurs internes
 /// d'un élément (action, champ manquant…) et toml pointe alors le premier élément.
 fn element_fautif(texte: &str) -> Option<usize> {
     #[derive(Deserialize)]
