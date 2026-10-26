@@ -23,9 +23,18 @@ pub(super) fn texte(s: &str) -> Retained<NSString> {
 }
 
 /// `None` si le symbole SF n'existe pas : un `buttonWithImage: nil` fait paniquer AppKit.
+/// Gardé par nom : un NSImage neuf à chaque rechargement restait en mémoire (la Touch Bar le garde), +60 Ko par symbole.
 pub(crate) fn symbole(nom: &str) -> Option<Id> {
-    let image: Id = unsafe { msg_send![class!(NSImage), imageWithSystemSymbolName: &*texte(nom), accessibilityDescription: std::ptr::null_mut::<AnyObject>()] };
-    (!image.is_null()).then_some(image)
+    SYMBOLES.with_borrow_mut(|cache| {
+        if let Some(i) = cache.get(nom) {
+            return Some(Retained::as_ptr(i) as Id);
+        }
+        let image: Id = unsafe { msg_send![class!(NSImage), imageWithSystemSymbolName: &*texte(nom), accessibilityDescription: std::ptr::null_mut::<AnyObject>()] };
+        let image = unsafe { Retained::retain(image) }?;
+        let id = Retained::as_ptr(&image) as Id;
+        cache.insert(nom.to_string(), image);
+        Some(id)
+    })
 }
 
 /// Hauteur des images personnalisées, celle des symboles SF dans la barre.
@@ -41,6 +50,8 @@ thread_local! {
     /// Images de fichier déjà lues et réduites, par chemin et gabarit, avec la date du fichier : un script qui renvoie
     /// la même image à chaque sortie ne la relit pas (20 → 141 Mo en 60 s avant) ; un fichier modifié est relu.
     static IMAGES: RefCell<Cache> = RefCell::new(HashMap::new());
+    /// Symboles SF déjà demandés, par nom (bornés par les noms de la config et de la batterie).
+    static SYMBOLES: RefCell<HashMap<String, Retained<AnyObject>>> = RefCell::new(HashMap::new());
 }
 
 /// `None` si le fichier n'existe pas ou n'est pas une image. `~` est étendu ; `gabarit` teinte l'image comme un symbole.
@@ -339,6 +350,14 @@ mod tests {
     fn symbole_inconnu_ne_donne_pas_d_image() {
         assert!(symbole("xmark").is_some());
         assert!(symbole("symbole.qui.nexiste.pas").is_none());
+    }
+
+    /// Un rechargement reconstruit tous les boutons : un nouvel NSImage par symbole et par rechargement restait en mémoire
+    /// (+1 NSImage et ~60 Ko par symbole, 16 → 26 Mo en 30 min d'endurance). Le même symbole donne le même objet.
+    #[test]
+    fn symbole_reutilise_d_un_rechargement_a_l_autre() {
+        assert_eq!(symbole("xmark"), symbole("xmark"));
+        assert_ne!(symbole("xmark"), symbole("sun.max.fill"));
     }
 
     #[test]
