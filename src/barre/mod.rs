@@ -30,7 +30,7 @@ pub(crate) use vues::{controler_image, icone_app, image, reduire, symbole};
 #[cfg(test)]
 pub(crate) use vues::{memoire_max, png_annonce};
 /// Pour `sources` : ses processus (`curl`, commandes, serveurs MCP) meurent avec la barre, comme les scripts.
-pub(crate) use rafraichi::{executer, inscrire, retirer, tuer_groupe};
+pub(crate) use rafraichi::{executer, inscrire, retirer, tuer_groupe, TROP_LONG};
 #[cfg(test)]
 pub(crate) use rafraichi::tuer_tous;
 pub(crate) type Processus = rafraichi::Processus;

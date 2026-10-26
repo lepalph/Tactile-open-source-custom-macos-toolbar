@@ -13,6 +13,7 @@ use super::vues::{couleur, styler, titre};
 use super::{batterie, Id, ETAT, PREFIXE};
 use crate::actions::media;
 use crate::config::{CouleurSelon, SymboleSelon};
+use crate::sources::TAILLE_MAX;
 
 pub(super) enum Rafraichi {
     Heure { bouton: Id, formateur: Id },
@@ -215,21 +216,44 @@ pub(crate) fn executer(commande: &mut std::process::Command, entree: Option<&str
         }
         tue
     });
-    let sortie = enfant.wait_with_output();
+    // Lecture bornée pendant la lecture (pas `wait_with_output`, qui garde tout) : au-delà de 1 Mo, le groupe est tué.
+    // stderr dans un fil, sinon un enfant qui le remplit bloquerait pendant qu'on lit stdout.
+    use std::io::Read;
+    let (mut stdout, mut stderr) = (enfant.stdout.take().expect("stdout demandé"), enfant.stderr.take().expect("stderr demandé"));
+    let lecteur_erreur = std::thread::spawn(move || {
+        let mut octets = Vec::new();
+        let _ = (&mut stderr).take(TAILLE_MAX as u64).read_to_end(&mut octets);
+        // Le reste est jeté : l'enfant n'est pas bloqué, la mémoire reste bornée.
+        let _ = std::io::copy(&mut stderr, &mut std::io::sink());
+        octets
+    });
+    let mut texte = Vec::new();
+    let lu = (&mut stdout).take(TAILLE_MAX as u64 + 1).read_to_end(&mut texte);
+    let trop_long = texte.len() > TAILLE_MAX;
+    if trop_long {
+        tuer_groupe(pid);
+        texte = Vec::new();
+    }
+    drop(stdout);
+    let statut = enfant.wait();
     let _ = fini.send(());
     let tue = garde.join().unwrap_or(false);
     retirer(processus, pid);
-    let Ok(sortie) = sortie else { return Sortie { texte: String::new(), erreur: "sortie illisible".into() } };
-    let stderr = String::from_utf8_lossy(&sortie.stderr).trim().to_string();
+    let stderr = lecteur_erreur.join().unwrap_or_default();
+    let (Ok(_), Ok(statut)) = (lu, statut) else { return Sortie { texte: String::new(), erreur: "sortie illisible".into() } };
+    if trop_long {
+        return Sortie { texte: TROP_LONG.into(), erreur: "sortie de plus de 1 Mo, commande arrêtée".into() };
+    }
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
     let erreur = if tue {
         format!("tué après {} s", delai.as_secs_f64())
-    } else if !sortie.status.success() || !stderr.is_empty() {
-        let code = sortie.status.code().map_or("signal".to_string(), |c| format!("code {c}"));
+    } else if !statut.success() || !stderr.is_empty() {
+        let code = statut.code().map_or("signal".to_string(), |c| format!("code {c}"));
         if stderr.is_empty() { code } else { format!("{code}, {stderr}") }
     } else {
         String::new()
     };
-    Sortie { texte: String::from_utf8_lossy(&sortie.stdout).into_owned(), erreur }
+    Sortie { texte: String::from_utf8_lossy(&texte).into_owned(), erreur }
 }
 
 pub(super) fn rafraichir() {

@@ -23,6 +23,13 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Images (button `image`, script JSON image, logos added or imported) are refused above 4096 × 4096 pixels, read from the file header before any decoding; SVG and PDF are rendered at most 4096 px wide. A tiny PNG announcing 30000 × 30000 px no longer makes the bar allocate gigabytes.
 - Editor: a file dropped in the window is limited to 10 MB, with a clear message (it was unbounded on the Rust side).
 
+### Security
+
+- Import now shows every header of a data source. A `trousseau:` header is spelled out ("Reads your saved password “github-token” and sends it to exfil.example.com"); when that secret goes to a host other than this Mac, the editor preview opens with a warning banner and `--import` refuses without an explicit `--yes` (and still prints the warning with it). The list of what a bar does is built by one exhaustive `match` over every item, action and source field, so a new type can't be forgotten; it also lists image files read outside `icones/`.
+- A command's output (`script`, `commande` source, keychain lookup, curl) and each line from a stdio MCP server are read with a 1 MB cap while reading: past it, the process group is killed and the item shows "⚠ trop long" (the error is logged). `cat /dev/zero` no longer fills memory before the timeout.
+- An imported bar can only use images from its own archive (`icones/…`): an absolute, `~` or other path (`/etc/passwd`, `~/.ssh/id_rsa`) is dropped, the button falls back to its text or symbol, and the preview says "image ignored: path outside the imported bar". Your own bars keep their paths.
+- Editor: messages from the page that carry a path (`capture`, `importerImage`, `importerBarre`, `exporterVers`) are only followed with the `TACTILE_EDITEUR_JS` driver, inside the temporary folder or the repository; otherwise only the file NSSavePanel just returned can be written.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added
