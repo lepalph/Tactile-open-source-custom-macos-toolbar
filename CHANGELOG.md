@@ -20,6 +20,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - `--verifier` checks what breaks in use, with one validator shared by the editor and the bar's log: unknown SF Symbol, color not `#RRGGBB`, missing image or app, overflow of the main bar and of each app bar, the same app twice; warnings start with `attention :` (exit 0), an empty bar is an error (exit 1).
 - `--verifier` warns when an `[[element]]` comes after an `[[application]]` (it goes to the main bar), with its line.
 - `--help` follows the system language (English unless French); `--check` and `--customize` are English aliases of `--verifier` and `--personnaliser`.
+- Editor: the last 5 saved versions are kept (`barre.toml.precedent`, `.precedent-2` … `.precedent-5`) and "Go back" steps back one per click without losing any; the first save over a hand-commented file keeps a `barre.toml.manuel` copy, never overwritten.
+- Editor: an app name typed by hand is checked, with the closest installed app offered in one click.
 
 ### Fixed
 
@@ -38,6 +40,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - An error inside an `[[application]]` (or a group in it) reports its own line, and errors come in file order.
 - TOML and serde error messages are fully translated into French; "1 élément", "2 éléments".
 - Version 0.2.0 with crate metadata; hardware tests show as `ignored` under `CI`; the glossary test reads both READMEs; CONTRIBUTING lists the eight places to touch when adding an action; `{ app = "com.example.App" }` opens a bundle id with `open -b`.
+- Editor: an unreadable bar file no longer opens as an empty bar that Save would write over. The window shows the faulty line, turns Save off, and offers to open the file or start from a ready-made bar (the broken file is first copied to `barre.toml.abime-YYYYMMDD-HHMMSS`). Saving a bar whose main bar has no item is refused, with the same message as `--verifier`.
+- Editor: unsaved changes are flagged ("Edited", dot in the close button) and confirmed before closing the window, loading a ready-made bar or going back; going back now says it worked.
 
 ## [0.1.0] - 2026-10-25
 

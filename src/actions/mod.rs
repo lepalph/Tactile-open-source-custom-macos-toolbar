@@ -96,8 +96,13 @@ fn est_bundle(nom: &str) -> bool {
     }
 }
 
-/// Une app installée, par bundle id ou par nom (celui qu'`open -a` trouve), sans lancer de processus.
+/// Une app installée, par bundle id, chemin ou nom (celui qu'`open -a` trouve), sans lancer de processus.
+/// Partagée par `--verifier` (`config::controler`) et l'éditeur (qui y ajoute une suggestion).
 pub fn app_existe(nom: &str) -> bool {
+    // `fullPathForApplication:` répond pour n'importe quel chemin, même absent.
+    if nom.starts_with('/') {
+        return std::path::Path::new(nom).exists();
+    }
     let chemin = objc2_foundation::NSString::from_str(nom);
     est_bundle(nom)
         || unsafe {
@@ -156,6 +161,8 @@ mod tests {
     #[test]
     fn app_par_nom_ou_par_bundle_id() {
         assert!(app_existe("Safari") && app_existe("com.apple.Safari") && app_existe("TextEdit"));
+        assert!(app_existe("/System/Applications/TextEdit.app"), "chemin");
+        assert!(!app_existe("/Applications/Nexiste.app"), "chemin absent");
         assert!(!app_existe("AppQuiNexistePas") && !app_existe("com.exemple.nexiste.pas"));
         assert!(est_bundle("com.apple.Safari") && !est_bundle("Safari"));
     }
