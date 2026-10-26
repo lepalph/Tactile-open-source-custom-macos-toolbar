@@ -210,11 +210,13 @@ fn largeur_estimee(element: &Element) -> f64 {
 /// qui seront cachés (du premier qui dépasse `disponible` jusqu'au dernier), ou `None` si tout tient.
 pub(super) fn debordement(elements: &[Element], disponible: f64) -> Option<(f64, usize)> {
     const ESPACEMENT: f64 = 8.0;
+    // L'estimation est grossière (la barre par défaut tient à 3 % près) : on ne prévient qu'au-delà de 5 %.
+    const TOLERANCE: f64 = 1.05;
     let largeurs: Vec<f64> = elements.iter().map(|e| largeur_estimee(e) + ESPACEMENT).collect();
     let mut cumul = 0.0;
     let premier_cache = largeurs.iter().position(|l| {
         cumul += l;
-        cumul > disponible
+        cumul > disponible * TOLERANCE
     })?;
     Some((largeurs.iter().sum(), elements.len() - premier_cache))
 }
@@ -245,11 +247,16 @@ mod tests {
         };
         let defaut = crate::config::lire(include_str!("../../exemples/barre.toml")).unwrap();
         assert_eq!(debordement(&defaut.elements, largeur_barre(true)), None);
+        // La barre par défaut avec en_cours à 280 et les deux éléments de Claude vocal tient sur la vraie barre (vu en capture).
+        let mut avec_claude = defaut.elements.clone();
+        avec_claude[5] = Element::EnCours { largeur: Some(280.0) };
+        avec_claude.extend(crate::config::lire(include_str!("../../exemples/claude-vocal.toml")).unwrap().elements);
+        assert_eq!(debordement(&avec_claude, largeur_barre(true)), None);
         assert_eq!(debordement(&[bouton(None, Some(100_000.0)), bouton(None, None)], 1004.0).map(|d| d.1), Some(2));
         let vingt_cinq: Vec<Element> = (0..25).map(|_| bouton(None, None)).collect();
         let (total, caches) = debordement(&vingt_cinq, 1004.0).unwrap();
         assert_eq!(total, 25.0 * 80.0);
-        assert_eq!(caches, 25 - 12);
+        assert_eq!(caches, 25 - 13); // la vraie barre en cache 13 : l'estimation est à un élément près
         // Un texte long sans largeur est plafonné, il ne cache pas tout seul ses voisins.
         let long = "x".repeat(200);
         assert_eq!(debordement(&[bouton(Some(&long), None), bouton(None, None)], 1004.0), None);
