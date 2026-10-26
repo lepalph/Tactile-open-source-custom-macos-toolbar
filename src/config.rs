@@ -42,6 +42,8 @@ pub enum Element {
     Script {
         commande: String,
         intervalle: f64,
+        /// Secondes au bout desquelles la commande est tuée (5 par défaut).
+        delai: Option<f64>,
         largeur: Option<f64>,
         action: Option<Action>,
     },
@@ -349,6 +351,15 @@ symbole = "speaker.wave.2.fill"
                     },
                 ],
             }
+        );
+    }
+
+    #[test]
+    fn script_avec_delai() {
+        let barre = lire("[[element]]\ntype = \"script\"\ncommande = \"uptime\"\nintervalle = 2\ndelai = 1.5\n").unwrap();
+        assert_eq!(
+            barre.elements[0],
+            Element::Script { commande: "uptime".into(), intervalle: 2.0, delai: Some(1.5), largeur: None, action: None }
         );
     }
 

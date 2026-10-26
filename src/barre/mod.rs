@@ -17,7 +17,7 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, NSObject};
 use objc2::{class, define_class, msg_send, sel, ClassType};
 use plateau::{installer_plateau, PLATEAU};
-use rafraichi::{rafraichir, Rafraichi};
+use rafraichi::{rafraichir, Processus, Rafraichi, Sortie};
 use std::cell::RefCell;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
@@ -44,9 +44,11 @@ struct Etat {
     commandes: Vec<(Option<Commande>, Option<Commande>)>,
     barres: Vec<Id>,
     rafraichis: Vec<Rafraichi>,
+    /// Scripts en cours, tués quand la barre est remplacée.
+    processus: Processus,
     prochain_media: Instant,
-    envoi: Sender<(usize, String)>,
-    reception: Receiver<(usize, String)>,
+    envoi: Sender<(usize, Sortie)>,
+    reception: Receiver<(usize, Sortie)>,
     /// Contrôles nommés (« ouvrir sun.max.fill », « fermer », « slider luminosite »…), pour l'autotest.
     controles: Vec<(String, Id)>,
 }
@@ -250,6 +252,7 @@ fn installer(config: &Barre) {
         controles: Vec::new(),
         barres: vec![std::ptr::null_mut()],
         rafraichis: Vec::new(),
+        processus: Processus::new(std::sync::Mutex::new(Some(Vec::new()))),
         prochain_media: Instant::now(),
         envoi,
         reception,
@@ -261,7 +264,12 @@ fn installer(config: &Barre) {
     etat.barres[0] = barre_touch(PREFIXE, items);
     let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());
     let principale = etat.barres[0];
-    ETAT.with_borrow_mut(|place| *place = Some(etat));
+    ETAT.with_borrow_mut(|place| {
+        if let Some(ancien) = place.as_ref() {
+            rafraichi::tuer_tous(&ancien.processus);
+        }
+        *place = Some(etat);
+    });
     presenter(a_presenter.unwrap_or(principale));
 }
 

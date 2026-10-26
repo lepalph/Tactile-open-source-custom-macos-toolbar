@@ -142,7 +142,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 etat.rafraichis.push(Rafraichi::EnCours { bouton: b });
                 item_vue(&ident, b)
             }
-            Element::Script { commande, intervalle, largeur, action } => {
+            Element::Script { commande, intervalle, delai, largeur, action } => {
                 let b = bouton_texte(etat, action.clone());
                 largeur_fixe(b, largeur_script(*largeur));
                 etat.controles.push((format!("script {commande}"), b));
@@ -150,8 +150,10 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                     bouton: b,
                     commande: commande.clone(),
                     intervalle: Duration::from_secs_f64(intervalle.max(0.1)),
+                    delai: Duration::from_secs_f64(delai.unwrap_or(DELAI_SCRIPT).max(0.1)),
                     prochain: Instant::now(),
                     en_cours: false,
+                    derniere_erreur: String::new(),
                 });
                 item_vue(&ident, b)
             }
@@ -174,6 +176,9 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
 /// Largeur d'un widget script sans `largeur` : sa sortie change, et une sortie qui grandit
 /// pousserait ses voisins hors de la barre (la Touch Bar retire ce qui dépasse).
 pub(super) const LARGEUR_SCRIPT: f64 = 120.0;
+
+/// Secondes avant qu'un script sans `delai` soit tué.
+pub(super) const DELAI_SCRIPT: f64 = 5.0;
 
 pub(super) fn largeur_script(largeur: Option<f64>) -> f64 {
     largeur.unwrap_or(LARGEUR_SCRIPT)
