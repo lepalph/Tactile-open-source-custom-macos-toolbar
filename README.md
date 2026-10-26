@@ -499,7 +499,7 @@ Errors are written to `~/Library/Logs/Tactile.log` (menu → **Voir le journal**
 | Esc or a shortcut does nothing | Allow Tactile in **System Settings → Privacy & Security → Accessibility**. |
 | `{ app = "…" }` opens nothing | Use the `.app` folder's name ([finding an app's name](#finding-an-apps-name)); the log says "Unable to find application". |
 
-![A misspelled symbol in the editor window: saving is refused and the closest symbol is suggested](docs/editeur-erreur-sombre.png)
+![A misspelled symbol in the editor window: the preview flags it and suggests the closest symbol](docs/editeur-erreur-sombre-en.png)
 
 ### Why media-control
 

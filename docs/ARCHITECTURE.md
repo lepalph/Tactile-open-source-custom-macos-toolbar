@@ -69,6 +69,8 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `exemples/simple.toml`, `exemples/developpeur.toml` | Les deux autres préréglages de l'éditeur. |
 | `exemples/par-application.toml` | Barres par application commentées (testé par `aller_retour_toml`). |
 | `exemples/lanceur.toml` | Lanceurs, tiroir d'apps (un `groupe` de lanceurs) et raccourcis système (testé par `aller_retour_toml`). |
+| `exemples/vitrine.toml` | La barre des visuels du README (testé par `aller_retour_toml`). |
+| `scripts/hero.sh` | `docs/hero.png`, `docs/social-preview.png` et `docs/editeur-erreur-sombre-en.png`, rendus par l'éditeur piloté (`scripts/pilote-editeur.sh`) sur `vitrine.toml`. |
 | `scripts/empaqueter.sh` | `Tactile.app` universelle signée ad hoc + `Tactile.zip`. |
 
 ## Recettes
