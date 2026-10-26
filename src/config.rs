@@ -262,6 +262,18 @@ mod tests {
                 r#"{ shell = "open -a Safari" }"#,
                 Action::Shell("open -a Safari".into()),
             ),
+            (r#""echap""#, Action::Echap),
+            (
+                r#"{ touche = "cmd+shift+4" }"#,
+                Action::Touche(crate::actions::clavier::Touche::try_from("cmd+shift+4".to_string()).unwrap()),
+            ),
+            ("{ keycode = 53 }", Action::Keycode(53)),
+            (r#"{ app = "Figma" }"#, Action::App("Figma".into())),
+            (r#"{ url = "https://example.org" }"#, Action::Url("https://example.org".into())),
+            (
+                r#"{ applescript = 'tell application "Music" to playpause' }"#,
+                Action::Applescript("tell application \"Music\" to playpause".into()),
+            ),
         ] {
             let texte = format!("[[element]]\ntype = \"bouton\"\naction = {ecrit}\n");
             assert_eq!(
@@ -298,6 +310,12 @@ mod tests {
             erreur.starts_with("ligne 4 : valeur inconnue «danser», attendu parmi"),
             "{erreur}"
         );
+    }
+
+    #[test]
+    fn touche_inconnue_dit_la_ligne() {
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[element]]\ntype = \"bouton\"\naction = { touche = \"cmd+truc\" }\n").unwrap_err();
+        assert_eq!(erreur, "ligne 4 : touche inconnue « truc » ; attendu : cmd+shift+4, f5, keycode = 53");
     }
 
     #[test]
