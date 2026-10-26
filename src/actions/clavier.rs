@@ -91,6 +91,14 @@ impl TryFrom<String> for Touche {
     type Error = String;
 
     fn try_from(texte: String) -> Result<Self, String> {
+        // `cmd++`, `+` : un `+` final précédé d'un séparateur (ou seul) est la touche elle-même.
+        let avant = texte.trim_end().strip_suffix('+').map(str::trim_end).filter(|a| a.is_empty() || a.ends_with('+'));
+        if let Some(avant) = avant {
+            let modificateurs = avant.strip_suffix('+').unwrap_or(avant);
+            let mut t = if modificateurs.trim().is_empty() { Touche { nom: String::new(), drapeaux: 0 } } else { Touche::try_from(format!("{modificateurs}+a"))? };
+            t.nom = "+".into();
+            return Ok(t);
+        }
         let mut drapeaux = 0;
         let mut mots = texte.split('+').map(|m| m.trim().to_lowercase()).peekable();
         while let Some(mot) = mots.next() {
@@ -245,6 +253,17 @@ mod tests {
         assert_eq!(lire("cmd+truc").unwrap_err(), "touche inconnue « truc » ; attendu : cmd+shift+4, f5, keycode = 53");
         assert_eq!(lire("cmd+").unwrap_err(), "touche inconnue «  » ; attendu : cmd+shift+4, f5, keycode = 53");
         assert_eq!(lire("super+a").unwrap_err(), "modificateur inconnu « super » ; attendu : cmd, shift, ctrl, alt, fn");
+    }
+
+    /// `cmd++` : le dernier `+` est la touche (Lise, sonde 03) ; `cmd+-` aussi.
+    #[test]
+    fn plus_et_moins_comme_touche() {
+        for (ecrit, nom, drapeaux, reecrit) in [("cmd++", "+", CMD, "cmd++"), ("cmd + +", "+", CMD, "cmd++"), ("+", "+", 0, "+"), ("cmd+shift++", "+", CMD | SHIFT, "cmd+shift++"), ("cmd+-", "-", CMD, "cmd+-")] {
+            let t = lire(ecrit).unwrap_or_else(|e| panic!("{ecrit} : {e}"));
+            assert_eq!(t, Touche { nom: nom.into(), drapeaux }, "{ecrit}");
+            assert_eq!(String::from(t), reecrit);
+        }
+        assert!(lire("a++").unwrap_err().starts_with("modificateur inconnu « a »"));
     }
 
     #[test]

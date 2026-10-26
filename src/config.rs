@@ -540,20 +540,35 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
     c.elements(&barre.elements, &mut Vec::new(), "");
     let largeur = crate::barre::largeur_barre(barre.masquer_control_strip);
     c.deborde(&barre.elements, largeur, &[], "la barre principale");
+    // Chaque app par son bundle id quand elle est installée : `Finder` et `com.apple.finder` sont la même.
+    let identites: Vec<String> = barre.applications.iter().map(|a| crate::actions::bundle_app(&a.app).unwrap_or_else(|| a.app.clone()).to_lowercase()).collect();
     for (k, app) in barre.applications.iter().enumerate() {
         let lieu = format!("application « {} »", app.app);
-        if let Some(j) = barre.applications[..k].iter().position(|a| a.app.to_lowercase() == app.app.to_lowercase()) {
+        if let Some(j) = identites[..k].iter().position(|i| *i == identites[k]) {
             let ou = c.ligne(&[("application", j)]).map_or(format!("l'application n° {}", j + 1), |n| format!("ligne {n}"));
-            c.signaler(false, &[("application", k)], &lieu, format!("« {} » a déjà sa barre ({ou}) : celle-ci ne sera jamais montrée", app.app));
+            let premiere = &barre.applications[j].app;
+            let qui = if premiere.to_lowercase() == app.app.to_lowercase() { String::new() } else { format!(" est la même app que « {premiere} », qui") };
+            c.signaler(false, &[("application", k)], &lieu, format!("« {} »{qui} a déjà sa barre ({ou}) : celle-ci ne sera jamais montrée", app.app));
         }
         if !crate::actions::app_existe(&app.app) {
-            c.signaler(false, &[("application", k)], &lieu, format!("app « {} » introuvable : ni un bundle id (com.apple.Safari) ni le nom d'une app installée", app.app));
+            c.signaler(false, &[("application", k)], &lieu, app_introuvable(&app.app, " : sa barre ne sera pas montrée"));
         }
         c.elements(&app.elements, &mut vec![("application", k)], &format!("{lieu}, "));
         c.deborde(&app.elements_avec(&barre.elements), largeur, &[("application", k)], &format!("la barre de « {} »", app.app));
     }
     c.avis.sort_by_key(|a| a.ligne.unwrap_or(usize::MAX));
     c.avis
+}
+
+/// L'avis d'une app introuvable, suivi de `suite` (ce qui se passera). Un bundle id bien formé (deux points au moins,
+/// sans espace) est sans doute juste, pour une app pas encore installée : pas de conseil d'écriture.
+fn app_introuvable(app: &str, suite: &str) -> String {
+    if app.matches('.').count() >= 2 && !app.contains([' ', '/']) {
+        format!("aucune app installée n'a le bundle id « {app} »{suite}")
+    } else {
+        let suite = if suite.is_empty() { " :".to_string() } else { format!("{suite} ;") };
+        format!("app « {app} » introuvable{suite} écris le nom du dossier .app sans l'extension, ou son bundle id")
+    }
 }
 
 struct Controle<'a> {
@@ -602,7 +617,7 @@ impl Controle<'_> {
             if let Element::Lanceur { app, .. } = element
                 && !crate::actions::app_existe(app)
             {
-                self.signaler(false, chemin, &ici, format!("app « {app} » introuvable : le lanceur affichera son nom en texte ; écris le nom du dossier .app sans l'extension, ou son bundle id"));
+                self.signaler(false, chemin, &ici, app_introuvable(app, " : le lanceur affichera son nom en texte"));
             }
             if let Some(s) = symbole.as_deref().filter(|s| !s.is_empty() && crate::barre::symbole(s).is_none()) {
                 self.signaler(false, chemin, &ici, format!("le symbole SF « {s} » n'existe pas : le bouton affichera son nom en texte"));
@@ -617,7 +632,7 @@ impl Controle<'_> {
                 if let Action::App(app) = action
                     && !crate::actions::app_existe(app)
                 {
-                    self.signaler(false, chemin, &ici, format!("app « {app} » introuvable : écris le nom du dossier .app sans l'extension, ou son bundle id"));
+                    self.signaler(false, chemin, &ici, app_introuvable(app, ""));
                 }
             }
             if let Element::Groupe { elements, .. } = element {
@@ -1471,6 +1486,23 @@ command = "uptime"
         // `template` texte sur un bouton : ce qu'il faut écrire, pas « attendu true ou false ».
         let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[item]]\ntype = \"button\"\nsource = \"s\"\ntemplate = \"{texte}\"\n").unwrap_err();
         assert_eq!(erreur, "ligne 7 : « template » : sur un bouton, le texte lié à une source s'écrit texte / text ; gabarit / template est l'interrupteur monochrome de l'image (true ou false)");
+    }
+
+    /// La même app sous son nom et son bundle id (Lise, sonde 22) ; un bundle id bien formé d'une app absente
+    /// n'a pas besoin du conseil d'écriture (Lise, bug 4).
+    #[test]
+    fn meme_app_sous_deux_noms_et_bundle_id_absent() {
+        let texte = "[[element]]\ntype = \"lanceur\"\napp = \"com.example.absente\"\n\n[[element]]\ntype = \"bouton\"\naction = { app = \"com.example.absente\" }\n\n[[application]]\napp = \"Finder\"\n[[application.element]]\ntype = \"souple\"\n\n[[application]]\napp = \"com.apple.finder\"\n[[application.element]]\ntype = \"souple\"\n\n[[application]]\napp = \"com.example.absente\"\n[[application.element]]\ntype = \"souple\"\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(
+            avis,
+            [
+                "ligne 1 : aucune app installée n'a le bundle id « com.example.absente » : le lanceur affichera son nom en texte",
+                "ligne 5 : aucune app installée n'a le bundle id « com.example.absente »",
+                "ligne 14 : « com.apple.finder » est la même app que « Finder », qui a déjà sa barre (ligne 9) : celle-ci ne sera jamais montrée",
+                "ligne 19 : aucune app installée n'a le bundle id « com.example.absente » : sa barre ne sera pas montrée",
+            ]
+        );
     }
 
     #[test]
