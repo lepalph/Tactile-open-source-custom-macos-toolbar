@@ -4,6 +4,16 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- `lanceur` element (`launcher`): an app's real icon, a tap opens it or brings it to the front, a dot under the icon while it runs; `texte`, `affichage`, `largeur`, `appui_long`. A missing app shows its name as text and `--verifier` warns. In a `groupe`, launchers make an app drawer (`exemples/lanceur.toml`).
+- System actions: `mission_control`, `fenetres_app` (`app_windows`), `bureau` (`show_desktop`), `launchpad`, `capture_options` (`screenshot_options`) through Apple's own apps; `spotlight`, `capture_ecran` (`screenshot`), `capture_zone` (`screenshot_area`), `emojis` (`emoji`), `verrouiller` (`lock_screen`), `forcer_quitter` (`force_quit`) as macOS's default shortcuts.
+- `TACTILE_MESURE=1` logs how long reloads, app switches and sub-bars take.
+
+### Changed
+
+- The bar follows a saved file in under 300 ms (was up to 1 s): the file is checked every 0.2 s, the new bar is applied right away, and warnings are computed after it.
+
 ## [0.2.0] - 2026-10-26
 
 ### Added

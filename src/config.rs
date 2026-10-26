@@ -148,6 +148,20 @@ pub enum Element {
         #[serde(alias = "width")]
         largeur: Option<f64>,
     },
+    /// L'icône d'une app ; l'appui la lance ou la met au premier plan, un point dessous dit qu'elle est ouverte.
+    #[serde(alias = "launcher")]
+    Lanceur {
+        /// Nom, bundle id ou chemin du `.app`, comme l'action `app`.
+        app: String,
+        #[serde(alias = "text")]
+        texte: Option<String>,
+        #[serde(alias = "display")]
+        affichage: Option<Affichage>,
+        #[serde(alias = "width")]
+        largeur: Option<f64>,
+        #[serde(alias = "long_press")]
+        appui_long: Option<Action>,
+    },
 }
 
 /// Ce qu'un bouton montre quand il a un symbole (ou une image) et un texte.
@@ -412,8 +426,14 @@ impl Controle<'_> {
                 Element::Bouton { symbole, couleur, couleur_texte, image, action, appui_long, .. } => (symbole, vec![couleur, couleur_texte], image, vec![action, appui_long]),
                 Element::Slider { symbole, .. } | Element::Groupe { symbole, .. } => (symbole, vec![], &None, vec![]),
                 Element::Script { action, .. } => (&None, vec![], &None, vec![action]),
+                Element::Lanceur { appui_long, .. } => (&None, vec![], &None, vec![appui_long]),
                 _ => (&None, vec![], &None, vec![]),
             };
+            if let Element::Lanceur { app, .. } = element
+                && !crate::actions::app_existe(app)
+            {
+                self.signaler(false, chemin, &ici, format!("app « {app} » introuvable : le lanceur affichera son nom en texte ; écris le nom du dossier .app sans l'extension, ou son bundle id"));
+            }
             if let Some(s) = symbole.as_deref().filter(|s| !s.is_empty() && crate::barre::symbole(s).is_none()) {
                 self.signaler(false, chemin, &ici, format!("le symbole SF « {s} » n'existe pas : le bouton affichera son nom en texte"));
             }
@@ -438,7 +458,8 @@ impl Controle<'_> {
     }
 }
 
-/// Relit la barre à chaque modification du fichier (vérifiée toutes les secondes).
+/// Relit la barre à chaque modification du fichier, vue par sa date, relevée toutes les 0,2 s (un `stat` : le CPU au repos
+/// ne bouge pas, et la barre suit l'enregistrement en moins de 300 ms ; à 1 s, il fallait parfois une seconde).
 pub fn surveiller(rappel: impl Fn(Result<Barre, String>) + Send + 'static) -> JoinHandle<()> {
     surveiller_chemin(chemin(), rappel)
 }
@@ -450,7 +471,7 @@ fn surveiller_chemin(
     let mut derniere = date_modification(&chemin);
     std::thread::spawn(move || {
         loop {
-            std::thread::sleep(Duration::from_secs(1));
+            std::thread::sleep(Duration::from_millis(200));
             let actuelle = date_modification(&chemin);
             if actuelle != derniere {
                 derniere = actuelle;
@@ -582,6 +603,45 @@ largeur = 100
   largeur = 80
 
 [[element]]
+type = "groupe"
+symbole = "square.grid.2x2"
+  [[element.element]]
+  type = "lanceur"
+  app = "Safari"
+  [[element.element]]
+  type = "lanceur"
+  app = "com.apple.TextEdit"
+  texte = "Texte"
+  affichage = "texte"
+  largeur = 90
+  appui_long = "launchpad"
+
+[[element]]
+type = "bouton"
+action = "mission_control"
+appui_long = "fenetres_app"
+
+[[element]]
+type = "bouton"
+action = "bureau"
+appui_long = "spotlight"
+
+[[element]]
+type = "bouton"
+action = "capture_ecran"
+appui_long = "capture_zone"
+
+[[element]]
+type = "bouton"
+action = "capture_options"
+appui_long = "verrouiller"
+
+[[element]]
+type = "bouton"
+action = "emojis"
+appui_long = "forcer_quitter"
+
+[[element]]
 type = "souple"
 
 [[element]]
@@ -689,6 +749,17 @@ mod tests {
                 r#"{ applescript = 'tell application "Music" to playpause' }"#,
                 Action::Applescript("tell application \"Music\" to playpause".into()),
             ),
+            (r#""mission_control""#, Action::MissionControl),
+            (r#""fenetres_app""#, Action::FenetresApp),
+            (r#""launchpad""#, Action::Launchpad),
+            (r#""bureau""#, Action::Bureau),
+            (r#""spotlight""#, Action::Spotlight),
+            (r#""capture_ecran""#, Action::CaptureEcran),
+            (r#""capture_zone""#, Action::CaptureZone),
+            (r#""capture_options""#, Action::CaptureOptions),
+            (r#""verrouiller""#, Action::Verrouiller),
+            (r#""emojis""#, Action::Emojis),
+            (r#""forcer_quitter""#, Action::ForcerQuitter),
         ] {
             let texte = format!("[[element]]\ntype = \"bouton\"\naction = {ecrit}\n");
             assert_eq!(
@@ -766,6 +837,40 @@ appui_long = { url = "https://example.org" }
 [[element]]
 type = "bouton"
 action = { applescript = "beep" }
+appui_long = "mission_control"
+
+[[element]]
+type = "bouton"
+action = "fenetres_app"
+appui_long = "launchpad"
+
+[[element]]
+type = "bouton"
+action = "bureau"
+appui_long = "spotlight"
+
+[[element]]
+type = "bouton"
+action = "capture_ecran"
+appui_long = "capture_zone"
+
+[[element]]
+type = "bouton"
+action = "capture_options"
+appui_long = "verrouiller"
+
+[[element]]
+type = "bouton"
+action = "emojis"
+appui_long = "forcer_quitter"
+
+[[element]]
+type = "lanceur"
+app = "Safari"
+texte = "Web"
+affichage = "les_deux"
+largeur = 80
+appui_long = "launchpad"
 
 [[element]]
 type = "slider"
@@ -880,6 +985,40 @@ long_press = { url = "https://example.org" }
 [[item]]
 type = "button"
 action = { applescript = "beep" }
+long_press = "mission_control"
+
+[[item]]
+type = "button"
+action = "app_windows"
+long_press = "launchpad"
+
+[[item]]
+type = "button"
+action = "show_desktop"
+long_press = "spotlight"
+
+[[item]]
+type = "button"
+action = "screenshot"
+long_press = "screenshot_area"
+
+[[item]]
+type = "button"
+action = "screenshot_options"
+long_press = "lock_screen"
+
+[[item]]
+type = "button"
+action = "emoji"
+long_press = "force_quit"
+
+[[item]]
+type = "launcher"
+app = "Safari"
+text = "Web"
+display = "both"
+width = 80
+long_press = "launchpad"
 
 [[item]]
 type = "slider"
@@ -936,7 +1075,7 @@ inherit = true
     fn alias_anglais_donnent_la_meme_barre() {
         let fr = lire(TOUT_FR).unwrap();
         assert_eq!(lire(TOUT_EN), Ok(fr.clone()));
-        assert_eq!(fr.elements.len(), 18);
+        assert_eq!(fr.elements.len(), 24);
         assert_eq!((fr.applications.len(), fr.applications[0].herite), (1, true));
         assert_eq!(lire(include_str!("../exemples/barre.en.toml")), lire(PAR_DEFAUT));
         // Une erreur dans un [[item]] garde sa ligne.
@@ -1239,6 +1378,19 @@ symbole = "speaker.wave.2.fill"
     }
 
     #[test]
+    fn lanceur_seul_ou_dans_un_groupe() {
+        let barre = lire("[[element]]\ntype = \"lanceur\"\napp = \"Safari\"\n\n[[element]]\ntype = \"groupe\"\nsymbole = \"square.grid.2x2\"\n  [[element.element]]\n  type = \"lanceur\"\n  app = \"AppQuiNexistePas\"\n  texte = \"X\"\n  appui_long = \"launchpad\"\n").unwrap();
+        assert_eq!(barre.elements[0], Element::Lanceur { app: "Safari".into(), texte: None, affichage: None, largeur: None, appui_long: None });
+        let Element::Groupe { elements, .. } = &barre.elements[1] else { panic!("{:?}", barre.elements[1]) };
+        assert_eq!(elements[0], Element::Lanceur { app: "AppQuiNexistePas".into(), texte: Some("X".into()), affichage: None, largeur: None, appui_long: Some(Action::Launchpad) });
+        assert!(lire("[[element]]\ntype = \"lanceur\"\n").unwrap_err().starts_with("ligne 1 : champ manquant «app»"));
+        // Une app introuvable : l'avis de --verifier, avec la ligne du lanceur dans le groupe.
+        let texte = "[[element]]\ntype = \"lanceur\"\napp = \"Safari\"\n\n[[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"lanceur\"\n  app = \"AppQuiNexistePas\"\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(avis, ["ligne 7 : app « AppQuiNexistePas » introuvable : le lanceur affichera son nom en texte ; écris le nom du dossier .app sans l'extension, ou son bundle id"]);
+    }
+
+    #[test]
     fn aller_retour_toml() {
         for texte in [
             PAR_DEFAUT,
@@ -1247,6 +1399,7 @@ symbole = "speaker.wave.2.fill"
             include_str!("../exemples/simple.toml"),
             include_str!("../exemples/developpeur.toml"),
             include_str!("../exemples/par-application.toml"),
+            include_str!("../exemples/lanceur.toml"),
             BARRE_COMPLETE,
         ] {
             let barre = lire(texte).unwrap();

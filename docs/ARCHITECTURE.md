@@ -8,12 +8,14 @@ Ce document sert à reprendre le code : où est quoi, comment ajouter quelque ch
 main.rs
  ├─ --personnaliser → editeur::lancer_seul()   la fenêtre de réglage seule, sans Touch Bar (voir plus bas)
  ├─ config::charger()          lit ~/.config/tactile/barre.toml (ou la barre par défaut)
- ├─ config::surveiller()       fil qui relit le fichier quand sa date change, envoie la nouvelle barre par un canal
+ ├─ config::surveiller()       fil qui relève la date du fichier toutes les 0,2 s ; s'il a changé, envoie la nouvelle barre
+ │                             par un canal, puis barre::reveiller() (tic: tout de suite sur le fil principal)
  └─ barre::lancer()            app AppKit sans icône dans le Dock
      ├─ plateau                icône ✳ dans le Control Strip d'Apple
      ├─ menu                   icône de la barre des menus
      ├─ installer(config)      construit les items de la principale et d'une barre par [[application]], présente la base
      ├─ observateur NSWorkspace → appActivee:   suit l'app active (aucun sondage)
+     ├─ observateur NSWorkspace → appLanceeOuQuittee:   point « ouverte » sous l'icône des lanceurs
      └─ minuteur 0,1 s → tic   applique une config rechargée, rafraîchit heure / musique / scripts
 
 appui sur un bouton
@@ -38,16 +40,16 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 |---|---|
 | `src/main.rs` | Ligne de commande (`--help`, `--version`, `--verifier`), démarrage, journal `~/Library/Logs/Tactile.log` quand il n'y a pas de terminal. |
 | `src/config.rs` | Types `Barre`, `Element`, `Reglage`, `Application` (barre par app : `application_pour`, fusion `herite` dans `elements_avec`) ; lecture TOML avec erreurs en français (`lire` : `[[item]]` fondus dans `[[element]]` dans l'ordre du fichier, première erreur dans l'ordre du fichier) ; validateur partagé `controler` (couleur, symbole, image, app, débordement de chaque barre, app en double, `[[element]]` égaré, barre vide) appelé par `--verifier`, l'éditeur et le chargement de la barre ; surveillance du fichier. Tests de la config. |
-| `src/actions/mod.rs` | Enum `Action` (ce qu'on écrit dans `action = …`) et `executer`. |
+| `src/actions/mod.rs` | Enum `Action` (ce qu'on écrit dans `action = …`) et `executer` ; apps (`app_existe`, `chemin_app`, `app_ouverte`) ; raccourcis système : par l'app d'Apple quand elle existe (`open -b com.apple.exposelauncher [--args 1|2]`, Launchpad, Capture d'écran), sinon au clavier (`raccourci_systeme`). |
 | `src/actions/luminosite.rs` | Luminosité de l'écran intégré (DisplayServices, privé). |
 | `src/actions/volume.rs` | Volume et muet de la sortie par défaut (CoreAudio). |
 | `src/actions/media.rs` | Titre en cours et commandes de lecture (via `media-control`). |
 | `src/actions/clavier.rs` | Frappes simulées : `echap`, `{ touche = "cmd+shift+4" }` (type `Touche`, vérifié à la lecture de la config), `{ touche = "cmd+shift+keycode:21" }` (un code avec modificateurs), `{ keycode = n }`. Les caractères sont résolus sur la disposition clavier courante (`UCKeyTranslate`) : « a » donne le bon code en AZERTY, `\` y ajoute ⌥⇧, et un chiffre vise toujours la rangée du haut. |
 | `src/barre/mod.rs` | État de la barre, classe `TactileCible` (reçoit appuis, sliders, minuteur), présentation, `afficher` / `masquer`. |
-| `src/barre/elements.rs` | Transforme chaque `Element` en item de Touch Bar ; sous-barres (`depliable`). |
+| `src/barre/elements.rs` | Transforme chaque `Element` en item de Touch Bar ; sous-barres (`depliable`) ; point des lanceurs (`marquer_lanceurs`). |
 | `src/barre/rafraichi.rs` | Éléments vivants : heure, titre en cours, scripts (texte brut ou JSON `Riche`), batterie. |
 | `src/barre/batterie.rs` | Lecture et analyse de `pmset -g batt`, symbole de pile selon le niveau. |
-| `src/barre/vues.rs` | Outils AppKit (texte, symbole SF, image de fichier réduite et gardée en cache par chemin, couleur, style du titre, largeur, barre, `lacher`). |
+| `src/barre/vues.rs` | Outils AppKit (texte, symbole SF, image de fichier et icône d'app réduites et gardées en cache par chemin, couleur, style du titre, largeur, barre, `lacher`). |
 | `src/barre/plateau.rs` | Icône ✳ du Control Strip. |
 | `src/menu.rs` | Icône de la barre des menus, lancement au démarrage (`SMAppService`). |
 | `src/editeur/mod.rs` | Fenêtre « Personnaliser ma barre » : NSWindow + WKWebView, pont JS ⇄ Rust, écriture et vérification du fichier. |
@@ -55,6 +57,7 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire ; préréglage « Musique » de l'éditeur. `barre.en.toml` : la même avec les alias anglais (test `alias_anglais_donnent_la_meme_barre`). |
 | `exemples/simple.toml`, `exemples/developpeur.toml` | Les deux autres préréglages de l'éditeur. |
 | `exemples/par-application.toml` | Barres par application commentées (testé par `aller_retour_toml`). |
+| `exemples/lanceur.toml` | Lanceurs, tiroir d'apps (un `groupe` de lanceurs) et raccourcis système (testé par `aller_retour_toml`). |
 | `scripts/empaqueter.sh` | `Tactile.app` universelle signée ad hoc + `Tactile.zip`. |
 
 ## Recettes
@@ -138,6 +141,25 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 - Une config sans élément dans la barre principale (fichier vide, `>` au lieu de `>>`) laissait la Touch Bar noire, sans esc : `installer` montre la barre par défaut (`exemples/barre.toml`, embarquée) avec le badge « ⚠ config vide » (`config_affichee`).
 - Le badge « ⚠ config » est ajouté à la principale **et** à chaque barre d'application (un bouton par barre : une vue n'a qu'un parent) : on édite souvent sa config dans l'app qui a sa propre barre.
 - Un avertissement `NSLayoutConstraint … exceeds internal limits` apparaît au lancement. Il est inoffensif ; sa source n'est pas encore identifiée.
+- `Mission Control.app` n'est qu'un lanceur : il envoie `CoreDockSendNotification` au Dock et quitte. Son premier argument choisit la notification (lu dans son code : rien = `com.apple.expose.awake`, `1` = `com.apple.showdesktop.awake`, `2` = `com.apple.expose.front.awake`). D'où `mission_control`, `bureau` et `fenetres_app` sans touche simulée ni Accessibilité ; un second appel referme. Pareil pour Launchpad (`com.apple.launchpad.toggle`) et `Screenshot.app` (⌘⇧5, lance `screencaptureui`).
+- Spotlight, ⌘⇧3, ⌘⇧4, émojis, verrouiller et forcer à quitter n'ont ni app ni API publique : ce sont les raccourcis par défaut, simulés. Sans l'autorisation Accessibilité, `CGEventPost` ne fait rien, sans erreur ; lancé depuis un terminal, c'est l'autorisation du terminal qui compte. Dictée, Ne pas déranger et luminosité du clavier n'ont pas d'action : aucun moyen public fiable (raccourci de dictée choisi par l'utilisateur, Focus sans API, touches `NX_KEYTYPE_ILLUMINATION` non vérifiables et le réglage de CoreBrightness ignoré écran verrouillé).
+- Le point d'un lanceur suit `NSWorkspaceDidLaunch/DidTerminateApplicationNotification` : à la notification de fin, l'app quittée est encore dans `runningApplicationsWithBundleIdentifier:`, marquée `isTerminated` (`actions::app_ouverte` l'écarte).
+- Les avis de `config::controler` (apps, images, symboles) sont calculés **après** l'envoi de la barre rechargée : avant, ils retardaient le rechargement, et le fil de surveillance relisait les images sans cache (le cache d'images est par fil).
+
+## Mesures
+
+`TACTILE_MESURE=1` écrit au journal une ligne `mesure : …` par passage : `installer`, « enregistrement du fichier → barre rechargée » (de la date du fichier à la fin d'`installer`), « appui → sous-barre montrée », « ✕ → base montrée », « app activée → barre de l'app montrée » (le travail de Tactile après la notification ; le dessin par la Touch Bar ne se mesure pas d'ici). Mesuré sur un MacBook Pro M1 13 pouces, macOS 15.8.1, binaire release, barre de l'utilisateur + une `[[application]]` (TextEdit, `herite`), 8 enregistrements à 1,3 s d'écart, puis autotest :
+
+| | Cible | Avant (0.2.0) | Après |
+|---|---|---|---|
+| Enregistrement → barre rechargée | < 300 ms | 137 à 1025 ms (moyenne 620) | 86 à 256 ms (moyenne 172) |
+| `installer` complet | | 20 à 43 ms | 20 à 48 ms (avec 4 lanceurs) |
+| Appui sur un groupe → sous-barre | < 30 ms | 0,1 à 0,2 ms | 0,0 à 0,2 ms |
+| ✕ → base | | 0,2 à 1,2 ms | 0,1 à 0,7 ms |
+| App activée → barre de l'app | < 50 ms | 0,3 ms | 2,4 ms |
+| CPU au repos (`top`, 5 × 3 s) | ≤ 0,2 % | 0,2 % | 0,1 à 0,2 % |
+
+Le rechargement attendait le sondage d'une seconde, puis les avis de `controler`, puis le `tic` suivant (jusqu'à 0,1 s). Maintenant : sondage à 0,2 s (un `stat`, sans effet mesurable sur le CPU), barre envoyée avant les avis, et `reveiller` lance le `tic` aussitôt. `installer` reconstruit toutes les barres à chaque rechargement ; les images de fichier et les icônes d'app sont en cache (par chemin et date), les symboles SF passent par le cache d'AppKit, les sliders relisent luminosité et volume. Aucune animation n'est ajoutée : `montrer` change le contenu de la barre système sans nouvelle présentation. Écran verrouillé pendant ces mesures : l'app au premier plan était simulée (`APP_SIMULEE`), la latence entre l'activation réelle et la notification n'est pas mesurée.
 
 ## Vérifier un changement
 

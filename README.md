@@ -136,6 +136,31 @@ A button, the clock or now playing without a `largeur` / `width` is capped at 20
 | `espace` / `space` | `largeur` / `width` (required) | Empty space of a fixed width. |
 | `souple` / `flexible` | none | Empty space that takes all the room left: two `souple` center what's between them. |
 | `groupe` / `group` | `texte` / `text`, `symbole` / `symbol`, `largeur` / `width` (72 by default), then sub-items `[[element.element]]` / `[[item.item]]` | A button that opens a sub-bar with its items; ✕ closes it. |
+| `lanceur` / `launcher` | `app` (required: the `.app` folder name, a bundle id or a path, like the `app` action); `texte` / `text`; `affichage` / `display` (as for a button); `largeur` / `width`; `appui_long` / `long_press` | The app's own icon. A tap opens the app or brings it to the front; a small dot under the icon means it's running, as in the Dock. An app that can't be found shows its name as text, and `tactile --check` warns about it. |
+
+#### An app drawer
+
+Launchers in a group make an app drawer: one icon in the main bar opens a sub-bar of apps, ✕ closes it. A full French example is in [exemples/lanceur.toml](exemples/lanceur.toml).
+
+```toml
+[[item]]
+type = "launcher"
+app = "Safari"
+
+[[item]]
+type = "group"
+symbol = "square.grid.2x2"
+
+  [[item.item]]
+  type = "launcher"
+  app = "Calendar"
+
+  [[item.item]]
+  type = "launcher"
+  app = "com.apple.systempreferences"
+  text = "Settings"
+  long_press = "launchpad"
+```
 
 ### Actions
 
@@ -157,6 +182,10 @@ An action is either a word (`action = "next"`) or a table (`action = { volume = 
 | `{ url = "https://…" }` | Opens the address in the default browser (or a file, or a folder). |
 | `{ applescript = 'tell application "Music" to playpause' }` | Runs the AppleScript with `osascript`. With single quotes around it, the script's double quotes stay readable. Errors go to the log. |
 | `"barre_apple"` / `"apple_bar"` | Shows Apple's bar; the ✳ icon in the Control Strip brings Tactile's back. |
+| `"mission_control"`, `"fenetres_app"` / `"app_windows"`, `"bureau"` / `"show_desktop"` | Mission Control, the front app's windows (App Exposé), or the desktop, through Apple's Mission Control app. |
+| `"launchpad"` | Opens Launchpad. |
+| `"capture_options"` / `"screenshot_options"` | The screenshot and screen recording toolbar (⌘⇧5), through Apple's Screenshot app. |
+| `"spotlight"`, `"capture_ecran"` / `"screenshot"`, `"capture_zone"` / `"screenshot_area"`, `"emojis"` / `"emoji"`, `"verrouiller"` / `"lock_screen"`, `"forcer_quitter"` / `"force_quit"` | Spotlight (⌘Space), a screenshot of the whole screen (⌘⇧3) or of an area (⌘⇧4), the emoji and symbols viewer (⌃⌘Space), lock the screen (⌃⌘Q), the Force Quit window (⌥⌘⎋). Sends macOS's default shortcut (Accessibility); if you changed it in System Settings, use `{ key = "…" }` with yours. |
 | `{ shell = "command" }` | Runs the command with `zsh -c`, without waiting for it to finish. `~` works. |
 
 #### Finding an app's name
@@ -218,6 +247,18 @@ French is the reference form, but you can write the whole file in English, which
 | `url` | `url` |
 | `applescript` | `applescript` |
 | `herite` | `inherit` |
+| `lanceur` | `launcher` |
+| `mission_control` | `mission_control` |
+| `fenetres_app` | `app_windows` |
+| `launchpad` | `launchpad` |
+| `bureau` | `show_desktop` |
+| `spotlight` | `spotlight` |
+| `capture_ecran` | `screenshot` |
+| `capture_zone` | `screenshot_area` |
+| `capture_options` | `screenshot_options` |
+| `verrouiller` | `lock_screen` |
+| `emojis` | `emoji` |
+| `forcer_quitter` | `force_quit` |
 
 In a `script`'s JSON output too: `text`, `symbol`, `color`, `text_color`.
 
@@ -279,7 +320,7 @@ type = "clock"
 format = "HH:mm"
 ```
 
-The other examples in [exemples/](exemples/) are in French: [simple.toml](exemples/simple.toml) and [developpeur.toml](exemples/developpeur.toml) are the editor's Simple and Developer bars.
+The other examples in [exemples/](exemples/) are in French: [simple.toml](exemples/simple.toml) and [developpeur.toml](exemples/developpeur.toml) are the editor's Simple and Developer bars, [lanceur.toml](exemples/lanceur.toml) shows launchers, an app drawer and system shortcuts.
 
 ## A bar per app
 

@@ -269,6 +269,23 @@ mod tests {
         }
     }
 
+    /// Les raccourcis système (Spotlight, captures, verrouiller…) : seul l'événement est construit, rien n'est envoyé.
+    #[test]
+    fn raccourcis_systeme_resolus_sans_les_envoyer() {
+        use super::super::{raccourci_systeme, Action};
+        let _tis = TIS.lock().unwrap();
+        let code = |a: Action| lire(raccourci_systeme(&a).unwrap()).unwrap().code().unwrap();
+        assert_eq!(code(Action::Spotlight), (49, CMD));
+        assert_eq!(code(Action::CaptureEcran), (20, CMD | SHIFT));
+        assert_eq!(code(Action::CaptureZone), (21, CMD | SHIFT));
+        assert_eq!(code(Action::Emojis), (49, CTRL | CMD));
+        assert_eq!(code(Action::ForcerQuitter), (53, ALT | CMD));
+        // « q » dépend de la disposition (12 en QWERTY, 0 en AZERTY) : ⌃⌘ seuls, sans Maj ajouté.
+        let (q, drapeaux) = code(Action::Verrouiller);
+        assert!(!PAVE.contains(&q) && drapeaux == CTRL | CMD, "{q} {drapeaux:#x}");
+        assert_eq!(raccourci_systeme(&Action::MissionControl), None);
+    }
+
     #[test]
     fn caractere_resolu_sur_la_disposition_courante() {
         let _tis = TIS.lock().unwrap();

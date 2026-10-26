@@ -50,6 +50,7 @@ A few variables help capture what you can't touch:
 - `TACTILE_OUVRIR=1 target/release/tactile` opens sub-bar number 1 (the first slider or group) right away.
 - `TACTILE_MASQUER=1 target/release/tactile` switches to Apple's bar 2 s after launch.
 - `TACTILE_RETOUR=1` (with the previous one) brings Tactile's bar back at 4 s, the same way a tap on ✳ does.
+- `TACTILE_MESURE=1` writes to the log how long a reload, an app switch and opening or closing a sub-bar take (`mesure : …` lines); the numbers to keep are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#mesures).
 
 ## Adding an action
 
@@ -80,7 +81,7 @@ If the action points at something that may be missing (an app, a file), also tea
 ## Architecture overview
 
 1. `src/main.rs` reads the command line, then loads the bar (`config::charger`) and starts the app (`barre::lancer`).
-2. `src/config.rs` defines the bar file: types `Barre`, `Element`, `Reglage`, with serde aliases for the English keys. It also checks the file (`lire` for the syntax, `controler` for what breaks in use: colors, SF Symbols, images, apps, overflow) and watches it, re-reading it each second when its date changes.
+2. `src/config.rs` defines the bar file: types `Barre`, `Element`, `Reglage`, with serde aliases for the English keys. It also checks the file (`lire` for the syntax, `controler` for what breaks in use: colors, SF Symbols, images, apps, overflow) and watches it, re-reading it when its date changes (checked every 0.2 s).
 3. `src/actions/` holds the system actions (`Action` enum, `executer`): brightness, volume, media, keyboard. None of them needs a UI.
 4. `src/barre/` is the AppKit layer. `mod.rs` holds the state and `TactileCible`, which receives taps, slider moves and a 0.1 s timer.
 5. `elements.rs` turns each `Element` into a Touch Bar item; sliders and groups open system sub-bars.

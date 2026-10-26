@@ -14,7 +14,7 @@ Usage :
   tactile --verifier [fichier]   vérifie un fichier de barre (syntaxe, symboles, apps, largeur)
   tactile --version              affiche la version
   tactile --help                 affiche cette aide (--check et --customize marchent aussi)
-Variables : TACTILE_CONFIG=fichier, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1 (voir CONTRIBUTING.md).
+Variables : TACTILE_CONFIG=fichier, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1, TACTILE_MESURE=1 (voir CONTRIBUTING.md).
 Journal : ~/Library/Logs/Tactile.log";
 
 const HELP: &str = "Tactile: your Touch Bar, described in ~/.config/tactile/barre.toml.
@@ -25,7 +25,7 @@ Usage:
   tactile --check [file]         checks a bar file (syntax, symbols, apps, width)
   tactile --version              prints the version
   tactile --help                 prints this help (--verifier and --personnaliser work too)
-Variables: TACTILE_CONFIG=file, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1 (see CONTRIBUTING.md).
+Variables: TACTILE_CONFIG=file, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1, TACTILE_MESURE=1 (see CONTRIBUTING.md).
 Log: ~/Library/Logs/Tactile.log";
 
 /// Le français si la langue du système l'est : `LC_ALL`, `LC_MESSAGES` puis `LANG` (comme les outils Unix),
@@ -114,10 +114,13 @@ fn main() {
         config::lire(include_str!("../exemples/barre.toml")).expect("exemple invalide")
     });
     config::surveiller(move |barre| {
-        if let Ok(b) = &barre {
-            journaliser_avis(b);
-        }
+        // La barre d'abord : les avis (apps, images, symboles) se calculent ensuite, hors du chemin du rechargement.
+        let pour_avis = barre.as_ref().ok().cloned();
         let _ = envoi.send(barre);
+        barre::reveiller();
+        if let Some(b) = pour_avis {
+            journaliser_avis(&b);
+        }
     });
     barre::lancer(config, recharges);
 }

@@ -19,7 +19,7 @@ thread_local! {
 const ETAT_VOCAL: &str = "/tmp/claude-voix/etat";
 
 /// Barre des étapes 22-26 : script JSON (vert, en tête : c'est ce que verifier.sh reconnaît), image, groupe large,
-/// batterie, raccourci sans effet (f15), app inoffensive et AppleScript qui la ferme.
+/// batterie, raccourci sans effet (f15), lanceur d'une app inoffensive et AppleScript qui la ferme.
 const BARRE_RICHE: &str = r##"
 [[element]]
 type = "script"
@@ -48,9 +48,9 @@ symbole = "keyboard"
 action = { touche = "f15" }
 
 [[element]]
-type = "bouton"
+type = "lanceur"
+app = "TextEdit"
 texte = "TextEdit"
-action = { app = "TextEdit" }
 
 [[element]]
 type = "bouton"
@@ -138,6 +138,12 @@ fn badge_montre() -> bool {
 
 fn textedit_ouvert() -> bool {
     std::process::Command::new("/usr/bin/pgrep").args(["-x", "TextEdit"]).output().is_ok_and(|s| s.status.success())
+}
+
+/// Le lanceur de TextEdit montre-t-il l'icône avec le point « ouverte » ?
+fn point_de_textedit() -> bool {
+    let image: Id = controle("TextEdit").map_or(std::ptr::null_mut(), |b| unsafe { msg_send![b, image] });
+    !image.is_null() && Some(image) == vues::icone_app("/System/Applications/TextEdit.app", true)
 }
 
 fn etat_vocal() -> String {
@@ -262,10 +268,19 @@ pub(super) fn etape() {
             let pile = titre("batterie");
             noter(n, pile.trim_end_matches(" %").parse::<u8>().is_ok() && a_une_image("batterie"), &format!("batterie « {pile} » avec symbole"));
             noter(n, actions::executer(&Action::Touche(crate::actions::clavier::Touche::try_from("f15".to_string()).unwrap())).is_ok(), "raccourci f15 envoyé");
+            noter(n, a_une_image("TextEdit") && !point_de_textedit(), "lanceur : icône de TextEdit, sans point (fermé)");
             cliquer(n, "keyboard") && cliquer(n, "TextEdit")
         }
-        24 => { noter(n, textedit_ouvert(), "action app : TextEdit ouvert"); cliquer(n, "Quit") }
-        25 => { noter(n, !textedit_ouvert(), "action applescript : TextEdit fermé"); true }
+        24 => {
+            noter(n, textedit_ouvert(), "lanceur (action app) : TextEdit ouvert");
+            noter(n, point_de_textedit(), "lanceur : point sous l'icône, TextEdit ouvert");
+            cliquer(n, "Quit")
+        }
+        25 => {
+            noter(n, !textedit_ouvert(), "action applescript : TextEdit fermé");
+            noter(n, !point_de_textedit(), "lanceur : point retiré, TextEdit fermé");
+            true
+        }
         26 => {
             let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
             let mut config = crate::config::charger().unwrap_or_else(|_| config.unwrap());
