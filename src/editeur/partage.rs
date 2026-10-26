@@ -932,4 +932,221 @@ mod tests {
         assert_eq!(destination(Path::new("/x/b.TOML"), 2), Path::new("/x/b.TOML"));
         assert_eq!(destination(Path::new("/x/b.zip"), 0), Path::new("/x/b.zip"));
     }
+
+    /// L'export en .zip sans rendu AppKit : deux logos de même nom venus de deux dossiers, un logo utilisé deux fois,
+    /// un logo introuvable ; les chemins de la barre sont réécrits partout (groupe, barre d'application), puis relus à l'import.
+    #[test]
+    fn export_zip_reecrit_chaque_chemin() {
+        let d = dossier_essai("reecrit");
+        for (dossier, l) in [("a", 1), ("b", 2)] {
+            std::fs::create_dir_all(d.join(dossier)).unwrap();
+            std::fs::write(d.join(dossier).join("logo.png"), crate::barre::png_annonce(l, l)).unwrap();
+        }
+        let (a, b) = (d.join("a/logo.png"), d.join("b/logo.png"));
+        let barre = config::lire(&format!(
+            "[[element]]\ntype = \"bouton\"\nimage = \"{a}\"\n\n[[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"bouton\"\n  image = \"{b}\"\n  [[element.element]]\n  type = \"bouton\"\n  image = \"{a}\"\n\n\
+             [[element]]\ntype = \"bouton\"\nimage = \"/nexiste/pas.png\"\n\n[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"bouton\"\nimage = \"{b}\"\n",
+            a = a.display(),
+            b = b.display()
+        ))
+        .unwrap();
+        assert_eq!(logos(&barre), 3);
+        let export = exporter(&barre, None, &d.join("partage")).unwrap();
+        assert_eq!((export.fichier.clone(), export.logos), (d.join("partage.zip"), 2));
+        assert_eq!(export.avis.len(), 1);
+        assert!(export.avis[0].fr.contains("/nexiste/pas.png") && export.avis[0].en.contains("not found"), "{:?}", export.avis);
+
+        let mut zip = zip::ZipArchive::new(std::fs::File::open(&export.fichier).unwrap()).unwrap();
+        let noms: Vec<String> = zip.file_names().map(|n| n.unwrap().into_owned()).collect();
+        assert_eq!(noms, ["barre.toml", "icones/logo.png", "icones/logo-2.png"]);
+        let mut texte = String::new();
+        zip.by_name("barre.toml").unwrap().read_to_string(&mut texte).unwrap();
+        let dans_le_zip = config::lire(&texte).unwrap();
+        assert_eq!(images(&dans_le_zip), ["icones/logo.png", "icones/logo-2.png", "/nexiste/pas.png"]);
+        let mut contenu = Vec::new();
+        zip.by_name("icones/logo-2.png").unwrap().read_to_end(&mut contenu).unwrap();
+        assert_eq!(contenu, std::fs::read(&b).unwrap(), "la seconde image garde son contenu sous le nom suffixé");
+
+        let paquet = ouvrir(&export.fichier).unwrap();
+        let temporaire = paquet.temporaire.clone().unwrap();
+        for source in &paquet.sources {
+            assert!(Path::new(source).starts_with(&temporaire) && Path::new(source).is_file(), "{source}");
+        }
+        // Rien d'autre n'a bougé : même barre, aux chemins d'image près.
+        let mut sans_images = paquet.barre.clone();
+        chaque_image(&mut sans_images, &mut |i| *i = Path::new(i).file_name().unwrap().to_string_lossy().into_owned());
+        let mut attendue = dans_le_zip.clone();
+        chaque_image(&mut attendue, &mut |i| *i = Path::new(i).file_name().unwrap().to_string_lossy().into_owned());
+        assert_eq!(sans_images, attendue);
+        drop(paquet);
+        assert!(!temporaire.exists());
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn imports_refuses_ou_signales() {
+        let d = dossier_essai("refus");
+        let refus = |r: Result<Paquet, Texte>| r.map(|_| ()).unwrap_err();
+        let zip = |nom: &str, entrees: &[(&str, &[u8])]| {
+            let z = d.join(nom);
+            archive(&z, entrees, None);
+            ouvrir(&z)
+        };
+        assert!(refus(ouvrir(&d)).fr.ends_with("n'est pas un fichier"));
+        assert!(refus(ouvrir(&d.join("absent.zip"))).fr.starts_with("impossible de lire"));
+        assert_eq!(refus(ouvrir_octets(vec![0xFF, 0xFE, 0], None)).en, "this file is neither a .toml nor a .zip");
+        assert!(refus(zip("binaire.zip", &[("barre.toml", &[0xFF, 0xFE])])).fr.contains("UTF-8"));
+        assert!(refus(zip("rangee.zip", &[("dossier/barre.toml", SIMPLE)])).fr.contains("à sa racine"));
+        assert!(refus(ouvrir_octets(b"PK\x03\x04tronque".to_vec(), None)).fr.starts_with("archive illisible"));
+        // Une barre principale vide (avis grave de `controler`) ou une couleur invalide dans une barre d'application.
+        assert!(refus(ouvrir_octets(b"[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n".to_vec(), None)).fr.contains("vide"));
+        let couleur = b"[[element]]\ntype = \"souple\"\n[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"bouton\"\ncouleur = \"bleu\"\n";
+        assert!(refus(ouvrir_octets(couleur.to_vec(), None)).fr.starts_with("application « Safari », élément 1"));
+        // Un logo cité mais absent de l'archive : importé quand même, et dit.
+        let paquet = zip("absent.zip", &[("barre.toml", b"[[element]]\ntype = \"bouton\"\ntexte = \"x\"\nimage = \"icones/absent.png\"\n")]).unwrap();
+        assert!(paquet.avis.iter().any(|a| a.fr == "logo absent du fichier importé : icones/absent.png"), "{:?}", paquet.avis);
+        assert_eq!(paquet.logos(), 0);
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    #[test]
+    fn noms_d_icone_acceptes() {
+        assert_eq!(nom_d_icone("icones/x.png"), Some("x.png"));
+        assert_eq!(nom_d_icone("icones/Logo Final.SVG"), Some("Logo Final.SVG"));
+        for refuse in ["icones/", "icones/.x.png", "icones/a/b.png", "icones/a\\b.png", "icones/x.exe", "icones/x", "x.png", "Icones/x.png", "icones/x\0.png"] {
+            assert_eq!(nom_d_icone(refuse), None, "{refuse}");
+        }
+        assert_eq!(nom_d_icone(&format!("icones/{}.png", "a".repeat(252))), None, "plus de 255 octets");
+    }
+
+    #[test]
+    fn resume_dans_les_deux_langues() {
+        let paquet = ouvrir_octets(
+            b"[[element]]\ntype = \"bouton\"\ntexte = \"Build\"\naction = { shell = \"make\" }\n\n[[element]]\ntype = \"souple\"\n\n\
+              [[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n"
+                .to_vec(),
+            None,
+        )
+        .unwrap();
+        let fichier = Path::new("/tmp/b.toml");
+        assert_eq!(
+            resume(&paquet, fichier, true),
+            "Barre de /tmp/b.toml : 2 éléments, 1 barre d'application (Safari).\nCe qu'elle peut lancer sur ton Mac :\n  Barre principale, élément 1 « Build » · Commande shell : make"
+        );
+        assert_eq!(
+            resume(&paquet, fichier, false),
+            "Bar from /tmp/b.toml: 2 items, 1 app bar (Safari).\nWhat it can run on your Mac:\n  Main bar, item 1 “Build” · Shell command: make"
+        );
+        let seul = ouvrir_octets(b"[[element]]\ntype = \"souple\"\n".to_vec(), None).unwrap();
+        assert_eq!(resume(&seul, fichier, false), "Bar from /tmp/b.toml: 1 item.\nIt runs no commands.");
+        assert!(resume(&seul, fichier, true).ends_with("Elle ne lance aucune commande."));
+    }
+
+    /// Rien de ce qu'une barre peut lancer n'échappe à la liste montrée avant l'import : chaque `shell`, `applescript`,
+    /// `app` d'action ou de lanceur et chaque commande de script d'une barre générée y est, cherché dans son JSON.
+    #[test]
+    fn aucune_commande_cachee_dans_des_barres_generees() {
+        fn cherche(v: &serde_json::Value, trouves: &mut Vec<String>) {
+            match v {
+                serde_json::Value::Object(o) => {
+                    let barre_d_app = o.contains_key("element") && !o.contains_key("type");
+                    for (cle, valeur) in o {
+                        match (cle.as_str(), valeur) {
+                            ("app", _) if barre_d_app => {}
+                            ("shell" | "applescript" | "app" | "commande", serde_json::Value::String(s)) => trouves.push(s.clone()),
+                            _ => cherche(valeur, trouves),
+                        }
+                    }
+                }
+                serde_json::Value::Array(a) => a.iter().for_each(|x| cherche(x, trouves)),
+                _ => {}
+            }
+        }
+        for graine in 0..300 {
+            let barre = crate::essais::Hasard::new(graine).barre();
+            let valeurs: Vec<String> = commandes(&barre).into_iter().map(|c| c.valeur).collect();
+            let mut attendues = Vec::new();
+            cherche(&serde_json::to_value(&barre).unwrap(), &mut attendues);
+            for a in attendues {
+                assert!(valeurs.contains(&a), "graine {graine} : « {a} » absent de {valeurs:?}");
+            }
+        }
+    }
+
+    /// Des archives tronquées ou mutées octet par octet : `ouvrir_octets` refuse ou accepte, sans jamais paniquer, et
+    /// tout ce qu'il écrit reste dans son dossier temporaire.
+    #[test]
+    fn archives_abimees_sans_panique_ni_ecriture_hors_dossier() {
+        let d = dossier_essai("abimees");
+        let mut bases = Vec::new();
+        for (k, methode) in [zip::CompressionMethod::Stored, zip::CompressionMethod::Deflated].into_iter().enumerate() {
+            let z = d.join(format!("base{k}.zip"));
+            let mut w = zip::ZipWriter::new(std::fs::File::create(&z).unwrap());
+            let options = zip::write::SimpleFileOptions::default().compression_method(methode);
+            let toml = b"[[element]]\ntype = \"bouton\"\ntexte = \"x\"\nimage = \"icones/a.png\"\n[[element]]\ntype = \"bouton\"\ntexte = \"y\"\nimage = \"icones/b.png\"\n";
+            for (nom, contenu) in [("barre.toml", &toml[..]), ("icones/a.png", &crate::barre::png_annonce(2, 2)), ("icones/b.png", &crate::barre::png_annonce(3, 3)), ("notes.txt", b"x")] {
+                w.start_file(nom, options).unwrap();
+                w.write_all(contenu).unwrap();
+            }
+            w.finish().unwrap();
+            bases.push(std::fs::read(&z).unwrap());
+        }
+        let mut h = crate::essais::Hasard::new(42);
+        let (mut acceptees, mut refusees) = (0, 0);
+        for k in 0..600 {
+            let mut octets = h.parmi(&bases).clone();
+            match h.jusqua(3) {
+                0 => octets.truncate(h.jusqua(octets.len())),
+                1 => {
+                    for _ in 0..1 + h.jusqua(4) {
+                        let i = h.jusqua(octets.len());
+                        octets[i] = h.suivant() as u8;
+                    }
+                }
+                _ => {
+                    // Un nom d'entrée réécrit : `..`, `/`, `\` ou `:` glissés dans le répertoire central.
+                    let i = octets.windows(6).rposition(|w| w == b"icones").unwrap_or(0);
+                    octets[i..i + 6].copy_from_slice(*h.parmi(&[b"../../", b"/tmp//", b"..\\..\\", b"C:/xxx", b"icon/.", b"..icon"]));
+                }
+            }
+            match crate::essais::sans_panique(|| ouvrir_octets(octets.clone(), None)).unwrap_or_else(|p| panic!("cas {k} : panique « {p} »")) {
+                Ok(paquet) => {
+                    acceptees += 1;
+                    let temporaire = paquet.temporaire.clone().unwrap();
+                    for source in &paquet.sources {
+                        assert!(Path::new(source).starts_with(&temporaire), "cas {k} : {source} hors de {}", temporaire.display());
+                    }
+                }
+                Err(_) => refusees += 1,
+            }
+        }
+        assert!(acceptees > 10 && refusees > 100, "{acceptees} acceptées, {refusees} refusées");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Des noms d'entrée composés au hasard : une archive n'est acceptée que si aucun nom ne sort de son dossier.
+    #[test]
+    fn noms_d_entree_generes() {
+        let d = dossier_essai("noms");
+        let mut h = crate::essais::Hasard::new(3);
+        for k in 0..300 {
+            let morceaux = ["..", ".", "icones", "x.png", "a..b.png", "/", "\\", "C:", "", " ", "barre.toml", "~"];
+            let nom: String = (0..1 + h.jusqua(4)).map(|_| *h.parmi(&morceaux)).collect::<Vec<_>>().join(if h.pile() { "/" } else { "" });
+            if nom.is_empty() || nom == "barre.toml" {
+                continue;
+            }
+            let z = d.join(format!("{k}.zip"));
+            archive(&z, &[("barre.toml", SIMPLE), (&nom, &crate::barre::png_annonce(1, 1))], None);
+            let dangereux = nom.starts_with(['/', '\\']) || nom.as_bytes().get(1) == Some(&b':') || nom.split(['/', '\\']).any(|c| c == "..");
+            match ouvrir(&z) {
+                Ok(paquet) => {
+                    assert!(!dangereux, "« {nom} » accepté");
+                    let temporaire = paquet.temporaire.clone().unwrap();
+                    assert!(paquet.sources.iter().all(|s| Path::new(s).starts_with(&temporaire)));
+                }
+                Err(e) => assert!(dangereux || e.fr.contains("illisible"), "« {nom} » refusé : {}", e.fr),
+            }
+        }
+        std::fs::remove_dir_all(&d).unwrap();
+    }
 }
