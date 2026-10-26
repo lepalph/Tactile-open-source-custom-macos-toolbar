@@ -501,7 +501,9 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
     chaque_image(&mut barre, &mut |i| {
         if let Some((_, copie)) = copies.iter().find(|(c, _)| c == i) {
             *i = copie.to_string_lossy().into_owned();
-            sources.push(i.clone());
+            if !sources.contains(i) {
+                sources.push(i.clone());
+            }
         } else if nom_d_icone(i).is_some() && !absentes.contains(i) {
             absentes.push(i.clone());
         }
@@ -969,6 +971,9 @@ mod tests {
         assert_eq!(contenu, std::fs::read(&b).unwrap(), "la seconde image garde son contenu sous le nom suffixé");
 
         let paquet = ouvrir(&export.fichier).unwrap();
+        // Le résumé dit « 2 logos » (l'archive en a deux), pas le nombre de boutons qui les affichent.
+        assert_eq!(paquet.logos(), 2, "quatre emplacements, deux fichiers");
+        assert!(resume(&paquet, &export.fichier, true).contains(", 2 logos."));
         let temporaire = paquet.temporaire.clone().unwrap();
         for source in &paquet.sources {
             assert!(Path::new(source).starts_with(&temporaire) && Path::new(source).is_file(), "{source}");
