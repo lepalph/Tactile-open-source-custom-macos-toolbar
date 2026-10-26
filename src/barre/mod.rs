@@ -37,6 +37,10 @@ enum Commande {
 
 
 struct Etat {
+    /// La config affichée, pour la reconstruire (autotest).
+    config: Barre,
+    /// Bouton rouge « ⚠ config ligne N » ajouté à la barre principale après une config refusée.
+    erreur: Option<Id>,
     commandes: Vec<(Option<Commande>, Option<Commande>)>,
     barres: Vec<Id>,
     rafraichis: Vec<Rafraichi>,
@@ -104,7 +108,10 @@ define_class!(
             let recharge = RECHARGES.with_borrow(|r| r.as_ref().and_then(|r| r.try_recv().ok()));
             match recharge {
                 Some(Ok(config)) => installer(&config),
-                Some(Err(e)) => eprintln!("tactile : config ignorée, {e}"),
+                Some(Err(e)) => {
+                    eprintln!("tactile : config ignorée, {e}");
+                    afficher_erreur(&e);
+                }
                 None => {}
             }
             rafraichir();
@@ -191,10 +198,54 @@ pub fn masquer() {
 }
 
 
+/// Libellé court de l'élément d'erreur : « ⚠ config ligne 6 ».
+fn libelle_erreur(message: &str) -> String {
+    match message.find("ligne ") {
+        Some(debut) => format!("⚠ config {}", message[debut..].split(" :").next().unwrap_or("").trim()),
+        None => "⚠ config invalide".into(),
+    }
+}
+
+/// Montre l'erreur dans la barre principale elle-même : depuis le Finder, le journal est invisible
+/// et les notifications macOS demandent une app notarisée. L'élément disparaît à la config valide
+/// suivante, qui reconstruit la barre.
+fn afficher_erreur(message: &str) {
+    let libelle = libelle_erreur(message);
+    ETAT.with_borrow_mut(|etat| {
+        let Some(etat) = etat.as_mut() else { return };
+        if let Some(b) = etat.erreur {
+            return vues::titre(b, &libelle);
+        }
+        let index = elements::enregistrer(etat, None, None);
+        let b = elements::bouton(Some(&libelle), None, index, false, "");
+        etat.controles.push(("erreur".into(), b));
+        etat.erreur = Some(b);
+        let principale = etat.barres[0];
+        let ident = format!("{PREFIXE}.erreur");
+        unsafe {
+            if let Some(rouge) = vues::couleur("#B00020") {
+                let _: () = msg_send![b, setBezelColor: rouge];
+            }
+            let items: Id = msg_send![principale, templateItems];
+            let items: Id = msg_send![items, setByAddingObject: vues::item_vue(&ident, b)];
+            let _: () = msg_send![principale, setTemplateItems: items];
+            let idents: Id = msg_send![principale, defaultItemIdentifiers];
+            let idents: Id = msg_send![idents, mutableCopy];
+            let _: () = msg_send![idents, insertObject: &*texte(&ident), atIndex: 0usize];
+            let _: () = msg_send![principale, setDefaultItemIdentifiers: idents];
+        }
+        if COURANTE.get() == principale {
+            montrer(principale);
+        }
+    });
+}
+
 fn installer(config: &Barre) {
     PLEIN_ECRAN.set(config.masquer_control_strip);
     let (envoi, reception) = channel();
     let mut etat = Etat {
+        config: config.clone(),
+        erreur: None,
         commandes: Vec::new(),
         controles: Vec::new(),
         barres: vec![std::ptr::null_mut()],
@@ -243,5 +294,16 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         let _: Id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.1f64, target: cible(), selector: sel!(tic:), userInfo: std::ptr::null_mut::<AnyObject>(), repeats: Bool::YES];
         rafraichir();
         let _: () = msg_send![app, run];
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn libelle_d_erreur_garde_la_ligne() {
+        assert_eq!(libelle_erreur("/x/barre.toml, ligne 6 : valeur inconnue «truc»"), "⚠ config ligne 6");
+        assert_eq!(libelle_erreur("impossible de lire /x"), "⚠ config invalide");
     }
 }

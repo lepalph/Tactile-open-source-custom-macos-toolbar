@@ -51,9 +51,18 @@ func droiteAllumee(_ f: String) -> Bool {
     for x in stride(from: 1390, to: r.pixelsWide, by: 4) { for y in stride(from: 0, to: r.pixelsHigh, by: 4) { if (r.colorAt(x: x, y: y)?.brightnessComponent ?? 0) > 0.1 { n += 1 } } }
     return n > 50
 }
+// L'élément « ⚠ config ligne N » est rouge, en tête de barre.
+func rougeAGauche(_ f: String) -> Bool {
+    let r = NSBitmapImageRep(data: try! Data(contentsOf: URL(fileURLWithPath: f)))!
+    var n = 0
+    for x in stride(from: 0, to: 300, by: 3) { for y in stride(from: 0, to: r.pixelsHigh, by: 3) {
+        if let c = r.colorAt(x: x, y: y), c.redComponent > 0.4, c.greenComponent < 0.25, c.blueComponent < 0.3 { n += 1 }
+    } }
+    return n > 100
+}
 for f in fichiers {
     let p = pixels(f)
-    var vu = ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
+    var vu = rougeAGauche(f) ? "erreur" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
     if vu == "apple" && !droiteAllumee(f) { vu = "noir" }
     let attendu = String(f.split(separator: "-").last!.dropLast(4))
     let verdict = vu == attendu ? "ok   " : vu == "noir" ? "?    " : "ÉCHEC"

@@ -33,6 +33,13 @@ define_class!(
             }
         }
 
+        #[unsafe(method(voirJournal:))]
+        fn voir_journal(&self, _envoyeur: Id) {
+            let journal = crate::chemin_journal();
+            let _ = std::fs::OpenOptions::new().create(true).append(true).open(&journal);
+            let _ = std::process::Command::new("/usr/bin/open").arg(journal).spawn();
+        }
+
         #[unsafe(method(basculerDemarrage:))]
         fn basculer_demarrage(&self, _envoyeur: Id) {
             if let Err(e) = basculer_service() {
@@ -135,6 +142,7 @@ pub fn installer() {
         ajouter(menu, "Barre d'Apple", cible, Some(sel!(masquer:)));
         separateur(menu);
         ajouter(menu, "Ouvrir la configuration", cible, Some(sel!(ouvrirConfiguration:)));
+        ajouter(menu, "Voir le journal", cible, Some(sel!(voirJournal:)));
         let demarrage = if dans_bundle() {
             ajouter(menu, "Lancer au démarrage", cible, Some(sel!(basculerDemarrage:)))
         } else {

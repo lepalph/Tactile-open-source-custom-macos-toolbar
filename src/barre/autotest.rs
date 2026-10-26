@@ -113,6 +113,7 @@ fn attendu(n: usize) -> &'static str {
     match n {
         1 | 2 | 4 | 5 => "sous",
         7 | 8 => "apple",
+        20 => "erreur",
         _ => "principale",
     }
 }
@@ -157,6 +158,13 @@ pub(super) fn etape() {
                 let apres = media::en_cours().ok().flatten().map(|m| m.en_lecture);
                 noter(n, apres == Some(avant), &format!("second appui : lecture revenue à {avant}"));
             }
+            true
+        }
+        20 => { super::afficher_erreur("essai, ligne 6 : valeur inconnue «truc»"); noter(n, controle("erreur").is_some(), "config refusée : « ⚠ config ligne 6 » dans la barre"); true }
+        21 => {
+            let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
+            super::installer(&config.unwrap());
+            noter(n, controle("erreur").is_none() && COURANTE.get() == principale(), "config valide : l'erreur disparaît");
             eprintln!("AUTOTEST fin {} échec(s)", ECHECS.get());
             false
         }
