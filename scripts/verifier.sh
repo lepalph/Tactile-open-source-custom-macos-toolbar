@@ -97,6 +97,11 @@ if grep -q '^AUTOTEST fin 0 échec' $journal && ! print -- $visuel | grep -q ÉC
     print "Aucun échec, mais des écrans n'ont pas pu être vus (Touch Bar inactive) : touche le trackpad pendant la vérification."
     exit 2
   fi
+  # Écran verrouillé : l'autotest a simulé l'app au premier plan, le changement d'app réel n'est pas prouvé.
+  if grep -q 'est simulé' $journal; then
+    print "Aucun échec, mais le changement d'app a été simulé (écran verrouillé) : relance écran déverrouillé."
+    exit 2
+  fi
   print "Tout est vérifié. Captures : $dossier"
 else
   print -u2 "Vérification échouée : voir $journal et les captures de $dossier"
