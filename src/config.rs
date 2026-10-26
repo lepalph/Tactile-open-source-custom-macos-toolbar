@@ -540,6 +540,7 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
     c.elements(&barre.elements, &mut Vec::new(), "");
     let largeur = crate::barre::largeur_barre(barre.masquer_control_strip);
     c.deborde(&barre.elements, largeur, &[], "la barre principale");
+    c.rapides(&barre.elements, &[], "la barre principale");
     // Chaque app par son bundle id quand elle est installée : `Finder` et `com.apple.finder` sont la même.
     let identites: Vec<String> = barre.applications.iter().map(|a| crate::actions::bundle_app(&a.app).unwrap_or_else(|| a.app.clone()).to_lowercase()).collect();
     for (k, app) in barre.applications.iter().enumerate() {
@@ -555,6 +556,7 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
         }
         c.elements(&app.elements, &mut vec![("application", k)], &format!("{lieu}, "));
         c.deborde(&app.elements_avec(&barre.elements), largeur, &[("application", k)], &format!("la barre de « {} »", app.app));
+        c.rapides(&app.elements, &[("application", k)], &format!("la barre de « {} »", app.app));
     }
     c.avis.sort_by_key(|a| a.ligne.unwrap_or(usize::MAX));
     c.avis
@@ -599,6 +601,30 @@ impl Controle<'_> {
         if let Some((total, caches)) = crate::barre::debordement(elements, largeur) {
             let verbe = if caches > 1 { "seront cachés" } else { "sera caché" };
             let message = format!("{barre} déborde (environ {total:.0} pt pour {largeur:.0}) : {} sur {} {verbe} ; réduis des largeurs ou retire un élément", nombre(caches, "élément"), elements.len());
+            self.signaler(false, chemin, "", message);
+        }
+    }
+
+    /// Mesuré en 0.3 (`docs/ARCHITECTURE.md`, Mesures) : un script toutes les 0,3 s coûte à lui seul 0,4 % de CPU,
+    /// presque tout le budget de la barre. Avis au-delà de 2 scripts sous 1 s, ou de 3 lancements par seconde.
+    fn rapides(&mut self, elements: &[Element], chemin: &[(&str, usize)], barre: &str) {
+        fn frequences(elements: &[Element], liste: &mut Vec<f64>) {
+            for e in elements {
+                match e {
+                    Element::Script { intervalle, .. } if *intervalle < 1.0 => liste.push(1.0 / intervalle.max(0.1)),
+                    Element::Groupe { elements, .. } => frequences(elements, liste),
+                    _ => {}
+                }
+            }
+        }
+        let mut liste = Vec::new();
+        frequences(elements, &mut liste);
+        let par_seconde: f64 = liste.iter().sum();
+        if liste.len() > 2 || par_seconde > 3.0 {
+            let message = format!(
+                "{barre} lance {} plus d'une fois par seconde (environ {par_seconde:.0} lancements par seconde) : ces rafraîchissements rapides coûtent du CPU (un script toutes les 0,3 s prend à lui seul 0,4 %) ; passe leur intervalle à 1 s ou plus",
+                nombre(liste.len(), "script")
+            );
             self.signaler(false, chemin, "", message);
         }
     }
@@ -1923,6 +1949,23 @@ mod proprietes {
             assert_eq!(lire(&melange).unwrap_or_else(|e| panic!("graine {graine} : {e}\n{melange}")), barre, "graine {graine}\n{melange}");
         }
         assert!(renommes > 300, "{renommes}");
+    }
+
+    /// Fonctionnel 0.3 : un script à 0,3 s coûte 0,4 % de CPU à lui seul ; au-delà de 2 scripts sous 1 s ou de
+    /// 3 lancements par seconde, `controler` le dit.
+    #[test]
+    fn rafraichissements_rapides_signales() {
+        let script = |i: f64| format!("[[element]]\ntype = \"script\"\ncommande = \"date\"\nintervalle = {i}\n");
+        let rapide = |texte: &str| controler(&lire(texte).unwrap(), None).iter().any(|a| a.message.contains("rafraîchissements rapides coûtent du CPU"));
+        assert!(!rapide(&script(0.5)), "un script à 0,5 s : 2 par seconde");
+        assert!(!rapide(&[script(0.9), script(0.9), script(5.0)].concat()));
+        assert!(rapide(&script(0.3)), "un script à 0,3 s : 3,3 par seconde");
+        assert!(rapide(&[script(0.9), script(0.9), script(0.9)].concat()), "3 scripts sous 1 s");
+        let groupe = format!("[[element]]\ntype = \"heure\"\n[[application]]\napp = \"Finder\"\n[[application.element]]\ntype = \"groupe\"\n{}", script(0.2).replace("[[element]]", "[[application.element.element]]"));
+        let avis = controler(&lire(&groupe).unwrap(), Some(&groupe));
+        let a = avis.iter().find(|a| a.message.contains("coûtent du CPU")).expect("script dans un groupe d'une barre d'app");
+        assert!(a.message.starts_with("la barre de « Finder » lance 1 script plus d'une fois par seconde (environ 5 lancements par seconde)"), "{}", a.message);
+        assert_eq!(a.ligne, Some(3));
     }
 
     /// Un fichier tronqué, une ligne en double, un caractère en trop ou en moins : `lire` répond par une erreur située,
