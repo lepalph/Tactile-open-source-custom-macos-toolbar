@@ -33,31 +33,32 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `src/actions/luminosite.rs` | Luminosité de l'écran intégré (DisplayServices, privé). |
 | `src/actions/volume.rs` | Volume et muet de la sortie par défaut (CoreAudio). |
 | `src/actions/media.rs` | Titre en cours et commandes de lecture (via `media-control`). |
-| `src/actions/clavier.rs` | Frappes simulées (esc). |
+| `src/actions/clavier.rs` | Frappes simulées : `echap`, `{ touche = "cmd+shift+4" }` (type `Touche`, vérifié à la lecture de la config), `{ keycode = n }`. Les caractères sont résolus sur la disposition clavier courante (`UCKeyTranslate`) : « a » donne le bon code en AZERTY. |
 | `src/barre/mod.rs` | État de la barre, classe `TactileCible` (reçoit appuis, sliders, minuteur), présentation, `afficher` / `masquer`. |
 | `src/barre/elements.rs` | Transforme chaque `Element` en item de Touch Bar ; sous-barres (`depliable`). |
-| `src/barre/rafraichi.rs` | Éléments vivants : heure, titre en cours, scripts. |
-| `src/barre/vues.rs` | Outils AppKit sans état (texte, symbole SF, couleur, largeur, barre). |
+| `src/barre/rafraichi.rs` | Éléments vivants : heure, titre en cours, scripts (texte brut ou JSON `Riche`), batterie. |
+| `src/barre/batterie.rs` | Lecture et analyse de `pmset -g batt`, symbole de pile selon le niveau. |
+| `src/barre/vues.rs` | Outils AppKit sans état (texte, symbole SF, image de fichier, couleur, style du titre, largeur, barre). |
 | `src/barre/plateau.rs` | Icône ✳ du Control Strip. |
 | `src/menu.rs` | Icône de la barre des menus, lancement au démarrage (`SMAppService`). |
-| `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire. |
+| `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire. `barre.en.toml` : la même avec les alias anglais (test `alias_anglais_donnent_la_meme_barre`). |
 | `scripts/empaqueter.sh` | `Tactile.app` universelle signée ad hoc + `Tactile.zip`. |
 
 ## Recettes
 
 ### Ajouter une action
 
-1. `src/actions/mod.rs` : une variante dans `Action`. Son nom en `snake_case` devient le mot de la config (`BasculerMuet` → `"basculer_muet"`) ; une variante avec valeur s'écrit `{ nom = valeur }`.
-2. La fonction qui fait le travail, dans un fichier de `src/actions/`, avec un test qui change l'état, le relit, puis le restaure.
+1. `src/actions/mod.rs` : une variante dans `Action`. Son nom en `snake_case` devient le mot de la config (`BasculerMuet` → `"basculer_muet"`) ; une variante avec valeur s'écrit `{ nom = valeur }`. Ajoute son alias anglais (`#[serde(alias = "toggle_mute")]`).
+2. La fonction qui fait le travail, dans un fichier de `src/actions/`, avec un test qui change l'état, le relit, puis le restaure. Une action qui lance un programme dont l'échec doit se voir passe par `journaliser` (stderr au journal, sans bloquer).
 3. La branche correspondante dans `executer`.
-4. Le test `chaque_forme_d_action` de `src/config.rs`, et le tableau des actions du README.
+4. Le test `chaque_forme_d_action` de `src/config.rs`, le tableau des actions et le glossaire du README (le test `glossaire_du_readme` exige que chaque ligne du glossaire soit exercée par `TOUT_FR` / `TOUT_EN`).
 
 ### Ajouter un type d'élément
 
-1. `src/config.rs` : une variante dans `Element` (son nom en `snake_case` devient `type = "…"`), puis un test de lecture.
-2. `src/barre/elements.rs` : la branche dans `construire` qui crée l'item.
-3. S'il se met à jour seul : une variante dans `Rafraichi` (`src/barre/rafraichi.rs`) et sa branche dans `rafraichir`. Ne bloque jamais le fil principal : lance le travail dans un fil et renvoie le texte par `etat.envoi`.
-4. Le tableau des éléments du README.
+1. `src/config.rs` : une variante dans `Element` (son nom en `snake_case` devient `type = "…"`), avec son alias anglais et ceux de ses champs, puis un test de lecture.
+2. `src/barre/elements.rs` : la branche dans `construire` qui crée l'item, et sa ligne dans `largeur_estimee`.
+3. S'il se met à jour seul : une variante dans `Rafraichi` (`src/barre/rafraichi.rs`) et sa branche dans `rafraichir`. Ne bloque jamais le fil principal : lance le travail dans un fil et renvoie le texte par `etat.envoi` (modèle : `Batterie`, qui envoie la sortie brute de `pmset` et l'analyse au retour). Pour changer aussi l'icône ou les couleurs, construis un `Riche` et passe par `appliquer`.
+4. Le tableau des éléments et le glossaire du README, et une étape dans `autotest.rs` si l'effet est visible (la barre `BARRE_RICHE` des étapes 22-26 sert à ça).
 
 ### Ajouter une entrée au menu
 
@@ -76,6 +77,11 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont chargées par `dlopen` / `dlsym` : si l'une disparaît, Tactile écrit une erreur au lieu de planter.
 
 ## Pièges déjà rencontrés
+
+- Les keycodes macOS sont physiques : `0` est la touche « a » en QWERTY et « q » en AZERTY. `clavier.rs` cherche le code d'un caractère avec `UCKeyTranslate` sur la disposition courante ; seules les touches sans caractère (f1-f20, flèches, esc…) ont un code fixe.
+- Un bouton de `script` est sans bordure (`setBordered: NO`) : une couleur de fond venue du JSON ne se voit pas sans remettre la bordure (`appliquer`).
+- `setTitle:` efface la couleur d'un titre attribué : `vues::styler` est rappelé après chaque `titre` d'un script riche.
+- Avec des alias serde, « attendu parmi » liste aussi les mots anglais (`«icon», «icone», …`) ; les tests comparent le début du message.
 
 - Les popovers d'AppKit ne s'ouvrent pas dans une barre système. `NSPopoverTouchBarItem` s'affiche mais rien ne se passe au toucher. D'où les sous-barres (`depliable`) : on présente une autre barre système, avec un ✕ qui ramène la principale.
 - Les présentations de barres système sont animées et asynchrones : présenter une sous-barre puis la principale les fait s'empiler ou se croiser, une fois sur deux. Tactile ne présente donc qu'une barre système (`modale()`) et change son contenu (`montrer`) pour ouvrir ou fermer une sous-barre, comme MTMR. Ce bug ne se voyait qu'en capture : l'état interne disait « principale ».

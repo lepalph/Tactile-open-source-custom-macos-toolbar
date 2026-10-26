@@ -205,7 +205,7 @@ scripts/verifier.sh        # actionne chaque contrôle sur la vraie Touch Bar et
 - Tactile utilise des API privées d'Apple (barre système, Control Strip, luminosité). Une mise à jour de macOS peut les casser ; elles sont listées dans [ARCHITECTURE.md](docs/ARCHITECTURE.md#api-privées-utilisées).
 - Pas encore d'éditeur visuel : la barre se règle dans le fichier TOML.
 - Le curseur de luminosité règle l'écran intégré seulement.
-- Gestes sur la Touch Bar, raccourcis clavier et gestes trackpad viendront ensuite (voir [SPEC.md](SPEC.md)).
+- Gestes sur la Touch Bar et gestes trackpad viendront ensuite (voir [SPEC.md](SPEC.md)).
 
 ## Remerciements
 
@@ -229,7 +229,7 @@ At rest it uses 0.5 % CPU and 13 MB of memory (measured). It is written in Rust 
 
 **Menu.** The menu bar icon offers: show my bar, Apple's bar, open the configuration, launch at login, quit.
 
-**Customize.** Menu → *Ouvrir la configuration* opens `~/.config/tactile/barre.toml`; save it and the bar updates within a second. Keys are French: `bouton` = button, `texte` = text, `symbole` = SF Symbol, `couleur` = colour, `appui_long` = long press, `heure` = clock, `en_cours` = now playing, `script` = command output, `espace` = fixed space, `souple` = flexible space, `groupe` = group. Errors are written to `~/Library/Logs/Tactile.log`.
+**Customize.** Menu → *Ouvrir la configuration* opens `~/.config/tactile/barre.toml`; save it and the bar updates within a second. Every key has an English alias (`[[item]]`, `button`, `clock`, `now_playing`, `width`, `long_press`, `brightness_up`, `key`, `battery`…): see the glossary above and [exemples/barre.en.toml](exemples/barre.en.toml), the default bar in English. Error messages are in French for now and go to `~/Library/Logs/Tactile.log`.
 
 **Contribute.** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map, step-by-step recipes, private APIs, known pitfalls) and [docs/DECISIONS.md](docs/DECISIONS.md). Build with `cargo build --release`; `scripts/empaqueter.sh` produces the universal app.
 

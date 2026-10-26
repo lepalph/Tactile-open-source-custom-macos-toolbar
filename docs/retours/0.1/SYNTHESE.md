@@ -17,27 +17,27 @@ Quatre personas (rapports dans ce dossier) : Nadia (débutante), Marc (avancé, 
 
 ## B. Ergonomie
 
-| # | Point | Source |
-|---|---|---|
-| B1 | Pas d'éditeur visuel : tout passe par un fichier caché et un vocabulaire (TOML, SF Symbols, hex) inconnu d'une débutante | Nadia |
-| B2 | Lancer une app = `shell = "open -a Nom"` avec le nom anglais, jamais expliqué | Nadia, Lise |
-| B3 | Anglais : 19 lignes en pied de README, erreurs traduites en français, CONTRIBUTING impose le français | Sam |
-| B4 | Clés TOML françaises : frein international → alias anglais `#[serde(alias)]`, glossaire testé | Sam, Lise |
-| B5 | Présentation GitHub : pas de bannière, badges, GIF, notes de release, gabarits d'issues, icône | Nadia, Sam |
+| # | Point | Source | État |
+|---|---|---|---|
+| B1 | Pas d'éditeur visuel : tout passe par un fichier caché et un vocabulaire (TOML, SF Symbols, hex) inconnu d'une débutante | Nadia | chantier 3b |
+| B2 | Lancer une app = `shell = "open -a Nom"` avec le nom anglais, jamais expliqué | Nadia, Lise | fait : `{ app = "Nom" }`, README « Trouver le nom d'une app », app introuvable au journal |
+| B3 | Anglais : 19 lignes en pied de README, erreurs traduites en français, CONTRIBUTING impose le français | Sam | chantier 3c |
+| B4 | Clés TOML françaises : frein international → alias anglais `#[serde(alias)]`, glossaire testé | Sam, Lise | fait : alias sur chaque clé, type, réglage, action ; `exemples/barre.en.toml` ; tests `alias_anglais_donnent_la_meme_barre`, `glossaire_du_readme` |
+| B5 | Présentation GitHub : pas de bannière, badges, GIF, notes de release, gabarits d'issues, icône | Nadia, Sam | chantier 3c |
 
 ## C. Personnalisation (par valeur)
 
-| # | Fonction | Syntaxe souhaitée | Source |
-|---|---|---|---|
-| C1 | Raccourci clavier comme action | `action = { touche = "cmd+shift+4" }` | Marc, Lise |
-| C2 | Lancer une app / ouvrir une URL | `action = { app = "Figma" }`, `{ url = "https://…" }` | Nadia, Lise |
-| C3 | Barre par application | `[[application]] app = "com.adobe.PremierePro"` + ses `[[application.element]]`, `herite = true` | Lise, Marc |
-| C4 | Apparence : image perso, couleur du texte, taille, icône + texte | `image = "~/x.png"`, `couleur_texte`, `taille`, `affichage = "icone"\|"texte"\|"les_deux"` | Lise, Marc |
-| C5 | `largeur` sur `groupe` (libellé tronqué) | `largeur = 100` | Marc |
-| C6 | Scripts riches : sortie JSON `{"texte","symbole","couleur"}` | automatique si la sortie commence par `{` | Lise |
-| C7 | Widget batterie | `type = "batterie"` | Marc, Lise |
-| C8 | AppleScript natif | `action = { applescript = "…" }` | Lise |
-| C9 | Import de presets BTT | `tactile --importer x.bttpreset` | Lise |
+| # | Fonction | Syntaxe souhaitée | Source | Preuve |
+|---|---|---|---|---|
+| C1 | Raccourci clavier comme action | `action = { touche = "cmd+shift+4" }` | Marc, Lise | fait : modificateurs cmd/shift/ctrl/alt/fn, touches nommées, caractères résolus sur la disposition (AZERTY), `{ keycode = n }` ; tests `raccourci_lu_et_resolu`, `touche_inconnue_dit_la_ligne` ; autotest 23 (f15) |
+| C2 | Lancer une app / ouvrir une URL | `action = { app = "Figma" }`, `{ url = "https://…" }` | Nadia, Lise | fait : `open -a` / `open`, stderr au journal ; test `app_introuvable_et_applescript_faux_remontent_leur_erreur` ; autotest 24 (TextEdit ouvert) |
+| C3 | Barre par application | `[[application]] app = "com.adobe.PremierePro"` + ses `[[application.element]]`, `herite = true` | Lise, Marc | chantier 3a-3 |
+| C4 | Apparence : image perso, couleur du texte, taille, icône + texte | `image = "~/x.png"`, `couleur_texte`, `taille`, `affichage = "icone"\|"texte"\|"les_deux"` | Lise, Marc | fait : tests `apparence_d_un_bouton`, `image_redimensionnee_ou_absente`, `image_introuvable_donne_un_bouton_texte` ; autotest 23 et capture « riche » |
+| C5 | `largeur` sur `groupe` (libellé tronqué) | `largeur = 100` | Marc | fait : test `groupe_avec_largeur_et_batterie` ; « Export › » à 140 pt dans la capture « riche » |
+| C6 | Scripts riches : sortie JSON `{"texte","symbole","couleur"}` | automatique si la sortie commence par `{` | Lise | fait : clés texte, symbole, image, couleur, couleur_texte ; test `sortie_json_ou_texte_brut` ; autotest 23 (« ok » vert) |
+| C7 | Widget batterie | `type = "batterie"` | Marc, Lise | fait : `pmset -g batt` toutes les 30 s, `symbole`, `largeur` ; tests `analyse_pmset`, `chaque_symbole_de_pile_existe` ; autotest 23 |
+| C8 | AppleScript natif | `action = { applescript = "…" }` | Lise | fait : `osascript -e`, stderr au journal ; autotest 25 (TextEdit fermé) |
+| C9 | Import de presets BTT | `tactile --importer x.bttpreset` | Lise | reporté après la 0.2 |
 
 ## Ce que Tactile fait déjà mieux (à garder)
 
