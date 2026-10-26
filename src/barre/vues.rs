@@ -23,7 +23,7 @@ pub(super) fn texte(s: &str) -> Retained<NSString> {
 }
 
 /// `None` si le symbole SF n'existe pas : un `buttonWithImage: nil` fait paniquer AppKit.
-pub(super) fn symbole(nom: &str) -> Option<Id> {
+pub(crate) fn symbole(nom: &str) -> Option<Id> {
     let image: Id = unsafe { msg_send![class!(NSImage), imageWithSystemSymbolName: &*texte(nom), accessibilityDescription: std::ptr::null_mut::<AnyObject>()] };
     (!image.is_null()).then_some(image)
 }
@@ -45,7 +45,7 @@ thread_local! {
 
 /// `None` si le fichier n'existe pas ou n'est pas une image. `~` est étendu ; `gabarit` teinte l'image comme un symbole.
 /// L'image est réduite à 20 pt de haut (40 px) dès la lecture : un PNG de 10 000 px gardait 400 Mo par bouton.
-pub(super) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
+pub(crate) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
     let chemin = match chemin.strip_prefix("~/") {
         Some(suite) => format!("{}/{suite}", std::env::var("HOME").unwrap_or_default()),
         None => chemin.to_string(),
@@ -125,9 +125,9 @@ pub(super) fn styler(bouton: Id, couleur_texte: Option<&str>, taille: Option<f64
     }
 }
 
+/// `#RRGGBB` seulement, comme l'éditeur et `--verifier` (`config::rgb`).
 pub(super) fn couleur(hexa: &str) -> Option<Id> {
-    let h = hexa.trim_start_matches('#');
-    let v = u32::from_str_radix(h, 16).ok().filter(|_| h.len() == 6)?;
+    let v = crate::config::rgb(hexa)?;
     let c = |d: u32| ((v >> d) & 0xff) as f64 / 255.0;
     Some(unsafe { msg_send![class!(NSColor), colorWithSRGBRed: c(16), green: c(8), blue: c(0), alpha: 1.0f64] })
 }
@@ -202,6 +202,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
     fn image_redimensionnee_ou_absente() {
         let i = image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", true).unwrap();
         let taille: NSSize = unsafe { msg_send![i, size] };

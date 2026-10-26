@@ -55,11 +55,8 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(ci, ignore = "pas d'écran sur un runner de CI")]
     fn regler_puis_relire_et_restaurer() {
-        // Pas d'écran sur un runner de CI.
-        if std::env::var_os("CI").is_some() {
-            return;
-        }
         let origine = lire().unwrap();
         let cible = if origine > 0.5 { origine - 0.2 } else { origine + 0.2 };
         regler(cible).unwrap();

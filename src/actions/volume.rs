@@ -100,11 +100,8 @@ mod tests {
 
     // Volume et muet touchent la même sortie : un seul test, pour qu'ils ne tournent pas en parallèle.
     #[test]
+    #[cfg_attr(ci, ignore = "pas de sortie audio sur un runner de CI")]
     fn volume_et_muet_restaures() {
-        // Pas de sortie audio sur un runner de CI.
-        if std::env::var_os("CI").is_some() {
-            return;
-        }
         let origine = lire().unwrap();
         let cible = (origine - 0.1).max(0.0);
         regler(cible).unwrap();

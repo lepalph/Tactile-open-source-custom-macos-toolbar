@@ -23,6 +23,9 @@ use std::cell::RefCell;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 use vues::{barre_touch, texte};
+/// Pour le validateur de `config::controler` : il juge comme la barre.
+pub(crate) use elements::{debordement, largeur_barre};
+pub(crate) use vues::{image, symbole};
 
 type Id = *mut AnyObject;
 
@@ -350,9 +353,7 @@ fn installer(config: &Barre) {
         envoi,
         reception,
     };
-    if let Some((total, caches)) = elements::debordement(&config.elements, elements::largeur_barre(config.masquer_control_strip)) {
-        eprintln!("tactile : la barre déborde (environ {total:.0} pt pour {:.0}) : {caches} élément(s) sur {} seront cachés", elements::largeur_barre(config.masquer_control_strip), config.elements.len());
-    }
+    // Le débordement (de chaque barre) est journalisé par `config::controler`, au chargement du fichier (main.rs).
     let items = construire(&config.elements, PREFIXE, &mut etat);
     etat.barres[0] = barre_touch(PREFIXE, items);
     let applis = config.applications.iter().enumerate().map(|(k, app)| {

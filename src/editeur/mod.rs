@@ -148,6 +148,10 @@ fn enregistrer(chemin: &Path, barre: Value) -> Result<(), String> {
     for app in &relue.applications {
         verifier(&app.elements).map_err(|e| format!("application « {} », {e}", app.app))?;
     }
+    // Le validateur partagé avec `--verifier` et la barre : ce qui rendrait la barre inutilisable (vide).
+    if let Some(avis) = config::controler(&relue, None).into_iter().find(|a| a.grave) {
+        return Err(avis.to_string());
+    }
     if let Some(dossier) = chemin.parent() {
         std::fs::create_dir_all(dossier).map_err(|e| format!("impossible de créer {} : {e}", dossier.display()))?;
     }
@@ -194,7 +198,7 @@ fn verifier(elements: &[Element]) -> Result<(), String> {
 }
 
 fn couleur_valide(c: &str) -> bool {
-    c.len() == 7 && c.starts_with('#') && c[1..].chars().all(|ch| ch.is_ascii_hexdigit())
+    config::rgb(c).is_some()
 }
 
 /// Le symbole SF rendu par AppKit en PNG (data URL), à 2× pour un affichage à 17 pt. `None` s'il n'existe pas.
@@ -341,13 +345,15 @@ mod tests {
         assert!(ecrit.starts_with("# Ta barre Tactile"), "{ecrit}");
         assert_eq!(config::lire(&ecrit).unwrap().elements, [Element::Heure { format: Some("HH:mm".into()) }]);
 
-        enregistrer(&chemin, json!({ "element": [] })).unwrap();
+        // Une barre vide est refusée (validateur partagé) ; le fichier ne bouge pas.
+        assert!(enregistrer(&chemin, json!({ "element": [] })).unwrap_err().contains("aucun élément"));
+        enregistrer(&chemin, json!({ "element": [{ "type": "souple" }] })).unwrap();
         assert_eq!(noms(&dossier.join("sous")), ["barre.toml", "barre.toml.precedent"]);
         assert_eq!(config::lire(&std::fs::read_to_string(precedent(&chemin)).unwrap()).unwrap().elements.len(), 1);
 
         revenir(&chemin).unwrap();
-        assert_eq!(config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap().elements.len(), 1);
-        assert!(config::lire(&std::fs::read_to_string(precedent(&chemin)).unwrap()).unwrap().elements.is_empty());
+        assert_eq!(config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap().elements, [Element::Heure { format: Some("HH:mm".into()) }]);
+        assert_eq!(config::lire(&std::fs::read_to_string(precedent(&chemin)).unwrap()).unwrap().elements, [Element::Souple]);
         std::fs::remove_dir_all(&dossier).unwrap();
     }
 
@@ -367,10 +373,8 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(ci, ignore = "rendu de symbole SF : pas de session graphique sur un runner de CI")]
     fn un_symbole_inconnu_est_refuse() {
-        if std::env::var("CI").is_ok() {
-            return;
-        }
         assert!(glyphe("play.fill").is_some_and(|g| g.starts_with("data:image/png;base64,")));
         assert!(glyphe("truc.machin").is_none());
         let barre = config::lire("[[element]]\ntype = \"bouton\"\nsymbole = \"truc.machin\"\n").unwrap();

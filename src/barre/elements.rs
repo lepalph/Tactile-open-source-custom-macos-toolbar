@@ -244,7 +244,7 @@ pub(super) const LARGEUR_GROUPE: f64 = 72.0;
 pub(super) const LARGEUR_BATTERIE: f64 = 96.0;
 
 /// Largeur de la barre en points : toute la Touch Bar, ou ce qu'il reste à côté du Control Strip.
-pub(super) fn largeur_barre(masquer_control_strip: bool) -> f64 {
+pub(crate) fn largeur_barre(masquer_control_strip: bool) -> f64 {
     if masquer_control_strip { 1004.0 } else { 685.0 }
 }
 
@@ -266,7 +266,7 @@ fn largeur_estimee(element: &Element) -> f64 {
 
 /// La Touch Bar retire en silence ce qui dépasse : largeur totale estimée et nombre d'éléments
 /// qui seront cachés (du premier qui dépasse `disponible` jusqu'au dernier), ou `None` si tout tient.
-pub(super) fn debordement(elements: &[Element], disponible: f64) -> Option<(f64, usize)> {
+pub(crate) fn debordement(elements: &[Element], disponible: f64) -> Option<(f64, usize)> {
     const ESPACEMENT: f64 = 8.0;
     // L'estimation est grossière (la barre par défaut tient à 3 % près) : on ne prévient qu'au-delà de 5 %.
     const TOLERANCE: f64 = 1.05;

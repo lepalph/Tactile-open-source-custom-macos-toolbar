@@ -299,6 +299,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(ci, ignore = "dispositions clavier (TIS) de la session : pas de session ouverte sur un runner de CI")]
     fn azerty_chiffres_antislash_et_caracteres_a_option() {
         let _tis = TIS.lock().unwrap();
         let source = francais();

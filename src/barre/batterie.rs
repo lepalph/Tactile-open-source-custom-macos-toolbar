@@ -75,8 +75,8 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(ci, ignore = "pas de batterie sur un runner de CI")]
     fn la_vraie_sortie_se_lit() {
-        if std::env::var("CI").is_ok() { return; }
         assert!(analyser(&lire()).is_some());
     }
 }
