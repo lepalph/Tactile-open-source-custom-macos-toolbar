@@ -22,7 +22,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Editor: Import offers **Add to my bar** next to Replace my bar: items, sources and app bars are merged, and a source whose name is taken is renamed along with the items that use it.
 - Editor: a main menu while the window is open (Edit: Undo, Redo, Cut, Copy, Paste, Select All; File: Close ⌘W; View: Zoom In ⌘+, Zoom Out ⌘−, Actual Size ⌘0, remembered). ⌘C, ⌘V, ⌘X, ⌘A and ⌘Z now work in the fields.
 - Editor: Delete/⌫ on a preview item can be undone (an "Undo" link in the status line, or ⌘Z); keyboard shortcuts are shown under the preview.
-- `--check` (and the editor after saving) warns when a bar runs scripts faster than once a second (more than 2 such scripts, or more than 3 runs per second): a script every 0.3 s costs about 0.4 % CPU on its own.
+- `--check` (and the editor after saving) warns when a bar runs scripts faster than once a second (more than 2 such scripts, or more than 5 runs per second): a script every 0.3 s costs about 0.4 % CPU on its own.
 
 ### Changed
 

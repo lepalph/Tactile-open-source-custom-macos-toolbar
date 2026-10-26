@@ -606,7 +606,8 @@ impl Controle<'_> {
     }
 
     /// Mesuré en 0.3 (`docs/ARCHITECTURE.md`, Mesures) : un script toutes les 0,3 s coûte à lui seul 0,4 % de CPU,
-    /// presque tout le budget de la barre. Avis au-delà de 2 scripts sous 1 s, ou de 3 lancements par seconde.
+    /// presque tout le budget de la barre. Avis au-delà de 2 scripts sous 1 s, ou de 5 lancements par seconde (un
+    /// script seul à 0,3 s, comme `exemples/claude-vocal.toml`, est un choix assumé : pas d'avis).
     fn rapides(&mut self, elements: &[Element], chemin: &[(&str, usize)], barre: &str) {
         fn frequences(elements: &[Element], liste: &mut Vec<f64>) {
             for e in elements {
@@ -620,7 +621,7 @@ impl Controle<'_> {
         let mut liste = Vec::new();
         frequences(elements, &mut liste);
         let par_seconde: f64 = liste.iter().sum();
-        if liste.len() > 2 || par_seconde > 3.0 {
+        if liste.len() > 2 || par_seconde > 5.0 {
             let message = format!(
                 "{barre} lance {} plus d'une fois par seconde (environ {par_seconde:.0} lancements par seconde) : ces rafraîchissements rapides coûtent du CPU (un script toutes les 0,3 s prend à lui seul 0,4 %) ; passe leur intervalle à 1 s ou plus",
                 nombre(liste.len(), "script")
@@ -1952,19 +1953,21 @@ mod proprietes {
     }
 
     /// Fonctionnel 0.3 : un script à 0,3 s coûte 0,4 % de CPU à lui seul ; au-delà de 2 scripts sous 1 s ou de
-    /// 3 lancements par seconde, `controler` le dit.
+    /// 5 lancements par seconde, `controler` le dit.
     #[test]
     fn rafraichissements_rapides_signales() {
         let script = |i: f64| format!("[[element]]\ntype = \"script\"\ncommande = \"date\"\nintervalle = {i}\n");
         let rapide = |texte: &str| controler(&lire(texte).unwrap(), None).iter().any(|a| a.message.contains("rafraîchissements rapides coûtent du CPU"));
         assert!(!rapide(&script(0.5)), "un script à 0,5 s : 2 par seconde");
         assert!(!rapide(&[script(0.9), script(0.9), script(5.0)].concat()));
-        assert!(rapide(&script(0.3)), "un script à 0,3 s : 3,3 par seconde");
+        assert!(!rapide(&script(0.3)), "un script à 0,3 s : 3,3 par seconde, choix assumé (Claude vocal)");
+        assert!(rapide(&script(0.15)), "un script à 0,15 s : 6,7 par seconde");
+        assert!(rapide(&[script(0.3), script(0.3)].concat()), "deux à 0,3 s : 6,7 par seconde");
         assert!(rapide(&[script(0.9), script(0.9), script(0.9)].concat()), "3 scripts sous 1 s");
-        let groupe = format!("[[element]]\ntype = \"heure\"\n[[application]]\napp = \"Finder\"\n[[application.element]]\ntype = \"groupe\"\n{}", script(0.2).replace("[[element]]", "[[application.element.element]]"));
+        let groupe = format!("[[element]]\ntype = \"heure\"\n[[application]]\napp = \"Finder\"\n[[application.element]]\ntype = \"groupe\"\n{}", script(0.1).replace("[[element]]", "[[application.element.element]]"));
         let avis = controler(&lire(&groupe).unwrap(), Some(&groupe));
         let a = avis.iter().find(|a| a.message.contains("coûtent du CPU")).expect("script dans un groupe d'une barre d'app");
-        assert!(a.message.starts_with("la barre de « Finder » lance 1 script plus d'une fois par seconde (environ 5 lancements par seconde)"), "{}", a.message);
+        assert!(a.message.starts_with("la barre de « Finder » lance 1 script plus d'une fois par seconde (environ 10 lancements par seconde)"), "{}", a.message);
         assert_eq!(a.ligne, Some(3));
     }
 
