@@ -12,6 +12,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Button appearance: `image` (with `gabarit`), `couleur_texte`, `taille`, `affichage = "icone" | "texte" | "les_deux"`; `largeur` on groups.
 - Rich script output: a JSON line `{"texte", "symbole", "image", "couleur", "couleur_texte"}` styles the widget.
 - `batterie` element (`pmset`, every 30 s), with or without the battery symbol.
+- Per-app bars: an `[[application]]` table (`app` = bundle id or display name, `herite` to keep the main bar's edges) shows its own items while that app is frontmost.
 - English aliases for every key, type, setting and action (`exemples/barre.en.toml`, glossary in the README).
 - Command line: `--help`, `--version`, `--verifier [file]` (checks a bar file and reports the line of an error); unknown argument exits with code 2. `TACTILE_CONFIG` overrides the configuration path.
 - Config errors shown in the bar itself ("⚠ config ligne N") and a "View the log" menu item.

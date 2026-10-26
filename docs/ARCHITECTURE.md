@@ -12,14 +12,21 @@ main.rs
  └─ barre::lancer()            app AppKit sans icône dans le Dock
      ├─ plateau                icône ✳ dans le Control Strip d'Apple
      ├─ menu                   icône de la barre des menus
-     ├─ installer(config)      construit les items, présente la barre principale
-     └─ minuteur 0,1 s → tic   applique une config rechargée, rafraîchit heure / musique / scripts
+     ├─ installer(config)      construit les items de la principale et d'une barre par [[application]], présente la base
+     └─ minuteur 0,1 s → tic   applique une config rechargée, suit l'app active, rafraîchit heure / musique / scripts
 
 appui sur un bouton
  → TactileCible::appui (le tag du bouton = index dans Etat::commandes)
  → declencher : Commande::Systeme(action) → actions::executer
-                Commande::Ouvrir(k) / Fermer → montre le contenu de la sous-barre k / de la principale
+                Commande::Ouvrir(k) / Fermer → montre le contenu de la sous-barre k / de la base (barre de l'app active ou principale)
                 dans l'unique barre système
+
+changement d'app au premier plan (Safari passe devant)
+ → tic → suivre_app : base() lit NSWorkspace.frontmostApplication (bundle id, nom affiché),
+   Barre::application_pour trouve la [[application]] → Etat::applis[k], sinon la principale
+ → si la barre montrée est une base (principale ou barre d'app) : montrer(barre de l'app)
+   si c'est une sous-barre : rien ; son ✕ (Commande::Fermer) montrera base()
+ → sous la barre d'Apple (masquer) : montrer change le contenu sans représenter ; ✳ (afficher) présente base()
 ```
 
 Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une commande `script`, `media-control`) part dans un fil à part et renvoie son texte par un canal, relu au `tic` suivant.
@@ -29,7 +36,7 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | Fichier | Rôle |
 |---|---|
 | `src/main.rs` | Ligne de commande (`--help`, `--version`, `--verifier`), démarrage, journal `~/Library/Logs/Tactile.log` quand il n'y a pas de terminal. |
-| `src/config.rs` | Types `Barre`, `Element`, `Reglage` ; lecture TOML avec erreurs en français ; surveillance du fichier. Tests de la config. |
+| `src/config.rs` | Types `Barre`, `Element`, `Reglage`, `Application` (barre par app : `application_pour`, fusion `herite` dans `elements_avec`) ; lecture TOML avec erreurs en français ; surveillance du fichier. Tests de la config. |
 | `src/actions/mod.rs` | Enum `Action` (ce qu'on écrit dans `action = …`) et `executer`. |
 | `src/actions/luminosite.rs` | Luminosité de l'écran intégré (DisplayServices, privé). |
 | `src/actions/volume.rs` | Volume et muet de la sortie par défaut (CoreAudio). |
@@ -46,6 +53,7 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `src/editeur/editeur.html` | La page de l'éditeur (HTML, CSS et JS dans un seul fichier, embarqué par `include_str!`, sans réseau). |
 | `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire ; préréglage « Musique » de l'éditeur. `barre.en.toml` : la même avec les alias anglais (test `alias_anglais_donnent_la_meme_barre`). |
 | `exemples/simple.toml`, `exemples/developpeur.toml` | Les deux autres préréglages de l'éditeur. |
+| `exemples/par-application.toml` | Barres par application commentées (testé par `aller_retour_toml`). |
 | `scripts/empaqueter.sh` | `Tactile.app` universelle signée ad hoc + `Tactile.zip`. |
 
 ## Recettes
@@ -114,11 +122,14 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 - Un `script` tourne dans son propre groupe de processus (`process_group(0)`) : tuer `zsh -c` seul laisse son enfant (`sleep`, `curl`…) orphelin. Le groupe est tué au-delà de `delai` et quand la barre est remplacée (`Etat::processus`, mis à `None` pour que le script qui démarre pendant le remplacement soit tué aussi). Quitter Tactile pendant un script laisse encore ce script finir seul.
 - Le `placement` d'une barre système n'est lu qu'à sa présentation : changer `masquer_control_strip` à chaud impose `minimizeSystemModalTouchBar:` avant de représenter. Une présentation en placement 0 (Control Strip visible) ne réveille pas la Touch Bar : sans toucher humain, `screencapture -b` rend une image noire.
 - Les notifications macOS (`UNUserNotificationCenter`, et même `NSUserNotificationCenter`) exigent un bundle : depuis `target/release/tactile` elles plantent ou ne font rien. L'erreur de config s'affiche donc dans la barre elle-même (`afficher_erreur`).
+- L'app active est **sondée** au `tic` (`frontmostApplication`), pas observée par `NSWorkspaceDidActivateApplicationNotification` : même coût (rien quand la config n'a pas d'`[[application]]`), et le sondage rattrape tout seul le changement d'app survenu pendant qu'une sous-barre était ouverte. Écran verrouillé, `frontmostApplication` reste `com.apple.loginwindow` même après `open -a TextEdit` : l'autotest le détecte et simule l'app active (`APP_SIMULEE`), en le disant au journal ; le passage réel au premier plan ne se vérifie qu'écran déverrouillé.
+- `scripts/verifier.sh` n'affiche pas les lignes du journal qui contiennent « pas » entre deux espaces (c'est son filtre des lignes `AUTOTEST n pas attendu=…`) : un message d'étape ne doit pas contenir ce mot.
+- Une barre par application est construite entière à chaque rechargement, comme la principale : ses scripts tournent même quand elle n'est pas montrée, et avec `herite` les éléments repris de la principale existent deux fois (deux scripts, deux horloges).
 - Un avertissement `NSLayoutConstraint … exceeds internal limits` apparaît au lancement. Il est inoffensif ; sa source n'est pas encore identifiée.
 
 ## Vérifier un changement
 
-- `scripts/verifier.sh` : la vérification complète. Lance Tactile avec `TACTILE_AUTOTEST=1`, qui actionne chaque contrôle par le même chemin qu'un doigt (`performClick:` sur le vrai bouton, message `glisse:` pour les sliders) et contrôle l'effet réel : sous-barres, luminosité et volume relus puis restaurés, barre d'Apple et retour par ✳, Claude vocal qui démarre et s'arrête, lecture/pause. Il capture la Touch Bar à chaque étape (`target/verification/`) et compare chaque capture à l'écran attendu (étapes 20-21 : l'élément rouge « ⚠ config ligne 6 » apparaît puis disparaît ; 22-25 : barre riche verte). Un écran noir (Touch Bar inactive) est signalé comme non vérifiable, jamais comme réussi : touche le trackpad pendant la vérification.
+- `scripts/verifier.sh` : la vérification complète. Lance Tactile avec `TACTILE_AUTOTEST=1`, qui actionne chaque contrôle par le même chemin qu'un doigt (`performClick:` sur le vrai bouton, message `glisse:` pour les sliders) et contrôle l'effet réel : sous-barres, luminosité et volume relus puis restaurés, barre d'Apple et retour par ✳, Claude vocal qui démarre et s'arrête, lecture/pause. Il capture la Touch Bar à chaque étape (`target/verification/`) et compare chaque capture à l'écran attendu (étapes 20-21 : l'élément rouge « ⚠ config ligne 6 » apparaît puis disparaît ; 22-25 : barre riche verte ; 26-29 : barre de TextEdit, bouton bleu, après `open -a TextEdit`, puis retour à la principale quand TextEdit quitte). Un écran noir (Touch Bar inactive) est signalé comme non vérifiable, jamais comme réussi : touche le trackpad pendant la vérification.
 - `cargo test` : config, ligne de commande, parsing des médias, symbole SF inconnu, débordement, scripts (délai avec `sleep 30`, stderr, barre remplacée), et luminosité / volume réels (valeur changée, relue, restaurée). Avec `CI` défini, les tests matériels sortent tout de suite.
 - `tactile --verifier [fichier]` : lit un fichier de barre et dit « OK : n éléments » ou l'erreur avec sa ligne, sans toucher la Touch Bar.
 - `TACTILE_CONFIG=chemin` remplace `~/.config/tactile/barre.toml` pour tout le programme (lecture, surveillance, éditeur) : indispensable pour essayer l'éditeur sans toucher à sa vraie barre, par exemple `TACTILE_CONFIG=/tmp/essai.toml target/release/tactile --personnaliser`. `--personnaliser` n'ouvre que la fenêtre : ni Touch Bar, ni icône de menu.

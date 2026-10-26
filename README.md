@@ -168,12 +168,35 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | `app` | `app` |
 | `url` | `url` |
 | `applescript` | `applescript` |
+| `herite` | `inherit` |
 
 Dans la sortie JSON d'un `script` aussi : `text`, `symbol`, `color`, `text_color`.
 
 ### Extra : Claude vocal
 
 Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La transcription (whisper.cpp) et la voix (Piper) tournent sur ton Mac. Installation : [extras/claude-voix](extras/claude-voix/README.md) ; éléments à ajouter à ta barre : [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
+
+## Une barre par application
+
+Une table `[[application]]` donne sa propre barre à une app : quand elle passe au premier plan, sa barre remplace la principale ; quand tu la quittes, la principale revient. Les `[[element]]` du haut du fichier restent la barre principale.
+
+```toml
+[[application]]
+app = "com.apple.Safari"        # bundle id, ou nom affiché ("Safari")
+herite = true                   # défaut false
+
+[[application.element]]
+type = "bouton"
+texte = "Nouvel onglet"
+action = { touche = "cmd+t" }
+```
+
+- `app` : l'identifiant de l'app (bundle id) ou son nom affiché, majuscules et minuscules confondues. L'identifiant est le plus sûr ; pour le trouver : `osascript -e 'id of app "Safari"'` (affiche `com.apple.Safari`).
+- `herite = false` (défaut) : les éléments de l'app remplacent toute la barre. `herite = true` : ils remplacent seulement la zone entre le premier et le dernier `souple` de la barre principale ; ce qui est avant et après (luminosité, heure…) reste. Sans `souple` dans la principale, ils s'ajoutent à sa suite.
+- Chaque `[[application.element]]` s'écrit comme un `[[element]]` ; un groupe y prend ses sous-éléments en `[[application.element.element]]`. Une `[[application]]` sans `app` ou sans élément est refusée, avec sa ligne.
+- Une sous-barre ouverte (curseur, groupe) reste en place quand tu changes d'app ; son ✕ ramène la barre de l'app au premier plan. L'icône ✳ ramène aussi la barre de l'app en cours.
+
+Exemple complet : [exemples/par-application.toml](exemples/par-application.toml). La fenêtre « Personnaliser ma barre » ne règle que la barre principale, mais garde tes `[[application]]` à l'enregistrement.
 
 ## Dépannage
 
@@ -244,7 +267,7 @@ At rest it uses 0.5 % CPU and 13 MB of memory (measured). It is written in Rust 
 
 **Menu.** The menu bar icon offers: show my bar, Apple's bar, open the configuration, launch at login, quit.
 
-**Customize.** Menu → *Ouvrir la configuration* opens `~/.config/tactile/barre.toml`; save it and the bar updates within a second. Every key has an English alias (`[[item]]`, `button`, `clock`, `now_playing`, `width`, `long_press`, `brightness_up`, `key`, `battery`…): see the glossary above and [exemples/barre.en.toml](exemples/barre.en.toml), the default bar in English. Error messages are in French for now and go to `~/Library/Logs/Tactile.log`.
+**Customize.** Menu → *Ouvrir la configuration* opens `~/.config/tactile/barre.toml`; save it and the bar updates within a second. Every key has an English alias (`[[item]]`, `button`, `clock`, `now_playing`, `width`, `long_press`, `brightness_up`, `key`, `battery`…): see the glossary above and [exemples/barre.en.toml](exemples/barre.en.toml), the default bar in English. A per-app bar is an `[[application]]` table with `app = "com.apple.Safari"` (bundle id or display name), optional `inherit = true`, and its own `[[application.item]]` entries ([exemples/par-application.toml](exemples/par-application.toml)). Error messages are in French for now and go to `~/Library/Logs/Tactile.log`.
 
 **Contribute.** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map, step-by-step recipes, private APIs, known pitfalls) and [docs/DECISIONS.md](docs/DECISIONS.md). Build with `cargo build --release`; `scripts/empaqueter.sh` produces the universal app.
 
