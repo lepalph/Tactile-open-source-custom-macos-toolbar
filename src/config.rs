@@ -1646,6 +1646,7 @@ symbole = "speaker.wave.2.fill"
             include_str!("../exemples/lanceur.toml"),
             include_str!("../exemples/meteo.toml"),
             include_str!("../exemples/mcp.toml"),
+            include_str!("../exemples/vitrine.toml"),
             BARRE_COMPLETE,
         ] {
             let barre = lire(texte).unwrap();

@@ -1,0 +1,60 @@
+# La barre des visuels du README (docs/hero.png, docs/social-preview.png, scripts/hero.sh) :
+# échap, un tiroir d'apps, la musique en cours, la météo de Paris (Open-Meteo, sans clé), la batterie et l'heure.
+
+masquer_control_strip = true
+
+[[element]]
+type = "bouton"
+texte = "esc"
+largeur = 64
+action = "echap"
+
+# Le tiroir : un toucher ouvre une sous-barre de lanceurs, ✕ la referme.
+[[element]]
+type = "groupe"
+symbole = "square.grid.2x2"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Safari"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Music"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Notes"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Calendar"
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "en_cours"
+largeur = 300
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "texte"
+source = "meteo"
+gabarit = "{current.temperature_2m} °C"
+largeur = 110
+symbole_selon = { champ = "current.weather_code", defaut = "cloud.sun.fill", valeurs = { "0" = "sun.max.fill", "1" = "sun.max.fill", "2" = "cloud.sun.fill", "3" = "cloud.fill", "45" = "cloud.fog.fill", "48" = "cloud.fog.fill", "51" = "cloud.drizzle.fill", "53" = "cloud.drizzle.fill", "55" = "cloud.drizzle.fill", "61" = "cloud.rain.fill", "63" = "cloud.rain.fill", "65" = "cloud.heavyrain.fill", "71" = "cloud.snow.fill", "73" = "cloud.snow.fill", "75" = "cloud.snow.fill", "80" = "cloud.rain.fill", "81" = "cloud.rain.fill", "82" = "cloud.heavyrain.fill", "95" = "cloud.bolt.rain.fill" } }
+
+[[element]]
+type = "batterie"
+
+[[element]]
+type = "heure"
+format = "HH:mm"
+
+[[source]]
+nom = "meteo"
+http = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m,weather_code"
+toutes_les = 600

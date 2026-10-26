@@ -339,7 +339,7 @@ const T = {
     couleur_texte: 'Couleur du texte', couleurTexteAuto: 'blanc', taille: 'Taille du texte (points)', affichage: 'Afficher', affIcone: 'le symbole seul', affTexte: 'le texte seul', affLesDeux: 'les deux',
     symbolePile: 'Symbole de pile à côté du pourcentage', delai: 'Tuée après (secondes)', image: 'Image',
     imageChoisir: 'Choisir une image…', imageRetirer: 'Retirer', imageAide: 'PNG, JPEG, SVG, PDF… Tu peux aussi glisser un fichier ici ou sur le bouton dans la barre.',
-    imageAvantSymbole: 'L’image s’affiche à la place du symbole.', gabarit: 'Monochrome, comme les symboles Apple', gabaritAide: 'Les couleurs disparaissent : la barre teinte la forme en blanc.',
+    imageAvantSymbole: 'L’image s’affiche à la place du symbole.', gabarit: 'Monochrome, comme les symboles Apple', source: 'Source', modele: 'Gabarit', modeleAide: 'Chaque {chemin} devient la valeur lue par la source, par ex. {current.temperature_2m}. L’aperçu montre « — » à sa place.', gabaritAide: 'Les couleurs disparaissent : la barre teinte la forme en blanc.',
     imageIntrouvable: 'Image introuvable : {f}. La barre affichera son nom à la place.', imageAutre: 'Choisir une autre image', imageRefusee: 'Image refusée : {m}',
     action: 'Au toucher', appuiLong: 'Appui long (0,5 s)', reglage: 'Réglage', luminosite: 'Luminosité', volume: 'Volume',
     format: 'Format', formatAide: 'HH = heures, mm = minutes, ss = secondes. Par exemple HH:mm ou HH\'h\'mm.',
@@ -396,7 +396,7 @@ const T = {
     couleur_texte: 'Text color', couleurTexteAuto: 'white', taille: 'Text size (points)', affichage: 'Show', affIcone: 'symbol only', affTexte: 'text only', affLesDeux: 'both',
     symbolePile: 'Battery symbol next to the percentage', delai: 'Killed after (seconds)', image: 'Image',
     imageChoisir: 'Choose an image…', imageRetirer: 'Remove', imageAide: 'PNG, JPEG, SVG, PDF… You can also drop a file here or on the button in the bar.',
-    imageAvantSymbole: 'The image shows instead of the symbol.', gabarit: 'Monochrome, like Apple’s symbols', gabaritAide: 'Colors are dropped and the bar tints the shape white.',
+    imageAvantSymbole: 'The image shows instead of the symbol.', gabarit: 'Monochrome, like Apple’s symbols', source: 'Source', modele: 'Template', modeleAide: 'Each {path} becomes the value read by the source, e.g. {current.temperature_2m}. The preview shows “—” instead.', gabaritAide: 'Colors are dropped and the bar tints the shape white.',
     imageIntrouvable: 'Image not found: {f}. The bar will show its name instead.', imageAutre: 'Choose another image', imageRefusee: 'Image refused: {m}',
     action: 'On tap', appuiLong: 'Long press (0.5 s)', reglage: 'Setting', luminosite: 'Brightness', volume: 'Volume',
     format: 'Format', formatAide: 'HH = hours, mm = minutes, ss = seconds. For example HH:mm or h:mm a.',
@@ -470,9 +470,10 @@ const CLE_ACTION = { luminosite_plus: 'actLuminositePlus', luminosite_moins: 'ac
 /* Actions système (macOS) : regroupées sous « Système » dans la liste des actions. */
 const ACTIONS_SYSTEME = { mission_control: 'actMissionControl', fenetres_app: 'actFenetresApp', launchpad: 'actLaunchpad', bureau: 'actBureau', spotlight: 'actSpotlight',
   capture_ecran: 'actCaptureEcran', capture_zone: 'actCaptureZone', capture_options: 'actCaptureOptions', verrouiller: 'actVerrouiller', emojis: 'actEmojis', forcer_quitter: 'actForcerQuitter' };
+// Les types qu'on peut ajouter depuis la barre latérale (pas `texte` : il lui faut une [[source]], écrite dans le fichier).
 const ICONES = { bouton: '▢', lanceur: '◰', slider: '⇆', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
 /* Les mêmes en symboles SF (rendus par Rust) ; les caractères ci-dessus servent tant qu'ils ne sont pas arrivés. */
-const ICONES_SF = { bouton: 'hand.tap.fill', lanceur: 'app.fill', slider: 'slider.horizontal.3', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
+const ICONES_SF = { bouton: 'hand.tap.fill', lanceur: 'app.fill', slider: 'slider.horizontal.3', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', texte: 'text.bubble.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
   simple: 'star.fill', musique: 'music.note.list', developpeur: 'chevron.left.forwardslash.chevron.right' };
 const DECOR = new Set([...Object.values(ICONES_SF), 'chevron.left', 'chevron.right', 'exclamationmark.triangle.fill', 'checkmark.circle.fill', 'hand.point.up.left']);
 
@@ -519,7 +520,7 @@ function imagesDe(elements) {
   return elements.flatMap(e => [e.image, ...(e.element ? imagesDe(e.element) : [])]).filter(c => typeof c === 'string');
 }
 function symbolesDe(elements) {
-  return elements.flatMap(e => [e.symbole, ...(e.element ? symbolesDe(e.element) : [])]).filter(n => typeof n === 'string');
+  return elements.flatMap(e => [e.symbole, e.symbole_selon?.defaut, ...Object.values(e.symbole_selon?.valeurs || {}), ...(e.element ? symbolesDe(e.element) : [])]).filter(n => typeof n === 'string');
 }
 
 /* ---------- Appels venant de Rust ---------- */
@@ -789,6 +790,11 @@ function face(e) {
     case 'heure': return `<span class="face plat" style="font-variant-numeric:tabular-nums">${esc(heure(e.format || 'HH:mm'))}</span>`;
     case 'en_cours': return `<span class="face plat"${style}>▶&nbsp;&nbsp;${langue === 'fr' ? 'Titre' : 'Title'}&nbsp;&nbsp;·&nbsp;&nbsp;${langue === 'fr' ? 'Artiste' : 'Artist'}</span>`;
     case 'script': return `<span class="face plat mono" style="width:${e.largeur || 120}px;min-width:0">${langue === 'fr' ? 'sortie…' : 'output…'}</span>`;
+    // Texte d'une source : la valeur n'est lue que par la barre, l'aperçu met « — » (comme un champ absent).
+    case 'texte': {
+      const s = e.symbole_selon && (e.symbole_selon.defaut || Object.values(e.symbole_selon.valeurs || {})[0]);
+      return `<span class="face plat" style="width:${e.largeur || 120}px;min-width:0">${s ? sf(s) : ''}<span>${esc((e.gabarit || '').replace(/\{[^}]*\}/g, '—'))}</span></span>`;
+    }
     case 'batterie': return `<span class="face plat"${style}>${e.symbole === false ? '' : sf('battery.50')}<span>50 %</span></span>`;
     case 'espace': return `<span class="face"${style}></span>`;
     case 'souple': return `<span class="face"></span>`;
@@ -1036,6 +1042,11 @@ function dessinerProprietes(reconstruire) {
       html += encart(ligne(t('commande'), `<textarea id="f-commande" data-champ="commande" rows="2" spellcheck="false">${esc(e.commande)}</textarea>`, 'f-commande', { aide: t('commandeAide'), haute: true })
           + nombreChamp('intervalle', e.intervalle, 0.1, 1, '', false) + nombreChamp('delai', e.delai, 0.1, 1, parDefaut('5'), true) + nombreChamp('largeur', e.largeur, 20, 4, parDefaut('120'), true))
         + encart(champAction('action', t('action')));
+      break;
+    case 'texte':
+      html += encart(texteChamp('f-source', 'source', e.source, '')
+        + ligne(t('modele'), `<input type="text" class="moyen" id="f-modele" data-champ="gabarit" value="${esc(e.gabarit ?? '')}" spellcheck="false">`, 'f-modele', { aide: t('modeleAide') })
+        + nombreChamp('largeur', e.largeur, 20, 4, parDefaut('120'), true));
       break;
     case 'espace': html += encart(nombreChamp('largeur', e.largeur, 4, 4, '', false)); break;
     case 'batterie': html += encart(ligne(t('symbolePile'), `<input type="checkbox" class="interrupteur" role="switch" id="f-pile" ${e.symbole === false ? '' : 'checked'}>`, 'f-pile') + nombreChamp('largeur', e.largeur, 40, 4, '', true)); break;
