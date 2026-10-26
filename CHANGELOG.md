@@ -18,8 +18,13 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Config errors shown in the bar itself ("⚠ config ligne N") and a "View the log" menu item.
 - App icon drawn in code (`scripts/icone.sh`), embedded in `Tactile.app`; issue and PR templates; clippy and `cargo doc` in CI; release notes with SHA-256.
 
+- Editor: the last 5 saved versions are kept (`barre.toml.precedent`, `.precedent-2` … `.precedent-5`) and "Go back" steps back one per click without losing any; the first save over a hand-commented file keeps a `barre.toml.manuel` copy, never overwritten.
+- Editor: an app name typed by hand is checked, with the closest installed app offered in one click.
+
 ### Fixed
 
+- Editor: an unreadable bar file no longer opens as an empty bar that Save would write over. The window shows the faulty line, turns Save off, and offers to open the file or start from a ready-made bar (the broken file is first copied to `barre.toml.abime-YYYYMMDD-HHMMSS`). Saving a bar with no item and no app bar is refused.
+- Editor: unsaved changes are flagged ("Edited", dot in the close button) and confirmed before closing the window, loading a ready-made bar or going back; going back now says it worked.
 - An unknown SF symbol no longer crashes the bar: its name is shown as text.
 - Text without `largeur` is capped at 200 pt; the log says how many items overflow the bar.
 - Scripts: 5 s timeout (`delai`), stderr and exit code logged, no orphan processes when the bar is reloaded.
