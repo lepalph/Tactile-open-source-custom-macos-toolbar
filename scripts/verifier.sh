@@ -2,7 +2,7 @@
 # Vérifie toutes les fonctions de la barre sur la vraie Touch Bar : lance Tactile en autotest
 # (chaque contrôle est actionné par le même chemin qu'un doigt), capture la barre 1,2 s après
 # chaque étape dans target/verification/, compare chaque capture à l'écran attendu
-# (barre principale, sous-barre ou barre d'Apple) et échoue au moindre écart. L'écran doit être allumé.
+# (barre principale, sous-barre, barre d'Apple, barre d'une application) et échoue au moindre écart. L'écran doit être allumé.
 set -uo pipefail
 cd "${0:A:h}/.."
 
@@ -69,9 +69,18 @@ func vertAGauche(_ f: String) -> Bool {
     } }
     return n > 100
 }
+// La barre de TextEdit (étape 27) commence par un bouton bleu.
+func bleuAGauche(_ f: String) -> Bool {
+    let r = NSBitmapImageRep(data: try! Data(contentsOf: URL(fileURLWithPath: f)))!
+    var n = 0
+    for x in stride(from: 0, to: 300, by: 3) { for y in stride(from: 0, to: r.pixelsHigh, by: 3) {
+        if let c = r.colorAt(x: x, y: y), c.blueComponent > 0.5, c.redComponent < 0.25, c.greenComponent < 0.5 { n += 1 }
+    } }
+    return n > 100
+}
 for f in fichiers {
     let p = pixels(f)
-    var vu = rougeAGauche(f) ? "erreur" : vertAGauche(f) ? "riche" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
+    var vu = rougeAGauche(f) ? "erreur" : vertAGauche(f) ? "riche" : bleuAGauche(f) ? "application" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
     if vu == "apple" && !droiteAllumee(f) { vu = "noir" }
     let attendu = String(f.split(separator: "-").last!.dropLast(4))
     let verdict = vu == attendu ? "ok   " : vu == "noir" ? "?    " : "ÉCHEC"

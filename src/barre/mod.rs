@@ -44,6 +44,8 @@ struct Etat {
     erreur: Option<Id>,
     commandes: Vec<(Option<Commande>, Option<Commande>)>,
     barres: Vec<Id>,
+    /// Une barre par `[[application]]` de la config, dans le même ordre.
+    applis: Vec<Id>,
     rafraichis: Vec<Rafraichi>,
     /// Scripts en cours, tués quand la barre est remplacée.
     processus: Processus,
@@ -60,6 +62,8 @@ thread_local! {
     static PLEIN_ECRAN: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static COURANTE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
     static MODALE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
+    /// Autotest écran verrouillé : `loginwindow` garde le premier plan, l'app active est alors simulée.
+    static APP_SIMULEE: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
     static RECHARGES: RefCell<Option<Receiver<Result<Barre, String>>>> = const { RefCell::new(None) };
 }
 
@@ -117,6 +121,7 @@ define_class!(
                 }
                 None => {}
             }
+            suivre_app();
             rafraichir();
         }
     }
@@ -143,7 +148,7 @@ fn declencher(index: isize, long: bool) {
         Some((Commande::Systeme(Action::BarreApple), _)) => masquer(),
         Some((Commande::Systeme(action), _)) => signaler(actions::executer(&action)),
         Some((Commande::Ouvrir(k), barres)) => montrer(barres[k]),
-        Some((Commande::Fermer, barres)) => montrer(barres[0]),
+        Some((Commande::Fermer, barres)) => montrer(base().unwrap_or(barres[0])),
         None => {}
     }
 }
@@ -187,8 +192,48 @@ fn presenter(barre: Id) {
 
 /// Remet la barre tactile à la place de celle d'Apple.
 pub fn afficher() {
-    if let Some(principale) = ETAT.with_borrow(|e| e.as_ref().map(|e| e.barres[0])) {
-        presenter(principale);
+    if let Some(barre) = base() {
+        presenter(barre);
+    }
+}
+
+/// Bundle id et nom affiché de l'app au premier plan. Sondé au `tic` plutôt qu'observé
+/// (`NSWorkspaceDidActivateApplicationNotification`) : le sondage attend aussi sans effort qu'une sous-barre se ferme.
+pub(super) fn app_active() -> (String, String) {
+    if let Some(app) = APP_SIMULEE.with_borrow(Clone::clone) {
+        return app;
+    }
+    unsafe {
+        let espace: Id = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let app: Id = msg_send![espace, frontmostApplication];
+        if app.is_null() {
+            return Default::default();
+        }
+        let chaine = |s: Id| if s.is_null() { String::new() } else { (*(s as *const objc2_foundation::NSString)).to_string() };
+        (chaine(msg_send![app, bundleIdentifier]), chaine(msg_send![app, localizedName]))
+    }
+}
+
+/// La barre de base : celle de l'`[[application]]` qui désigne l'app au premier plan, sinon la principale.
+fn base() -> Option<Id> {
+    ETAT.with_borrow(|e| {
+        let e = e.as_ref()?;
+        if e.applis.is_empty() {
+            return Some(e.barres[0]);
+        }
+        let (bundle, nom) = app_active();
+        Some(e.config.application_pour(&bundle, &nom).map_or(e.barres[0], |k| e.applis[k]))
+    })
+}
+
+/// Montre la barre de l'app au premier plan. Une sous-barre ouverte reste jusqu'à son ✕, qui ramène alors la bonne base ;
+/// sous la barre d'Apple, seul le contenu change, sans nouvelle présentation.
+fn suivre_app() {
+    let Some(voulue) = base() else { return };
+    let courante = COURANTE.get();
+    let sur_une_base = ETAT.with_borrow(|e| e.as_ref().is_some_and(|e| courante == e.barres[0] || e.applis.contains(&courante)));
+    if courante != voulue && sur_une_base {
+        montrer(voulue);
     }
 }
 
@@ -256,6 +301,7 @@ fn installer(config: &Barre) {
         commandes: Vec::new(),
         controles: Vec::new(),
         barres: vec![std::ptr::null_mut()],
+        applis: Vec::new(),
         rafraichis: Vec::new(),
         processus: Processus::new(std::sync::Mutex::new(Some(Vec::new()))),
         prochain_media: Instant::now(),
@@ -267,6 +313,12 @@ fn installer(config: &Barre) {
     }
     let items = construire(&config.elements, PREFIXE, &mut etat);
     etat.barres[0] = barre_touch(PREFIXE, items);
+    let applis = config.applications.iter().enumerate().map(|(k, app)| {
+        let prefixe = format!("{PREFIXE}.app{}", k + 1);
+        let items = construire(&app.elements_avec(&config.elements), &prefixe, &mut etat);
+        barre_touch(&prefixe, items)
+    }).collect();
+    etat.applis = applis;
     let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());
     let principale = etat.barres[0];
     ETAT.with_borrow_mut(|place| {
@@ -275,7 +327,7 @@ fn installer(config: &Barre) {
         }
         *place = Some(etat);
     });
-    presenter(a_presenter.unwrap_or(principale));
+    presenter(a_presenter.or(base()).unwrap_or(principale));
 }
 
 /// Crée la cible des contrôles (une fois) ; les tests construisent des boutons sans lancer l'app.

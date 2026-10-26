@@ -88,7 +88,9 @@ fn recevoir(message: Value) {
                 "developpeur" => include_str!("../../exemples/developpeur.toml"),
                 _ => include_str!("../../exemples/barre.toml"),
             };
-            match config::lire(toml) {
+            // Une barre toute faite remplace la principale ; les barres par application de l'utilisateur restent.
+            let applications = config::charger().map(|b| b.applications).unwrap_or_default();
+            match config::lire(toml).map(|b| Barre { applications, ..b }) {
                 Ok(barre) => js(&format!("tactile.charger({}, {})", json!(barre), precedent(&config::chemin()).exists())),
                 Err(e) => js(&format!("tactile.erreur({})", json!(e))),
             }
@@ -143,6 +145,9 @@ fn enregistrer(chemin: &Path, barre: Value) -> Result<(), String> {
     let toml = config::ecrire(&barre)?;
     let relue = config::lire(&toml)?;
     verifier(&relue.elements)?;
+    for app in &relue.applications {
+        verifier(&app.elements).map_err(|e| format!("application « {} », {e}", app.app))?;
+    }
     if let Some(dossier) = chemin.parent() {
         std::fs::create_dir_all(dossier).map_err(|e| format!("impossible de créer {} : {e}", dossier.display()))?;
     }
@@ -373,7 +378,7 @@ mod tests {
         assert!(erreur.contains("truc.machin"), "{erreur}");
     }
 
-    /// Ce que l'éditeur ne sait pas régler (image, keycode…) doit traverser JSON → Barre → TOML sans se perdre.
+    /// Ce que l'éditeur ne sait pas régler (image, keycode, [[application]]…) doit traverser JSON → Barre → TOML sans se perdre.
     #[test]
     fn le_json_ne_perd_aucun_champ() {
         let barre = config::lire(config::BARRE_COMPLETE).unwrap();
@@ -381,8 +386,12 @@ mod tests {
         assert_eq!(serde_json::from_value::<Barre>(json.clone()).unwrap(), barre);
         let dossier = dossier_essai("complet");
         let chemin = dossier.join("barre.toml");
+        assert!(json["application"][0]["herite"].as_bool().unwrap(), "{json}");
         enregistrer(&chemin, json).unwrap();
         assert_eq!(config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap(), barre);
+        // Une barre d'application aussi est vérifiée avant l'écriture.
+        let erreur = enregistrer(&chemin, json!({ "application": [{ "app": "Safari", "element": [{ "type": "bouton", "couleur": "bleu" }] }] })).unwrap_err();
+        assert!(erreur.starts_with("application « Safari », élément 1"), "{erreur}");
         std::fs::remove_dir_all(&dossier).unwrap();
     }
 }

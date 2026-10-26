@@ -6,7 +6,7 @@ use objc2::runtime::AnyObject;
 use objc2::{msg_send, sel};
 use std::cell::Cell;
 
-use super::{cible, Id, COURANTE, ETAT};
+use super::{cible, Id, APP_SIMULEE, COURANTE, ETAT};
 use crate::actions::{self, luminosite, media, volume, Action};
 
 thread_local! {
@@ -58,6 +58,19 @@ texte = "Quit"
 action = { applescript = 'tell application "TextEdit" to quit' }
 "##;
 
+/// Barre d'application des étapes 26-29 : un bouton bleu en tête (ce que verifier.sh reconnaît). Le nom
+/// affiché en minuscules : la casse ne compte pas.
+const BARRE_APPLI: &str = r##"
+[[application]]
+app = "textedit"
+
+[[application.element]]
+type = "bouton"
+texte = "Appli TextEdit"
+couleur = "#0050C8"
+largeur = 300
+"##;
+
 pub(super) fn programmer() {
     unsafe {
         let _: () = msg_send![cible(), performSelector: sel!(etapeAutotest:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.5f64];
@@ -70,6 +83,10 @@ fn controle(nom: &str) -> Option<Id> {
 
 fn principale() -> Id {
     ETAT.with_borrow(|e| e.as_ref().map(|e| e.barres[0]).unwrap_or(std::ptr::null_mut()))
+}
+
+fn appli() -> Id {
+    ETAT.with_borrow(|e| e.as_ref().and_then(|e| e.applis.first().copied()).unwrap_or(std::ptr::null_mut()))
 }
 
 fn noter(n: usize, ok: bool, quoi: &str) {
@@ -167,6 +184,8 @@ fn attendu(n: usize) -> &'static str {
         7 | 8 => "apple",
         20 => "erreur",
         22..=25 => "riche",
+        26 => "sous",
+        27 => "application",
         _ => "principale",
     }
 }
@@ -239,6 +258,36 @@ pub(super) fn etape() {
         24 => { noter(n, textedit_ouvert(), "action app : TextEdit ouvert"); cliquer(n, "Quit") }
         25 => { noter(n, !textedit_ouvert(), "action applescript : TextEdit fermé"); true }
         26 => {
+            let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
+            let mut config = crate::config::charger().unwrap_or_else(|_| config.unwrap());
+            config.applications = crate::config::lire(BARRE_APPLI).expect("barre d'application invalide").applications;
+            super::installer(&config);
+            noter(n, !appli().is_null() && COURANTE.get() == principale(), "barre de TextEdit construite, principale présentée");
+            let ouvert = cliquer(n, "ouvrir sun.max.fill");
+            if super::app_active().0 == "com.apple.loginwindow" {
+                eprintln!("AUTOTEST {n} info écran verrouillé : loginwindow garde le premier plan, TextEdit au premier plan est simulé");
+                APP_SIMULEE.set(Some(("com.apple.TextEdit".into(), "TextEdit".into())));
+            }
+            let lance = std::process::Command::new("/usr/bin/open").args(["-a", "TextEdit"]).status().is_ok_and(|s| s.success());
+            noter(n, lance, "open -a TextEdit");
+            ouvert
+        }
+        27 => {
+            let courante = COURANTE.get();
+            let (bundle, _) = super::app_active();
+            noter(n, bundle == "com.apple.TextEdit", &format!("TextEdit au premier plan (vu : « {bundle} »)"));
+            noter(n, courante != principale() && courante != appli(), "sous-barre gardée malgré le changement d'app");
+            cliquer(n, "fermer")
+        }
+        28 => {
+            noter(n, COURANTE.get() == appli(), "✕ ramène la barre de TextEdit (et non la principale)");
+            let quitte = std::process::Command::new("/usr/bin/osascript").args(["-e", "quit app \"TextEdit\""]).status().is_ok_and(|s| s.success());
+            noter(n, quitte, "osascript : quit app \"TextEdit\"");
+            APP_SIMULEE.set(None);
+            true
+        }
+        29 => {
+            noter(n, !textedit_ouvert() && COURANTE.get() == principale(), "TextEdit fermé : retour à la barre principale");
             let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
             super::installer(&crate::config::charger().unwrap_or_else(|_| config.unwrap()));
             noter(n, controle("Quit").is_none() && COURANTE.get() == principale(), "barre de l'utilisateur rétablie");

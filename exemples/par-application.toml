@@ -1,0 +1,32 @@
+# Une barre par application : copie ces blocs à la fin de ~/.config/tactile/barre.toml.
+# Quand l'app nommée par `app` passe au premier plan, sa barre remplace la principale ;
+# ailleurs, la principale (les [[element]] du haut) revient.
+
+[[element]]
+type = "heure"
+format = "HH:mm"
+
+# Safari : `herite = true` garde les éléments de la principale avant le premier « souple »
+# et après le dernier, et met ceux-ci entre les deux. Sans `herite`, ils remplacent toute la barre.
+[[application]]
+app = "com.apple.Safari"        # bundle id (osascript -e 'id of app "Safari"'), ou nom affiché : "Safari"
+herite = true
+
+[[application.element]]
+type = "bouton"
+texte = "Nouvel onglet"
+action = { touche = "cmd+t" }
+
+# TextEdit : une barre à lui seul.
+[[application]]
+app = "TextEdit"
+
+[[application.element]]
+type = "bouton"
+symbole = "bold"
+action = { touche = "cmd+b" }
+
+[[application.element]]
+type = "bouton"
+symbole = "italic"
+action = { touche = "cmd+i" }

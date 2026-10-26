@@ -275,7 +275,8 @@ function symbolesDe(elements) {
 /* ---------- Appels venant de Rust ---------- */
 window.tactile = {
   charger(b, precedent) {
-    barre = { masquer_control_strip: !!b.masquer_control_strip, element: b.element || [] };
+    // Le reste (les [[application]], que la fenêtre ne règle pas) traverse l'enregistrement intact.
+    barre = { ...b, masquer_control_strip: !!b.masquer_control_strip, element: b.element || [] };
     aPrecedent = !!precedent; sel = null;
     modifie = prereglageAttendu;
     etat(prereglageAttendu ? t('charge') : '');

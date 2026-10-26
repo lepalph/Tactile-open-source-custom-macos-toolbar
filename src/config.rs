@@ -17,6 +17,48 @@ pub struct Barre {
     pub masquer_control_strip: bool,
     #[serde(rename = "element", alias = "item", default)]
     pub elements: Vec<Element>,
+    /// Barres propres à une app, montrées quand elle passe au premier plan.
+    #[serde(rename = "application", default, skip_serializing_if = "Vec::is_empty")]
+    pub applications: Vec<Application>,
+}
+
+/// `[[application]]` : la barre montrée quand cette app est au premier plan.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Application {
+    /// Bundle id (`com.apple.Safari`) ou nom affiché (`Safari`), sans tenir compte de la casse.
+    pub app: String,
+    /// `true` : les éléments remplacent seulement la zone entre le premier et le dernier `souple` de la principale.
+    #[serde(default, alias = "inherit")]
+    pub herite: bool,
+    #[serde(rename = "element", alias = "item", default)]
+    pub elements: Vec<Element>,
+}
+
+impl Barre {
+    /// Index de la première `[[application]]` qui désigne l'app active (bundle id ou nom, sans casse).
+    pub fn application_pour(&self, bundle: &str, nom: &str) -> Option<usize> {
+        let (bundle, nom) = (bundle.to_lowercase(), nom.to_lowercase());
+        self.applications.iter().position(|a| {
+            let app = a.app.to_lowercase();
+            !app.is_empty() && (app == bundle || app == nom)
+        })
+    }
+}
+
+impl Application {
+    /// Les éléments de sa barre : les siens seuls ; avec `herite`, ceux de la principale jusqu'au premier
+    /// `souple` inclus, les siens, puis ceux de la principale depuis le dernier `souple` (sans `souple` : les siens à la suite).
+    pub fn elements_avec(&self, principale: &[Element]) -> Vec<Element> {
+        if !self.herite {
+            return self.elements.clone();
+        }
+        let souple = |e: &Element| *e == Element::Souple;
+        match (principale.iter().position(souple), principale.iter().rposition(souple)) {
+            (Some(premier), Some(dernier)) => [&principale[..=premier], &self.elements[..], &principale[dernier..]].concat(),
+            _ => [principale, &self.elements[..]].concat(),
+        }
+    }
 }
 
 /// Les clés françaises sont la forme canonique ; chaque clé, type, réglage et action accepte
@@ -149,33 +191,38 @@ pub fn ecrire(barre: &Barre) -> Result<String, String> {
 }
 
 pub fn lire(texte: &str) -> Result<Barre, String> {
-    toml::from_str(texte).map_err(|e| {
-        let message = traduire(e.message());
-        let debut = e.span().map(|s| s.start).max(element_fautif(texte));
-        match debut.and_then(|d| texte.get(..d)) {
-            Some(avant) => format!("ligne {} : {message}", avant.matches('\n').count() + 1),
-            None => message,
-        }
-    })
+    let situer = |debut: Option<usize>, message: String| match debut.and_then(|d| texte.get(..d)) {
+        Some(avant) => format!("ligne {} : {message}", avant.matches('\n').count() + 1),
+        None => message,
+    };
+    let barre: Barre = toml::from_str(texte).map_err(|e| situer(e.span().map(|s| s.start).max(element_fautif(texte)), traduire(e.message())))?;
+    if let Some(k) = barre.applications.iter().position(|a| a.elements.is_empty()) {
+        let debut = brut(texte).and_then(|b| b.application.get(k).map(|a| a.span().start));
+        return Err(situer(debut, format!("[[application]] « {} » sans élément : ajoute au moins un [[application.element]]", barre.applications[k].app)));
+    }
+    Ok(barre)
 }
 
-/// Début du premier `[[element]]` invalide : serde ne situe pas les erreurs internes
+/// Les tables du fichier avec leur position, pour situer une erreur que serde ne situe pas.
+#[derive(Deserialize)]
+struct Brut {
+    #[serde(alias = "item", default)]
+    element: Vec<toml::Spanned<toml::Table>>,
+    #[serde(default)]
+    application: Vec<toml::Spanned<toml::Table>>,
+}
+
+fn brut(texte: &str) -> Option<Brut> {
+    toml::from_str(texte).ok()
+}
+
+/// Début du premier `[[element]]` ou `[[application]]` invalide : serde ne situe pas les erreurs internes
 /// d'un élément (action, champ manquant…) et toml pointe alors le premier élément.
 fn element_fautif(texte: &str) -> Option<usize> {
-    #[derive(Deserialize)]
-    struct Brut {
-        #[serde(alias = "item", default)]
-        element: Vec<toml::Spanned<toml::Table>>,
-    }
-    let brut: Brut = toml::from_str(texte).ok()?;
-    brut.element
-        .into_iter()
-        .find(|e| {
-            toml::Value::Table(e.get_ref().clone())
-                .try_into::<Element>()
-                .is_err()
-        })
-        .map(|e| e.span().start)
+    let brut = brut(texte)?;
+    let invalide = |e: &toml::Spanned<toml::Table>| toml::Value::Table(e.get_ref().clone()).try_into::<Element>().is_err();
+    let appli_invalide = |e: &toml::Spanned<toml::Table>| toml::Value::Table(e.get_ref().clone()).try_into::<Application>().is_err();
+    brut.element.iter().find(|e| invalide(e)).or(brut.application.iter().find(|e| appli_invalide(e))).map(|e| e.span().start)
 }
 
 pub fn charger() -> Result<Barre, String> {
@@ -311,6 +358,21 @@ type = "souple"
 [[element]]
 type = "espace"
 largeur = 10
+
+[[application]]
+app = "com.apple.Safari"
+herite = true
+
+[[application.element]]
+type = "bouton"
+texte = "Nouvel onglet"
+action = { touche = "cmd+t" }
+
+[[application.element]]
+type = "groupe"
+texte = "Plus"
+  [[application.element.element]]
+  type = "heure"
 "##;
 
 #[cfg(test)]
@@ -362,6 +424,7 @@ mod tests {
                     format: Some("HH:mm".into()),
                 },
             ],
+            applications: vec![],
         };
         assert_eq!(lire(PAR_DEFAUT), Ok(attendu));
     }
@@ -403,7 +466,8 @@ mod tests {
                 lire(&texte),
                 Ok(Barre {
                     masquer_control_strip: true,
-                    elements: vec![bouton(action)]
+                    elements: vec![bouton(action)],
+                    applications: vec![],
                 }),
                 "{ecrit}"
             );
@@ -515,6 +579,14 @@ largeur = 100
   type = "batterie"
   symbole = false
   largeur = 80
+
+[[application]]
+app = "com.apple.Safari"
+herite = true
+  [[application.element]]
+  type = "bouton"
+  texte = "Onglet"
+  action = { touche = "cmd+t" }
 "##;
 
     const TOUT_EN: &str = r##"
@@ -621,6 +693,14 @@ width = 100
   type = "battery"
   symbol = false
   width = 80
+
+[[application]]
+app = "com.apple.Safari"
+inherit = true
+  [[application.item]]
+  type = "button"
+  text = "Onglet"
+  action = { key = "cmd+t" }
 "##;
 
     #[test]
@@ -628,6 +708,7 @@ width = 100
         let fr = lire(TOUT_FR).unwrap();
         assert_eq!(lire(TOUT_EN), Ok(fr.clone()));
         assert_eq!(fr.elements.len(), 18);
+        assert_eq!((fr.applications.len(), fr.applications[0].herite), (1, true));
         assert_eq!(lire(include_str!("../exemples/barre.en.toml")), lire(PAR_DEFAUT));
         // Une erreur dans un [[item]] garde sa ligne.
         assert!(lire("[[item]]\ntype = \"clock\"\n\n[[item]]\ntype = \"button\"\naction = \"dance\"\n").unwrap_err().starts_with("ligne 4 : valeur inconnue «dance»"));
@@ -653,6 +734,48 @@ width = 100
             assert!(fr.contains(f), "« {f} » n'est pas dans TOUT_FR");
             assert!(en.contains(e), "« {e} » n'est pas dans TOUT_EN");
         }
+    }
+
+    #[test]
+    fn barre_par_application() {
+        let barre = lire("[[element]]\ntype = \"heure\"\n\n[[application]]\napp = \"com.apple.Safari\"\n[[application.element]]\ntype = \"bouton\"\ntexte = \"Nouvel onglet\"\naction = { touche = \"cmd+t\" }\n\n[[application]]\napp = \"Aperçu\"\n[[application.element]]\ntype = \"souple\"\n").unwrap();
+        assert_eq!(barre.elements.len(), 1);
+        assert_eq!(barre.applications.len(), 2);
+        assert!(!barre.applications[0].herite);
+        assert_eq!(barre.applications[0].elements.len(), 1);
+        // Par bundle id ou par nom affiché, sans casse (accents compris).
+        assert_eq!(barre.application_pour("com.apple.safari", "Safari"), Some(0));
+        assert_eq!(barre.application_pour("com.example.x", "COM.APPLE.SAFARI"), Some(0));
+        assert_eq!(barre.application_pour("com.apple.Preview", "APERÇU"), Some(1));
+        assert_eq!(barre.application_pour("com.apple.finder", "Finder"), None);
+        assert_eq!(barre.application_pour("", ""), None);
+    }
+
+    #[test]
+    fn application_sans_app_ou_sans_element() {
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[application]]\nherite = true\n[[application.element]]\ntype = \"souple\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 4 : champ manquant «app»"), "{erreur}");
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[application]]\napp = \"Safari\"\n").unwrap_err();
+        assert_eq!(erreur, "ligne 4 : [[application]] « Safari » sans élément : ajoute au moins un [[application.element]]");
+        let erreur = lire("[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"truc\"\n").unwrap_err();
+        assert!(erreur.contains("valeur inconnue «truc»"), "{erreur}");
+        let erreur = lire("[[application]]\napp = \"Safari\"\nherites = true\n[[application.element]]\ntype = \"souple\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 3 : champ inconnu «herites»"), "{erreur}");
+    }
+
+    #[test]
+    fn herite_remplace_la_zone_entre_les_souples() {
+        let heure = || Element::Heure { format: None };
+        let espace = |l: f64| Element::Espace { largeur: l };
+        let principale = [espace(1.0), Element::Souple, espace(2.0), Element::Souple, espace(3.0)];
+        let mut app = Application { app: "Safari".into(), herite: false, elements: vec![heure()] };
+        assert_eq!(app.elements_avec(&principale), [heure()]);
+        app.herite = true;
+        assert_eq!(app.elements_avec(&principale), [espace(1.0), Element::Souple, heure(), Element::Souple, espace(3.0)]);
+        // Un seul souple : les éléments de l'app se placent à côté de lui, centrés entre deux souples.
+        assert_eq!(app.elements_avec(&[espace(1.0), Element::Souple, espace(3.0)]), [espace(1.0), Element::Souple, heure(), Element::Souple, espace(3.0)]);
+        // Sans souple : à la suite de la principale.
+        assert_eq!(app.elements_avec(&[espace(1.0)]), [espace(1.0), heure()]);
     }
 
     #[test]
@@ -795,6 +918,7 @@ symbole = "speaker.wave.2.fill"
             include_str!("../exemples/claude-vocal.toml"),
             include_str!("../exemples/simple.toml"),
             include_str!("../exemples/developpeur.toml"),
+            include_str!("../exemples/par-application.toml"),
             BARRE_COMPLETE,
         ] {
             let barre = lire(texte).unwrap();
