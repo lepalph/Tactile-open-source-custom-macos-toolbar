@@ -273,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "processus d'une session ouverte (Finder) : pas de session sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "needs a logged-in session (Finder): none on a CI runner")]
     fn app_ouverte_selon_ses_processus() {
         assert!(app_ouverte(&chemin_app("com.apple.finder").unwrap()), "le Finder tourne toujours");
         let grapher = std::process::Command::new("/usr/bin/pgrep").args(["-x", "Grapher"]).status().unwrap().success();

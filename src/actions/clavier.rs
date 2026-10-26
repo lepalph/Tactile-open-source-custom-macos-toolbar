@@ -266,6 +266,17 @@ mod tests {
         assert!(lire("a++").unwrap_err().starts_with("modificateur inconnu « a »"));
     }
 
+    /// Les deux README listent exactement les modificateurs acceptés (Sam : `command`, `control`, `maj` manquaient).
+    #[test]
+    fn readme_liste_les_modificateurs() {
+        let attendus: std::collections::BTreeSet<&str> = MODIFICATEURS.iter().map(|(n, _)| *n).collect();
+        for (readme, debut) in [(include_str!("../../README.md"), "Modifiers: "), (include_str!("../../README.fr.md"), "Modificateurs : ")] {
+            let phrase = readme.split(debut).nth(1).expect(debut).split(". ").next().unwrap();
+            let cites: std::collections::BTreeSet<&str> = phrase.split('`').skip(1).step_by(2).collect();
+            assert_eq!(cites, attendus, "{debut}{phrase}");
+        }
+    }
+
     #[test]
     fn table_des_touches_nommees_sans_doublon() {
         for (i, (nom, _)) in NOMMEES.iter().enumerate() {
@@ -361,7 +372,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "dispositions clavier (TIS) de la session : pas de session ouverte sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "keyboard layouts (TIS) of the session: no logged-in session on a CI runner")]
     fn azerty_chiffres_antislash_et_caracteres_a_option() {
         let _tis = TIS.lock().unwrap();
         let source = francais();
@@ -398,7 +409,7 @@ mod tests {
 
     /// Matrice QWERTY, AZERTY, QWERTZ : lettres déplacées (a, z, y), chiffre de capture et « / », résolus sans rien envoyer.
     #[test]
-    #[cfg_attr(ci, ignore = "dispositions clavier (TIS) de la session : pas de session ouverte sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "keyboard layouts (TIS) of the session: no logged-in session on a CI runner")]
     fn trois_dispositions() {
         let _tis = TIS.lock().unwrap();
         // (disposition, keycodes attendus de cmd+a, cmd+z, cmd+y) ; cmd+shift+4 vise toujours la touche 21.

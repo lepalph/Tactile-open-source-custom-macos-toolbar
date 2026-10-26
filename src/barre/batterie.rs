@@ -75,7 +75,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "pas de batterie sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "no battery on a CI runner")]
     fn la_vraie_sortie_se_lit() {
         assert!(analyser(&lire()).is_some());
     }

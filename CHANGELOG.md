@@ -23,6 +23,14 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Images (button `image`, script JSON image, logos added or imported) are refused above 4096 × 4096 pixels, read from the file header before any decoding; SVG and PDF are rendered at most 4096 px wide. A tiny PNG announcing 30000 × 30000 px no longer makes the bar allocate gigabytes.
 - Editor: a file dropped in the window is limited to 10 MB, with a clear message (it was unbounded on the Rust side).
 
+### Fixed
+
+- `{text}` works like `{texte}` for a source whose output isn't JSON (it showed "—"), and `--check` reports a template variable that can't exist (`{Text}`, `{a..b}`, `{}`).
+- Errors and warnings name the key the way you wrote it (`every`, `template`, `color_by`, `command`, `[[item]]`); a missing field gives both names (`«outil» (ou «tool»)`); a string `template` on a button says to put the template in `text`.
+- `--check` sees the same app written twice (`Finder` and `com.apple.finder`, resolved through LaunchServices), and a well-formed bundle id of an app that isn't installed no longer gets the "write the .app name" advice.
+- Shortcuts accept `+` as the key (`cmd++`); `cmd+-` works too.
+- CONTRIBUTING: every `cargo` command works without activating mise (`mise exec -- cargo …`), the editor step runs in the background, the real test time (about 10 s) and what the `ignored` tests are; `ignore` reasons are in English. The README lists every accepted modifier (`command`, `control`, `maj` were missing).
+
 ## [0.2.0] - 2026-10-26
 
 ### Added

@@ -226,7 +226,7 @@ An action is either a word (`action = "next"`) or a table (`action = { volume = 
 | `"lecture_pause"` / `"play_pause"`, `"suivant"` / `"next"`, `"precedent"` / `"previous"` | Controls whatever is playing, in any app (needs `media-control`). |
 | `"veille"` / `"sleep"` | Puts the Mac to sleep (`pmset sleepnow`). |
 | `"echap"` / `"esc"` | Sends the esc key (needs the Accessibility permission). |
-| `{ touche = "cmd+shift+4" }` / `{ key = "cmd+shift+4" }` | Sends a keyboard shortcut (Accessibility). Modifiers: `cmd`, `shift`, `ctrl`, `alt` (or `option`), `fn`. Key: a letter, digit or symbol from your keyboard (resolved on your current layout, AZERTY included), `f1` to `f20`, `esc`, `tab`, `space`, `enter`, `delete`, `left`, `right`, `up`, `down`, `home`, `end`, `pageup`, `pagedown` (French names work too: `espace`, `entree`, `suppr`, `gauche`…). |
+| `{ touche = "cmd+shift+4" }` / `{ key = "cmd+shift+4" }` | Sends a keyboard shortcut (Accessibility). Modifiers: `cmd` (or `command`), `shift` (or `maj`), `ctrl` (or `control`), `alt` (or `option`), `fn`. Key: a letter, digit or symbol from your keyboard (resolved on your current layout, AZERTY included; `+` and `-` too, as in `cmd++`), `f1` to `f20`, `esc`, `tab`, `space`, `enter`, `delete`, `left`, `right`, `up`, `down`, `home`, `end`, `pageup`, `pagedown` (French names work too: `espace`, `entree`, `suppr`, `gauche`…). |
 | `{ keycode = 53 }` | Sends a key by its macOS key code, for keys that have no name. |
 | `{ app = "Figma" }` | Opens an app by name or bundle identifier (`com.figma.Desktop`), like `open -a`. See [finding an app's name](#finding-an-apps-name). |
 | `{ url = "https://…" }` | Opens the address in the default browser (or a file, or a folder). |

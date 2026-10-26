@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphical session on a CI runner")]
     fn image_redimensionnee_ou_absente() {
         let i = image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", true).unwrap();
         let taille: NSSize = unsafe { msg_send![i, size] };
@@ -389,7 +389,7 @@ mod tests {
 
     /// Un SVG très large (1000:1) : le rendu à 40 px de haut ferait 40000 px de large, refusé.
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphical session on a CI runner")]
     fn rendu_vectoriel_borne() {
         let d = std::env::temp_dir().join(format!("tactile-vectoriel-{}", std::process::id()));
         std::fs::create_dir_all(&d).unwrap();
@@ -400,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphical session on a CI runner")]
     fn icone_d_app_reduite_avec_ou_sans_point() {
         let chemin = "/System/Applications/TextEdit.app";
         let (fermee, ouverte) = (icone_app(chemin, false).unwrap(), icone_app(chemin, true).unwrap());

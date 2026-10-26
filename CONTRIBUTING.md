@@ -16,37 +16,39 @@ Identifiers and comments in the code are in French. This is a project choice ([D
    mise install
    ```
 
-2. Run the tests. `CI=1` skips the tests that really change your brightness and volume. The first build takes a minute or so, and the tests themselves run in about a second.
+   `mise install` doesn't put `cargo` on your `PATH`. Either activate mise in your shell ([`mise activate`](https://mise.jdx.dev/getting-started.html)) and drop the prefix, or keep `mise exec --` in front of every `cargo` command, as below.
+
+2. Run the tests. `CI=1` skips the tests that need real hardware or a logged-in session (brightness, volume, keyboard layouts, AppKit rendering): they show as `ignored`, with the reason, and that's expected. The first build takes a minute or so, and the tests themselves take about 10 s (the MCP and HTTP source tests wait on timeouts).
 
    ```
-   CI=1 cargo test
+   CI=1 mise exec -- cargo test
    ```
 
-3. Build and open the editor on a scratch file. It doesn't take over the Touch Bar, and your real bar stays as it is.
+3. Build and open the editor on a scratch file (it's created when you save). It doesn't take over the Touch Bar, and your real bar stays as it is. The `&` keeps your terminal free; close the window when you're done.
 
    ```
-   cargo build --release
-   TACTILE_CONFIG=/tmp/x.toml target/release/tactile --personnaliser
+   mise exec -- cargo build --release
+   TACTILE_CONFIG=/tmp/x.toml target/release/tactile --customize &
    target/release/tactile --check exemples/simple.toml
    ```
 
 4. Pick a [good first issue](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) and leave a comment so nobody else takes it. Each one lists the files to read, how to test the change, and when it counts as done.
 
-5. Make the change on a branch. Run `CI=1 cargo test` and `cargo clippy --all-targets -- -D warnings`, then open a pull request; the template asks for the rest. A question is welcome in the issue itself, in English or French.
+5. Make the change on a branch. Run `CI=1 mise exec -- cargo test` and `mise exec -- cargo clippy --all-targets -- -D warnings`, then open a pull request; the template asks for the rest. A question is welcome in the issue itself, in English or French.
 
 ## Build
 
 You need stable Rust. The repo has a `mise.toml`, so `mise install` sets it up.
 
 ```
-cargo build --release      # target/release/tactile
-scripts/empaqueter.sh      # universal target/Tactile.app (Apple Silicon + Intel) and target/Tactile.zip
+mise exec -- cargo build --release   # target/release/tactile
+scripts/empaqueter.sh                # universal target/Tactile.app (Apple Silicon + Intel) and target/Tactile.zip
 ```
 
 `target/release/tactile --help` lists the command-line options. To try the editor without touching your real bar:
 
 ```
-TACTILE_CONFIG=/tmp/try.toml target/release/tactile --personnaliser
+TACTILE_CONFIG=/tmp/try.toml target/release/tactile --customize &
 ```
 
 ## Test
@@ -54,10 +56,10 @@ TACTILE_CONFIG=/tmp/try.toml target/release/tactile --personnaliser
 Write the test that describes the behavior first, watch it fail, then write the code. An action is proven by changing a value, reading it back, then restoring the original state (see `src/actions/volume.rs`).
 
 ```
-CI=1 cargo test
+CI=1 mise exec -- cargo test
 ```
 
-Without `CI=1`, the brightness and volume tests really change your screen brightness and output volume, then put them back. With `CI` set, `build.rs` turns on `cfg(ci)` and those hardware tests show as `ignored` (`#[cfg_attr(ci, ignore = "…")]`). CI runs `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps` and `cargo test` on macOS; all four must pass, with no warnings.
+Without `CI=1`, the brightness and volume tests really change your screen brightness and output volume, then put them back. With `CI` set, `build.rs` turns on `cfg(ci)` and those hardware tests show as `ignored` (`#[cfg_attr(ci, ignore = "…")]`, with the reason in English). The same goes for tests that need a logged-in session: keyboard layouts, AppKit rendering, installed apps. CI runs `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps` and `cargo test` on macOS; all four must pass, with no warnings.
 
 ## Full check on a real Touch Bar
 

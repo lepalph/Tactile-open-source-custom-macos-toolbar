@@ -55,7 +55,7 @@ mod tests {
     use super::*;
 
     #[test]
-    #[cfg_attr(ci, ignore = "pas d'écran sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "no display on a CI runner")]
     fn regler_puis_relire_et_restaurer() {
         let origine = lire().unwrap();
         let cible = if origine > 0.5 { origine - 0.2 } else { origine + 0.2 };

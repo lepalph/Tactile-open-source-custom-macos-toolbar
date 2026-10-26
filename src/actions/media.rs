@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "pilote la vraie lecture"]
+    #[ignore = "drives real playback"]
     fn basculer_deux_fois() {
         let avant = en_cours().unwrap().expect("rien en cours de lecture").en_lecture;
         lecture_pause().unwrap();
@@ -121,7 +121,7 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "change de piste"]
+    #[ignore = "skips the current track"]
     fn suivant_change_de_titre() {
         let avant = en_cours().unwrap().expect("rien en cours de lecture").titre;
         suivant().unwrap();
