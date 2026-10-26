@@ -81,9 +81,10 @@ pub enum Action {
 
 const PAS: f32 = 1.0 / 16.0;
 
-/// Écrit `0.3` et non `0.30000001192092896` : un f32 passe par f64 dans le TOML.
+/// Écrit `0.3` et non `0.30000001192092896` : un f32 passe par f64 dans le TOML. Le plus court décimal qui redonne
+/// le même f32 (son `Display`), sans arrondi : 0,6100102 ne devient pas 0,61 à l'enregistrement.
 fn court<S: Serializer>(v: &f32, s: S) -> Result<S::Ok, S::Error> {
-    s.serialize_f64((f64::from(*v) * 1000.0).round() / 1000.0)
+    s.serialize_f64(v.to_string().parse().unwrap_or(f64::from(*v)))
 }
 
 pub fn executer(action: &Action) -> Resultat<()> {
@@ -229,6 +230,24 @@ mod tests {
         assert!(erreur.starts_with("osascript « -e » « tell blabla » : ") && erreur.contains("rror"), "{erreur}");
         assert_eq!(attendre("/usr/bin/osascript", &["-e", "return 1 + 1"]), Ok(()));
         assert!(attendre("/nexiste/pas", &[]).unwrap_err().starts_with("/nexiste/pas : "));
+    }
+
+    /// Un curseur réglé à 0,6100102 (une valeur d'f32 quelconque) revient à l'identique, et 0,3 s'écrit toujours `0.3`.
+    #[test]
+    fn valeur_de_curseur_ecrite_sans_perte() {
+        #[derive(Serialize, Deserialize)]
+        struct Fichier {
+            action: Action,
+        }
+        for v in [0.6100102f32, 0.0625, 0.3, 1.0, 0.0, 1e-7, f32::MIN_POSITIVE] {
+            for action in [Action::Volume(v), Action::Luminosite(v)] {
+                let toml = toml::to_string(&Fichier { action: action.clone() }).unwrap();
+                assert_eq!(toml::from_str::<Fichier>(&toml).unwrap().action, action, "{toml}");
+                let json = serde_json::to_string(&action).unwrap();
+                assert_eq!(serde_json::from_str::<Action>(&json).unwrap(), action, "{json}");
+            }
+        }
+        assert_eq!(serde_json::to_string(&Action::Volume(0.3)).unwrap(), r#"{"volume":0.3}"#);
     }
 
     #[test]
