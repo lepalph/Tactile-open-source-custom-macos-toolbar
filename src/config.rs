@@ -580,6 +580,15 @@ impl Controle<'_> {
             if let Some(s) = source.filter(|s| !self.sources.iter().any(|n| n == s)) {
                 self.signaler(false, chemin, &ici, format!("aucune [[source]] ne s'appelle « {s} » : l'élément affichera ⚠ source"));
             }
+            let gabarit = match element {
+                Element::Bouton { texte, source: Some(_), .. } => texte.as_deref(),
+                Element::Texte { gabarit, .. } => gabarit.as_deref(),
+                _ => None,
+            };
+            for v in gabarit.into_iter().flat_map(crate::sources::variables).filter(|v| crate::sources::variable_impossible(v)) {
+                let possibles = "variables possibles : {texte} ou {text} (sortie qui n'est pas du JSON), sinon le chemin d'un champ du JSON, comme {current.temperature_2m}";
+                self.signaler(false, chemin, &ici, format!("{{{v}}} n'existe pas ; {possibles}"));
+            }
             if let Element::Texte { source, gabarit, symbole_selon, couleur_selon, .. } = element {
                 if source.is_none() && gabarit.is_some() {
                     self.signaler(false, chemin, &ici, "un gabarit sans source n'affiche rien : ajoute source = \"…\"".into());
@@ -1364,6 +1373,15 @@ command = "uptime"
         );
         // La clé elle-même n'apparaît dans aucun avis.
         assert!(avis.iter().all(|a| !a.contains("sk_live")));
+    }
+
+    /// Une variable qu'aucune valeur ne peut avoir, dans le gabarit d'un `texte` ou le texte d'un bouton lié (Sam, B2).
+    #[test]
+    fn variables_de_gabarit_controlees() {
+        let texte = "[[element]]\ntype = \"texte\"\nsource = \"s\"\ngabarit = \"{text} {Text}\"\n\n[[element]]\ntype = \"bouton\"\nsource = \"s\"\ntexte = \"{a..b}\"\n\n[[element]]\ntype = \"bouton\"\ntexte = \"{Text} sans source\"\n\n[[source]]\nnom = \"s\"\ncommande = \"echo\"\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
+        let possibles = "variables possibles : {texte} ou {text} (sortie qui n'est pas du JSON), sinon le chemin d'un champ du JSON, comme {current.temperature_2m}";
+        assert_eq!(avis, [format!("ligne 1 : {{Text}} n'existe pas ; {possibles}"), format!("ligne 6 : {{a..b}} n'existe pas ; {possibles}")]);
     }
 
     #[test]
