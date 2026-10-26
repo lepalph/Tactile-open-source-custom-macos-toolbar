@@ -136,6 +136,7 @@ A button, the clock or now playing without a `largeur` / `width` is capped at 20
 | `heure` / `clock` | `format` (an Apple date format, `"HH:mm"` by default) | The time, kept up to date. |
 | `en_cours` / `now_playing` | `largeur` / `width` | Title and artist of what's playing (44 characters at most, refreshed every 2 s); a tap pauses or resumes. Needs `media-control`. |
 | `script` | `commande` / `command` (required); `intervalle` / `interval` (seconds, required; values below 0.1 are raised to 0.1); `delai` / `timeout` (seconds, 5 by default); `largeur` / `width` (120 by default); `action` | The output of the command, run with `zsh -c` at every interval and killed after `delai`. Text wider than the item is cut. A non-zero exit code or anything on stderr writes a line to the log. If the output starts with `{`, it is read as JSON: `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/rain.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, every key optional (English keys work too: `text`, `symbol`, `color`, `text_color`). That's how a script sets its own icon and colors. |
+| `texte` / `text` | `source` (the `nom` / `name` of a `[[source]]`); `gabarit` / `template` (`"{current.temperature_2m} °C"`, `{texte}` by default); `symbole_selon` / `symbol_by`; `couleur_selon` / `color_by`; `largeur` / `width` (120 by default); `action` | A value from a [data source](#data-sources), refreshed with it. |
 | `batterie` / `battery` | `symbole` / `symbol` (`true` by default: a battery icon next to the percentage, with a bolt while charging; `false`: text only, `⚡ 85 %` while charging); `largeur` / `width` (96 by default) | The battery level, read every 30 s (`pmset -g batt`). |
 | `espace` / `space` | `largeur` / `width` (required) | Empty space of a fixed width. |
 | `souple` / `flexible` | none | Empty space that takes all the room left: two `souple` center what's between them. |
@@ -222,6 +223,21 @@ French is the reference form, but you can write the whole file in English, which
 | `url` | `url` |
 | `applescript` | `applescript` |
 | `herite` | `inherit` |
+| `source` | `source` |
+| `nom` | `name` |
+| `http` | `http` |
+| `toutes_les` | `every` |
+| `entetes` | `headers` |
+| `mcp` | `mcp` |
+| `outil` | `tool` |
+| `arguments` | `arguments` |
+| `symbole_selon` | `symbol_by` |
+| `couleur_selon` | `color_by` |
+| `champ` | `field` |
+| `valeurs` | `values` |
+| `defaut` | `default` |
+| `seuils` | `thresholds` |
+| `couleurs` | `colors` |
 
 In a `script`'s JSON output too: `text`, `symbol`, `color`, `text_color`.
 
@@ -284,6 +300,38 @@ format = "HH:mm"
 ```
 
 The other examples in [exemples/](exemples/) are in French: [simple.toml](exemples/simple.toml) and [developpeur.toml](exemples/developpeur.toml) are the editor's Simple and Developer bars.
+
+## Data sources
+
+A `[[source]]` fetches a value (the weather, a server's status, the result of an MCP tool); a `texte` / `text` element, or a button with a `source`, shows it. Tactile reads nothing before the bar is on screen, never on the UI thread, and never more often than `toutes_les` / `every`.
+
+```toml
+[[source]]
+name = "weather"
+http = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m,weather_code"
+every = 600                 # seconds, 60 by default, 5 at least
+
+[[item]]
+type = "text"
+source = "weather"
+template = "{current.temperature_2m} °C"
+symbol_by = { field = "current.weather_code", values = { "0" = "sun.max.fill", "3" = "cloud.fill", "61" = "cloud.rain.fill" }, default = "cloud.sun.fill" }
+color_by = { field = "current.temperature_2m", thresholds = [10, 25], colors = ["#0A84FF", "#30D158", "#FF9F0A"] }
+```
+
+- A source has a `nom` / `name` and **exactly one** of:
+  - `http = "https://…"`: fetched with `/usr/bin/curl`, 10 s and 1 MB at most, redirects not followed. Only `https://` and `http://localhost` (or `127.0.0.1`) are allowed. `entetes` / `headers = { Authorization = "Bearer trousseau:openweather" }` adds headers.
+  - `commande` / `command = "…"`: run with `zsh -c`, like a `script` (10 s at most).
+  - `mcp = { commande = "npx -y @modelcontextprotocol/server-xyz", outil = "get_weather", arguments = { city = "Paris" } }` (`command`, `tool` in English): an MCP server over stdio, started once and kept alive; Tactile calls the tool (`tools/call`) every `toutes_les` seconds. `mcp = { url = "https://…/mcp", outil = "…" }` targets a remote server (Streamable HTTP). Both protocol eras work: 2026-07-28 (`server/discover`) and older servers (`initialize`). A server that dies is restarted after 5 s, then 10, 20… up to 5 min.
+- The value is JSON (HTTP body, command output, the tool's `structuredContent` or `content[0].text`). Anything that isn't JSON is read with `{texte}`.
+- `gabarit` / `template` replaces each `{path}` with the value at that path: `a.b.c`, and a number for a list item (`hourly.time.0`). A missing field shows `—` and writes one line to the log (once, not at every read). A failing source shows `⚠ source`; the error is in the log.
+- `symbole_selon` / `symbol_by` picks an SF Symbol from the value of a `champ` / `field` (`valeurs` / `values`, else `defaut` / `default`). `couleur_selon` / `color_by` picks the background color: the first color below the first threshold, the next one up to the following threshold, and so on (one more color than thresholds).
+- A button can have a `source` too: its `texte` / `text` becomes the template (`gabarit` / `template` already means the monochrome image there).
+- **Secrets**: don't write a key in the file. Put it in the keychain (`security add-generic-password -s openweather -a "$USER" -w`), then write `trousseau:openweather`: Tactile replaces it with the password at each read (macOS may ask for permission the first time). The key is never written to the log or to a message, and reaches `curl` through its standard input, not its command line. `tactile --check` warns about a header that looks like a plain-text key.
+- `tactile --check` also reports an unknown source, a duplicate name, a refused address, an interval under 5 s and a `gabarit` without a source.
+- The processes (`curl`, command, MCP server) are killed when the bar reloads and when Tactile quits. Started from the Finder, the PATH lacks `/opt/homebrew/bin`: write the full path (`/opt/homebrew/bin/npx`).
+
+Examples: [exemples/meteo.toml](exemples/meteo.toml) (Open-Meteo, Paris, symbol from the WMO weather code) and [exemples/mcp.toml](exemples/mcp.toml) (the tiny demo MCP server [exemples/mcp/horloge-mcp.py](exemples/mcp/horloge-mcp.py)).
 
 ## A bar per app
 

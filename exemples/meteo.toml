@@ -1,0 +1,33 @@
+# La météo de Paris dans la barre, par Open-Meteo (gratuit, sans clé), relue toutes les 10 minutes.
+# Pour une autre ville, change latitude et longitude dans l'adresse.
+
+[[element]]
+type = "bouton"
+symbole = "apple.logo"
+largeur = 56
+action = "barre_apple"
+
+[[element]]
+type = "souple"
+
+# La température, avec le symbole du temps qu'il fait (codes WMO, documentés sur open-meteo.com/en/docs)
+# et une couleur selon la température : bleu sous 10 °C, vert jusqu'à 25 °C, orange au-delà.
+[[element]]
+type = "texte"
+source = "meteo"
+gabarit = "{current.temperature_2m} °C"
+largeur = 110
+symbole_selon = { champ = "current.weather_code", defaut = "cloud.sun.fill", valeurs = { "0" = "sun.max.fill", "1" = "sun.max.fill", "2" = "cloud.sun.fill", "3" = "cloud.fill", "45" = "cloud.fog.fill", "48" = "cloud.fog.fill", "51" = "cloud.drizzle.fill", "53" = "cloud.drizzle.fill", "55" = "cloud.drizzle.fill", "56" = "cloud.sleet.fill", "57" = "cloud.sleet.fill", "61" = "cloud.rain.fill", "63" = "cloud.rain.fill", "65" = "cloud.heavyrain.fill", "66" = "cloud.sleet.fill", "67" = "cloud.sleet.fill", "71" = "cloud.snow.fill", "73" = "cloud.snow.fill", "75" = "cloud.snow.fill", "77" = "cloud.snow.fill", "80" = "cloud.rain.fill", "81" = "cloud.rain.fill", "82" = "cloud.heavyrain.fill", "85" = "cloud.snow.fill", "86" = "cloud.snow.fill", "95" = "cloud.bolt.rain.fill", "96" = "cloud.hail.fill", "97" = "cloud.bolt.rain.fill", "99" = "cloud.hail.fill" } }
+couleur_selon = { champ = "current.temperature_2m", seuils = [10, 25], couleurs = ["#0A84FF", "#30D158", "#FF9F0A"] }
+
+[[element]]
+type = "heure"
+format = "HH:mm"
+
+[[source]]
+nom = "meteo"
+http = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m,weather_code"
+toutes_les = 600
+# Une API qui demande une clé : range-la dans le trousseau
+#   security add-generic-password -s openweather -a "$USER" -w
+# puis écris : entetes = { Authorization = "Bearer trousseau:openweather" }

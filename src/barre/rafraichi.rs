@@ -12,12 +12,78 @@ use super::elements::Icone;
 use super::vues::{couleur, styler, titre};
 use super::{batterie, Id, ETAT, PREFIXE};
 use crate::actions::media;
+use crate::config::{CouleurSelon, SymboleSelon};
 
 pub(super) enum Rafraichi {
     Heure { bouton: Id, formateur: Id },
     EnCours { bouton: Id },
     Script { bouton: Id, commande: String, intervalle: Duration, delai: Duration, prochain: Instant, en_cours: bool, derniere_erreur: String, derniere_sortie: String, element: String },
     Batterie { bouton: Id, symbole: bool, prochain: Instant, en_cours: bool },
+    /// Élément `texte`, ou bouton avec `source` (`lien.style` : sa couleur de texte et sa taille, à remettre après le titre).
+    Source { bouton: Id, lien: Lien, derniere_erreur: String },
+}
+
+/// Ce qu'un élément affiche d'une `[[source]]`.
+pub(super) struct Lien {
+    /// Index dans `Barre::sources` ; `None` : aucune source de ce nom.
+    pub source: Option<usize>,
+    pub gabarit: String,
+    pub symbole_selon: Option<SymboleSelon>,
+    pub couleur_selon: Option<CouleurSelon>,
+    pub style: Option<(Option<String>, Option<f64>)>,
+    pub element: String,
+}
+
+/// Inscrit un élément lié à `source` (par son nom) ; il affiche « … » jusqu'à la première valeur.
+pub(super) fn lier(etat: &mut super::Etat, bouton: Id, source: &str, mut lien: Lien) {
+    lien.source = etat.config.sources.iter().position(|s| s.nom == source);
+    titre(bouton, if lien.source.is_some() { "…" } else { SOURCE_EN_ERREUR });
+    restyler(bouton, &lien);
+    etat.rafraichis.push(Rafraichi::Source { bouton, lien, derniere_erreur: String::new() });
+}
+
+/// Ce qu'affiche un élément dont la source manque ou a échoué (l'erreur est au journal).
+const SOURCE_EN_ERREUR: &str = "⚠ source";
+
+fn restyler(bouton: Id, lien: &Lien) {
+    if let Some((couleur_texte, taille)) = &lien.style {
+        styler(bouton, couleur_texte.as_deref(), *taille);
+    }
+}
+
+/// Une valeur (ou une erreur) de la source arrive : gabarit, symbole et couleur ; un champ absent est journalisé une fois.
+fn afficher_source(bouton: Id, lien: &Lien, valeur: &Result<serde_json::Value, String>, derniere_erreur: &mut String) {
+    let erreur = match valeur {
+        Ok(v) => {
+            let rendu = crate::sources::rendre(&lien.gabarit, lien.symbole_selon.as_ref(), lien.couleur_selon.as_ref(), v);
+            if lien.style.is_some() {
+                titre(bouton, &rendu.texte);
+                restyler(bouton, lien);
+            } else {
+                appliquer(bouton, &Riche { texte: rendu.texte, symbole: rendu.symbole, couleur: rendu.couleur, ..Riche::default() }, &lien.element);
+            }
+            match rendu.manquants.as_slice() {
+                [] => String::new(),
+                m => format!("champ absent de la source : {}", m.join(", ")),
+            }
+        }
+        Err(_) if lien.style.is_some() => {
+            titre(bouton, SOURCE_EN_ERREUR);
+            restyler(bouton, lien);
+            String::new()
+        }
+        Err(_) => {
+            appliquer(bouton, &Riche { texte: SOURCE_EN_ERREUR.into(), ..Riche::default() }, &lien.element);
+            String::new()
+        }
+    };
+    if erreur != *derniere_erreur {
+        if !erreur.is_empty() {
+            let element = lien.element.strip_prefix(PREFIXE).map_or(lien.element.as_str(), |e| e.trim_start_matches('.'));
+            eprintln!("tactile : élément {element} : {erreur}");
+        }
+        *derniere_erreur = erreur;
+    }
 }
 
 /// Sortie d'un script qui commence par `{` : il règle aussi son icône et ses couleurs. Tout est facultatif.
@@ -69,46 +135,74 @@ fn appliquer(bouton: Id, riche: &Riche, element: &str) {
 }
 
 /// Ce qu'un fil renvoie : la sortie à afficher, et ce qui a cloché (vide si rien).
-pub(super) struct Sortie {
+pub(crate) struct Sortie {
     pub texte: String,
     pub erreur: String,
 }
 
 /// Groupes de processus des scripts en cours. `None` : la barre a été remplacée, tout nouveau
 /// processus est tué aussitôt ; sinon un orphelin par rechargement (vu avec `sleep 1000`).
-pub(super) type Processus = Arc<Mutex<Option<Vec<i32>>>>;
+/// Les sources (`curl`, commandes, serveurs MCP) s'y inscrivent aussi.
+pub(crate) type Processus = Arc<Mutex<Option<Vec<i32>>>>;
 
 unsafe extern "C" {
     fn kill(pid: i32, signal: i32) -> i32;
 }
 
 /// Tue un groupe de processus entier : `zsh -c` et ses enfants.
-fn tuer_groupe(pid: i32) {
+pub(crate) fn tuer_groupe(pid: i32) {
     unsafe { kill(-pid, 9) };
 }
 
-pub(super) fn tuer_tous(processus: &Processus) {
+pub(crate) fn tuer_tous(processus: &Processus) {
     if let Some(pids) = processus.lock().unwrap().take() {
         pids.iter().for_each(|&pid| tuer_groupe(pid));
     }
 }
 
+/// Inscrit un groupe à tuer avec la barre ; `false` (et le groupe est tué) si la barre est déjà remplacée.
+pub(crate) fn inscrire(processus: &Processus, pid: i32) -> bool {
+    match processus.lock().unwrap().as_mut() {
+        Some(pids) => {
+            pids.push(pid);
+            true
+        }
+        None => {
+            tuer_groupe(pid);
+            false
+        }
+    }
+}
+
+pub(crate) fn retirer(processus: &Processus, pid: i32) {
+    if let Some(pids) = processus.lock().unwrap().as_mut() {
+        pids.retain(|&p| p != pid);
+    }
+}
+
 /// Lance la commande dans son propre groupe de processus et la tue au-delà de `delai`.
 pub(super) fn executer_script(commande: &str, delai: Duration, processus: &Processus) -> Sortie {
-    let enfant = std::process::Command::new("/bin/zsh")
-        .args(["-c", commande])
+    executer(std::process::Command::new("/bin/zsh").args(["-c", commande]), None, delai, processus)
+}
+
+/// Lance `commande` dans son propre groupe (inscrit dans `processus`), lui écrit `entree`, la tue au-delà de `delai`.
+pub(crate) fn executer(commande: &mut std::process::Command, entree: Option<&str>, delai: Duration, processus: &Processus) -> Sortie {
+    let enfant = commande
         .process_group(0)
+        .stdin(if entree.is_some() { std::process::Stdio::piped() } else { std::process::Stdio::null() })
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn();
-    let enfant = match enfant {
+    let mut enfant = match enfant {
         Ok(e) => e,
-        Err(e) => return Sortie { texte: String::new(), erreur: format!("zsh : {e}") },
+        Err(e) => return Sortie { texte: String::new(), erreur: format!("{} : {e}", commande.get_program().to_string_lossy()) },
     };
     let pid = enfant.id() as i32;
-    match processus.lock().unwrap().as_mut() {
-        Some(pids) => pids.push(pid),
-        None => tuer_groupe(pid),
+    inscrire(processus, pid);
+    // Petite entrée (en-têtes et corps d'une requête) : elle tient dans le tampon du tube, l'écrire d'un coup ne bloque pas.
+    if let (Some(texte), Some(mut tube)) = (entree, enfant.stdin.take()) {
+        use std::io::Write;
+        let _ = tube.write_all(texte.as_bytes());
     }
     let (fini, attente) = std::sync::mpsc::channel::<()>();
     let garde = std::thread::spawn(move || {
@@ -121,9 +215,7 @@ pub(super) fn executer_script(commande: &str, delai: Duration, processus: &Proce
     let sortie = enfant.wait_with_output();
     let _ = fini.send(());
     let tue = garde.join().unwrap_or(false);
-    if let Some(pids) = processus.lock().unwrap().as_mut() {
-        pids.retain(|&p| p != pid);
-    }
+    retirer(processus, pid);
     let Ok(sortie) = sortie else { return Sortie { texte: String::new(), erreur: "sortie illisible".into() } };
     let stderr = String::from_utf8_lossy(&sortie.stderr).trim().to_string();
     let erreur = if tue {
@@ -140,6 +232,15 @@ pub(super) fn executer_script(commande: &str, delai: Duration, processus: &Proce
 pub(super) fn rafraichir() {
     ETAT.with_borrow_mut(|etat| {
         let Some(etat) = etat.as_mut() else { return };
+        while let Ok((k, valeur)) = etat.valeurs.try_recv() {
+            for r in &mut etat.rafraichis {
+                if let Rafraichi::Source { bouton, lien, derniere_erreur } = r
+                    && lien.source == Some(k)
+                {
+                    afficher_source(*bouton, lien, &valeur, derniere_erreur);
+                }
+            }
+        }
         while let Ok((i, sortie)) = etat.reception.try_recv() {
             match etat.rafraichis.get_mut(i) {
                 Some(Rafraichi::Script { bouton, commande, en_cours, derniere_erreur, derniere_sortie, element, .. }) => {

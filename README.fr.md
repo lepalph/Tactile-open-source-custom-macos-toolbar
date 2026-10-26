@@ -136,6 +136,7 @@ Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 point
 | `heure` | `format` (format de date Apple, `"HH:mm"` par défaut) | L'heure, mise à jour en continu. |
 | `en_cours` | `largeur` | Le titre et l'artiste en cours de lecture (44 caractères au plus, rafraîchi toutes les 2 s) ; un appui met en pause ou relance. Demande `media-control`. |
 | `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire ; en dessous de 0,1, ramené à 0,1), `delai` (secondes, 5 par défaut), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle et tuée au-delà de `delai`. Un texte plus large que l'élément est coupé. Code de retour non nul ou texte sur stderr : une ligne dans le journal. Si la sortie commence par `{`, elle est lue comme du JSON : `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/pluie.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, chaque clé facultative ; le script règle ainsi son icône et ses couleurs. |
+| `texte` | `source` (le `nom` d'une `[[source]]`), `gabarit` (`"{current.temperature_2m} °C"`, `{texte}` par défaut), `symbole_selon`, `couleur_selon`, `largeur` (120 par défaut), `action` | Une valeur d'une [source de données](#sources-de-données), rafraîchie avec elle. |
 | `batterie` | `symbole` (`true` par défaut : une pile à côté du pourcentage, avec un éclair en charge ; `false` : texte seul, `⚡ 85 %` en charge), `largeur` (96 par défaut) | Le niveau de la batterie, relu toutes les 30 s (`pmset -g batt`). |
 | `espace` | `largeur` (obligatoire) | Un vide de largeur fixe. |
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
@@ -222,12 +223,59 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | `url` | `url` |
 | `applescript` | `applescript` |
 | `herite` | `inherit` |
+| `source` | `source` |
+| `nom` | `name` |
+| `http` | `http` |
+| `toutes_les` | `every` |
+| `entetes` | `headers` |
+| `mcp` | `mcp` |
+| `outil` | `tool` |
+| `arguments` | `arguments` |
+| `symbole_selon` | `symbol_by` |
+| `couleur_selon` | `color_by` |
+| `champ` | `field` |
+| `valeurs` | `values` |
+| `defaut` | `default` |
+| `seuils` | `thresholds` |
+| `couleurs` | `colors` |
 
 Dans la sortie JSON d'un `script` aussi : `text`, `symbol`, `color`, `text_color`.
 
 ### Un exemple complet en anglais
 
 [exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut écrite avec les clés anglaises ; [exemples/barre.toml](exemples/barre.toml), la même en français. Les autres exemples de [exemples/](exemples/) : [simple.toml](exemples/simple.toml) et [developpeur.toml](exemples/developpeur.toml), les barres Simple et Développeur de l'éditeur. Pour partir de l'un d'eux, copie-le vers `~/.config/tactile/barre.toml`.
+
+## Sources de données
+
+Une `[[source]]` va chercher une valeur (la météo, l'état d'un serveur, le résultat d'un outil MCP) ; un élément `texte`, ou un bouton qui a une `source`, l'affiche. Tactile ne lit rien avant que la barre soit affichée, jamais sur le fil de l'interface, et pas plus souvent que `toutes_les`.
+
+```toml
+[[source]]
+nom = "meteo"
+http = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m,weather_code"
+toutes_les = 600            # secondes, 60 par défaut, 5 au minimum
+
+[[element]]
+type = "texte"
+source = "meteo"
+gabarit = "{current.temperature_2m} °C"
+symbole_selon = { champ = "current.weather_code", valeurs = { "0" = "sun.max.fill", "3" = "cloud.fill", "61" = "cloud.rain.fill" }, defaut = "cloud.sun.fill" }
+couleur_selon = { champ = "current.temperature_2m", seuils = [10, 25], couleurs = ["#0A84FF", "#30D158", "#FF9F0A"] }
+```
+
+- Une source a un `nom` et **un seul** de :
+  - `http = "https://…"` : lue par `/usr/bin/curl`, 10 s et 1 Mo au plus, sans suivre de redirection. Seules `https://` et `http://localhost` (ou `127.0.0.1`) sont permises. `entetes = { Authorization = "Bearer trousseau:openweather" }` ajoute des en-têtes.
+  - `commande = "…"` : lancée avec `zsh -c`, comme un `script` (10 s au plus).
+  - `mcp = { commande = "npx -y @modelcontextprotocol/server-xyz", outil = "get_weather", arguments = { city = "Paris" } }` : un serveur MCP en stdio, lancé une fois et gardé vivant ; Tactile appelle l'outil (`tools/call`) toutes les `toutes_les` secondes. `mcp = { url = "https://…/mcp", outil = "…" }` vise un serveur distant (Streamable HTTP). Les deux époques du protocole sont comprises : 2026-07-28 (`server/discover`) et les serveurs plus anciens (`initialize`). Un serveur qui meurt est relancé après 5 s, puis 10, 20… jusqu'à 5 min.
+- La valeur est un JSON (corps HTTP, sortie de la commande, `structuredContent` ou `content[0].text` de l'outil). Ce qui n'est pas du JSON se lit par `{texte}`.
+- `gabarit` remplace chaque `{chemin}` par la valeur à ce chemin : `a.b.c`, et un nombre pour un élément de liste (`hourly.time.0`). Un champ absent s'affiche `—`, avec une ligne au journal (une fois, pas à chaque lecture). Une source en erreur affiche `⚠ source` ; l'erreur est au journal.
+- `symbole_selon` choisit un symbole SF selon la valeur d'un `champ` (`valeurs`, sinon `defaut`). `couleur_selon` choisit la couleur de fond : la première couleur sous le premier seuil, la suivante jusqu'au seuil d'après, etc. (une couleur de plus que de seuils).
+- Un bouton peut aussi avoir une `source` : son `texte` devient le gabarit (`gabarit` y désigne déjà l'image monochrome).
+- **Secrets** : n'écris pas de clé dans le fichier. Range-la dans le trousseau (`security add-generic-password -s openweather -a "$USER" -w`), puis écris `trousseau:openweather` : Tactile le remplace à chaque lecture par le mot de passe (macOS peut demander l'autorisation la première fois). La clé n'est jamais écrite dans le journal ni dans un message, et passe à `curl` par son entrée, pas par sa ligne de commande. `tactile --verifier` signale un en-tête qui ressemble à une clé en clair.
+- `tactile --verifier` signale aussi une source inconnue, un nom en double, une adresse refusée, un intervalle sous 5 s et un `gabarit` sans source.
+- Les processus (`curl`, commande, serveur MCP) sont tués quand la barre est rechargée et quand Tactile quitte. Lancé depuis le Finder, le PATH ne contient pas `/opt/homebrew/bin` : écris le chemin complet (`/opt/homebrew/bin/npx`).
+
+Exemples : [exemples/meteo.toml](exemples/meteo.toml) (Open-Meteo, Paris, symbole selon le code météo WMO) et [exemples/mcp.toml](exemples/mcp.toml) (le petit serveur MCP de démonstration [exemples/mcp/horloge-mcp.py](exemples/mcp/horloge-mcp.py)).
 
 ## Une barre par application
 

@@ -3,6 +3,7 @@ mod barre;
 mod config;
 mod editeur;
 mod menu;
+mod sources;
 
 use std::path::PathBuf;
 
