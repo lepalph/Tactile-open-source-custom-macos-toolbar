@@ -1,6 +1,6 @@
 //! L'icône de Tactile dans la barre des menus et son menu.
 
-use crate::{barre, config};
+use crate::{barre, config, editeur};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, NSObject, Sel};
 use objc2::{class, define_class, msg_send, sel, ClassType};
@@ -16,6 +16,11 @@ define_class!(
     struct Menu;
 
     impl Menu {
+        #[unsafe(method(personnaliser:))]
+        fn personnaliser(&self, _envoyeur: Id) {
+            editeur::ouvrir();
+        }
+
         #[unsafe(method(afficher:))]
         fn afficher(&self, _envoyeur: Id) {
             barre::afficher();
@@ -131,6 +136,8 @@ pub fn installer() {
     unsafe {
         let menu: Id = msg_send![class!(NSMenu), new];
         let _: () = msg_send![menu, setDelegate: cible];
+        ajouter(menu, "Personnaliser ma barre…", cible, Some(sel!(personnaliser:)));
+        separateur(menu);
         ajouter(menu, "Afficher ma barre", cible, Some(sel!(afficher:)));
         ajouter(menu, "Barre d'Apple", cible, Some(sel!(masquer:)));
         separateur(menu);

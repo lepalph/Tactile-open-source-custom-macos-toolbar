@@ -1,6 +1,7 @@
 mod actions;
 mod barre;
 mod config;
+mod editeur;
 mod menu;
 
 /// Lancée depuis le Finder, la sortie d'erreur part dans /dev/null : on l'envoie dans ~/Library/Logs/Tactile.log.
@@ -24,6 +25,11 @@ fn journal_si_sortie_perdue() {
 
 fn main() {
     journal_si_sortie_perdue();
+    // `tactile --personnaliser` : la fenêtre « Personnaliser ma barre » seule, sans toucher à la Touch Bar.
+    if std::env::args().any(|a| a == "--personnaliser") {
+        editeur::lancer_seul();
+        return;
+    }
     let config = config::charger().unwrap_or_else(|e| {
         eprintln!("tactile : {e} ; barre par défaut");
         config::lire(include_str!("../exemples/barre.toml")).expect("exemple invalide")
