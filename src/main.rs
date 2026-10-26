@@ -2,6 +2,8 @@ mod actions;
 mod barre;
 mod config;
 mod editeur;
+#[cfg(test)]
+mod essais;
 mod menu;
 mod sources;
 

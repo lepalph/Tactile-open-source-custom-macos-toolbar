@@ -1700,3 +1700,94 @@ symbole = "speaker.wave.2.fill"
         assert!(barre.unwrap().unwrap().masquer_control_strip);
     }
 }
+
+/// Propriétés vérifiées sur des centaines de barres générées et de fichiers abîmés (voir `crate::essais`).
+#[cfg(test)]
+mod proprietes {
+    use super::*;
+    use crate::essais::{sans_panique, Hasard};
+
+    /// TOML ⇄ Barre ⇄ JSON : toute barre que l'éditeur peut produire revient à l'identique, et son texte est stable.
+    #[test]
+    fn aller_retour_de_barres_generees() {
+        for graine in 0..400 {
+            let barre = Hasard::new(graine).barre();
+            let toml = ecrire(&barre).unwrap_or_else(|e| panic!("graine {graine} : {e}"));
+            let relue = lire(&toml).unwrap_or_else(|e| panic!("graine {graine} : {e}\n{toml}"));
+            assert_eq!(relue, barre, "graine {graine}, TOML :\n{toml}");
+            assert_eq!(ecrire(&relue).unwrap(), toml, "graine {graine} : texte instable");
+            let json = serde_json::to_string(&barre).unwrap();
+            assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre, "graine {graine}, JSON : {json}");
+        }
+    }
+
+    /// Un fichier tronqué, une ligne en double, un caractère en trop ou en moins : `lire` répond par une erreur située,
+    /// jamais par une panique (la barre tournerait sans config, l'éditeur fermerait).
+    #[test]
+    fn lire_ne_panique_jamais_sur_un_toml_abime() {
+        let mut textes: Vec<String> = [PAR_DEFAUT, BARRE_COMPLETE, include_str!("../exemples/par-application.toml"), include_str!("../exemples/lanceur.toml")]
+            .map(String::from)
+            .into();
+        textes.extend((1000..1040).map(|g| ecrire(&Hasard::new(g).barre()).unwrap()));
+        let mut h = Hasard::new(7);
+        let mut cas = 0;
+        for texte in &textes {
+            for _ in 0..60 {
+                let abime = abimer(&mut h, texte);
+                cas += 1;
+                let resultat = sans_panique(|| lire(&abime)).unwrap_or_else(|p| panic!("panique « {p} » sur :\n{abime}"));
+                match resultat {
+                    Err(message) => {
+                        if let Some(n) = message.split("ligne ").nth(1).and_then(|s| s.split(' ').next()).and_then(|n| n.parse::<usize>().ok()) {
+                            assert!(n >= 1 && n <= abime.lines().count() + 1, "ligne {n} hors du fichier : {message}\n{abime}");
+                        }
+                    }
+                    Ok(barre) if h.jusqua(8) == 0 => {
+                        sans_panique(|| controler(&barre, Some(&abime))).unwrap_or_else(|p| panic!("controler : panique « {p} » sur :\n{abime}"));
+                    }
+                    Ok(_) => {}
+                }
+            }
+        }
+        assert!(cas > 2000);
+    }
+
+    /// Une mutation au hasard d'un texte TOML, toujours sur des frontières de caractère.
+    fn abimer(h: &mut Hasard, texte: &str) -> String {
+        let car: Vec<char> = texte.chars().collect();
+        let i = h.jusqua(car.len() + 1);
+        let lignes: Vec<&str> = texte.lines().collect();
+        match h.jusqua(6) {
+            0 => car[..i].iter().collect(),
+            1 => car.iter().enumerate().filter(|(k, _)| *k != i).map(|(_, c)| c).collect(),
+            2 => {
+                let mut c = car.clone();
+                c.insert(i, *h.parmi(&['[', ']', '=', '"', '\'', '#', '\n', '{', '}', ',', '.', '+', '-', '\\', 'é', '\0', 'x', '9']));
+                c.into_iter().collect()
+            }
+            3 if !lignes.is_empty() => {
+                let k = h.jusqua(lignes.len());
+                let mut l = lignes.clone();
+                l.insert(k, lignes[k]);
+                l.join("\n")
+            }
+            4 if lignes.len() > 1 => {
+                let mut l = lignes.clone();
+                let (a, b) = (h.jusqua(l.len()), h.jusqua(l.len()));
+                l.swap(a, b);
+                l.join("\n")
+            }
+            _ => {
+                // Une valeur remplacée par une autre d'un autre type ou hors bornes.
+                let v = h.parmi(&["nan", "inf", "-inf", "1e308", "-1", "99999999999999999999", "\"\"", "[]", "{}", "true", "1979-05-27"]);
+                match texte.match_indices(" = ").nth(h.jusqua(texte.matches(" = ").count().max(1))) {
+                    Some((p, _)) => {
+                        let fin = texte[p + 3..].find('\n').map_or(texte.len(), |f| p + 3 + f);
+                        format!("{}{v}{}", &texte[..p + 3], &texte[fin..])
+                    }
+                    None => texte.to_string(),
+                }
+            }
+        }
+    }
+}
