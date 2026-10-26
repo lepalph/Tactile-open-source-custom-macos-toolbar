@@ -209,8 +209,8 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 etat.rafraichis.push(Rafraichi::Script {
                     bouton: b,
                     commande: commande.clone(),
-                    intervalle: Duration::from_secs_f64(intervalle.max(0.1)),
-                    delai: Duration::from_secs_f64(delai.unwrap_or(DELAI_SCRIPT).max(0.1)),
+                    intervalle: duree(*intervalle),
+                    delai: duree(delai.unwrap_or(DELAI_SCRIPT)),
                     prochain: Instant::now(),
                     en_cours: false,
                     derniere_erreur: String::new(),
@@ -288,6 +288,14 @@ pub(super) const LARGEUR_SCRIPT: f64 = 120.0;
 /// Secondes avant qu'un script sans `delai` soit tué.
 pub(super) const DELAI_SCRIPT: f64 = 5.0;
 
+/// `intervalle` ou `delai` d'un script, en secondes écrites par l'utilisateur, en durée : de 0,1 s à un an. Sans plafond,
+/// `1e300` fait paniquer la conversion, et `1e12` le calcul du prochain lancement.
+#[allow(clippy::manual_clamp, reason = "clamp garde NaN, que from_secs_f64 refuse ; max(0.1) le remplace")]
+fn duree(secondes: f64) -> Duration {
+    const UN_AN: f64 = 365.0 * 24.0 * 3600.0;
+    Duration::from_secs_f64(secondes.max(0.1).min(UN_AN))
+}
+
 pub(super) fn largeur_script(largeur: Option<f64>) -> f64 {
     largeur.unwrap_or(LARGEUR_SCRIPT)
 }
@@ -351,6 +359,20 @@ mod tests {
         let image: Id = unsafe { msg_send![b, image] };
         assert_eq!(unsafe { (*(titre as *const objc2_foundation::NSString)).to_string() }, "symbole.qui.nexiste.pas");
         assert!(image.is_null());
+    }
+
+    /// `intervalle = 1e300` est un nombre fini que `lire` accepte : la barre ne doit ni paniquer en le convertissant
+    /// ni en calculant le prochain lancement (`Instant + Duration` déborde).
+    #[test]
+    fn duree_de_script_bornee() {
+        assert_eq!(duree(0.0), Duration::from_millis(100));
+        assert_eq!(duree(-5.0), Duration::from_millis(100));
+        assert_eq!(duree(f64::NAN), Duration::from_millis(100));
+        assert_eq!(duree(60.0), Duration::from_secs(60));
+        for s in [1e300, f64::MAX, 1e20, 1e12] {
+            let d = crate::essais::sans_panique(|| duree(s)).unwrap_or_else(|p| panic!("{s} : {p}"));
+            assert!(Instant::now().checked_add(d).is_some(), "{s} : {d:?}");
+        }
     }
 
     #[test]
