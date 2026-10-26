@@ -1,0 +1,38 @@
+name: Feature request
+description: An element, action or option you would like in your bar.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What would you like to do with your Touch Bar?
+      description: The use case first; a sketch of the `barre.toml` you wish you could write is welcome.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "e.g. 15.1"
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      placeholder: "e.g. MacBook Pro 13\" M1 2020"
+  - type: input
+    id: version
+    attributes:
+      label: Tactile version
+      placeholder: "e.g. 0.1.0"
+  - type: textarea
+    id: config
+    attributes:
+      label: Config excerpt
+      description: What you tried in `~/.config/tactile/barre.toml`, if anything.
+      render: toml
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: Lines from `~/Library/Logs/Tactile.log`, if relevant.
+      render: text
