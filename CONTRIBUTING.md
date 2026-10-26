@@ -6,6 +6,34 @@ Thanks for your interest. You can contribute in English or in French.
 
 Identifiers and comments in the code are in French. This is a project choice ([DECISIONS.md §5](docs/DECISIONS.md), in French), so functions are called `luminosite::regler`, not `brightness::set`. If you don't speak French, write your code in English and say so in the pull request; a maintainer will rename things. The [glossary](#glossary) below covers the identifiers you'll run into first.
 
+## Your first contribution in 10 minutes
+
+1. Clone the repo and install Rust. The repo pins stable Rust in `mise.toml`; `rustup` works too.
+
+   ```
+   git clone https://github.com/lepalph/tactile-touch-bar.git
+   cd tactile-touch-bar
+   mise install
+   ```
+
+2. Run the tests. `CI=1` skips the tests that really change your brightness and volume. The first build takes a minute or so, and the tests themselves run in about a second.
+
+   ```
+   CI=1 cargo test
+   ```
+
+3. Build and open the editor on a scratch file. It doesn't take over the Touch Bar, and your real bar stays as it is.
+
+   ```
+   cargo build --release
+   TACTILE_CONFIG=/tmp/x.toml target/release/tactile --personnaliser
+   target/release/tactile --check exemples/simple.toml
+   ```
+
+4. Pick a [good first issue](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) and leave a comment so nobody else takes it. Each one lists the files to read, how to test the change, and when it counts as done.
+
+5. Make the change on a branch. Run `CI=1 cargo test` and `cargo clippy --all-targets -- -D warnings`, then open a pull request; the template asks for the rest. A question is welcome in the issue itself, in English or French.
+
 ## Build
 
 You need stable Rust. The repo has a `mise.toml`, so `mise install` sets it up.

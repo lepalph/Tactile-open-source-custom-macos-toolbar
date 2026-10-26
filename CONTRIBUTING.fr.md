@@ -4,6 +4,34 @@
 
 Merci de ton intérêt. Commence par [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : la carte du code, les recettes pour ajouter une action ou un élément, et les pièges déjà rencontrés. Le pourquoi des choix est dans [docs/DECISIONS.md](docs/DECISIONS.md).
 
+## Ta première contribution en 10 minutes
+
+1. Clone le dépôt et installe Rust. Le dépôt fixe Rust stable dans `mise.toml` ; `rustup` marche aussi.
+
+   ```
+   git clone https://github.com/lepalph/tactile-touch-bar.git
+   cd tactile-touch-bar
+   mise install
+   ```
+
+2. Lance les tests. `CI=1` saute ceux qui changent vraiment la luminosité et le volume. La première compilation prend une minute environ, les tests eux-mêmes à peu près une seconde.
+
+   ```
+   CI=1 cargo test
+   ```
+
+3. Compile et ouvre l'éditeur sur un fichier d'essai. Il ne prend pas la Touch Bar, et ta vraie barre ne bouge pas.
+
+   ```
+   cargo build --release
+   TACTILE_CONFIG=/tmp/x.toml target/release/tactile --personnaliser
+   target/release/tactile --verifier exemples/simple.toml
+   ```
+
+4. Choisis une [good first issue](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) et laisse un commentaire pour que personne d'autre ne la prenne. Chacune donne les fichiers à lire, comment tester le changement et quand il est terminé.
+
+5. Fais le changement sur une branche. Lance `CI=1 cargo test` et `cargo clippy --all-targets -- -D warnings`, puis ouvre une demande de fusion ; le gabarit demande le reste. Une question a sa place dans l'issue elle-même, en français ou en anglais.
+
 ## Style
 
 - Noms en français (fonctions, variables, types, messages) : `luminosite::regler`, pas `brightness::set`.
