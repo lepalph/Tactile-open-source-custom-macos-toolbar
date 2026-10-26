@@ -7,16 +7,19 @@
 //! `iconesApps { noms }`, `choisirImage`, `deposerImage { nom, donnees }` (fichier glissé, en base64), `importerImage { chemin }`
 //! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`,
 //! `exporter { barre, zip? }` (NSSavePanel), `exporterVers { barre, chemin }`, `importer` (NSOpenPanel),
-//! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport`, `annulerImport`. Un chemin venu
-//! de la page n'est suivi que s'il passe `chemin_permis` (pilote, ou fichier rendu par NSSavePanel).
+//! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport { ajouter?, barre? }`, `annulerImport`,
+//! `mesurer { barre }`, `chercherVille { nom, langue }`, `meteo { nom, latitude, longitude }`, `ouvrirReglages`. Un chemin
+//! venu de la page n'est suivi que s'il passe `chemin_permis` (pilote, ou fichier rendu par NSSavePanel).
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
-//! `tactile.glyphes({nom: dataURL|null})`, `tactile.iconesApps({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
+//! `tactile.glyphes({nom: dataURL|null})`, `tactile.iconesApps({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent, avis)`, `tactile.revenu()`,
 //! `tactile.abimeGarde(nom)`, `tactile.erreur(texte)`, `tactile.appChoisie(nom)`,
-//! `tactile.appVerifiee(nom, trouvee, suggestion)`, `tactile.demanderFermeture()`,
+//! `tactile.appVerifiee(nom, trouvee, suggestion, localise)`, `tactile.demanderFermeture()`, `tactile.deborde(caches)`,
+//! `tactile.villes(liste|null, erreur)`, `tactile.meteoPrete(source, element)`,
 //! `tactile.imageChoisie(chemin, dataURL)`, `tactile.imageRefusee(texte)`, `tactile.images({chemin: dataURL|null})`,
 //! `tactile.exportAvertir(logos)`, `tactile.exporte(nom, logos, avis)`, `tactile.importPret(apercu)`,
 //! `tactile.importe(manuel, aPrecedent)`, `tactile.partageRefuse({fr, en})`.
 
+mod barres;
 mod icones;
 mod partage;
 
@@ -25,7 +28,8 @@ pub use partage::{exporter_cli, importer_cli};
 use crate::config::{self, Barre, Element};
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, NSObject};
-use objc2::{class, define_class, msg_send, ClassType};
+use objc2::runtime::Sel;
+use objc2::{class, define_class, msg_send, sel, ClassType};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use serde_json::{json, Value};
 use std::cell::{Cell, RefCell};
@@ -39,6 +43,8 @@ const PAGE: &str = include_str!("editeur.html");
 thread_local! {
     static FENETRE: Cell<Id> = const { Cell::new(std::ptr::null_mut()) };
     static VUE: Cell<Id> = const { Cell::new(std::ptr::null_mut()) };
+    /// Le délégué de la fenêtre : cible du menu Présentation et des réponses calculées sur un autre fil.
+    static PONT: Cell<Id> = const { Cell::new(std::ptr::null_mut()) };
     /// Lancé avec `--personnaliser` : fermer la fenêtre quitte l'app.
     static SEUL: Cell<bool> = const { Cell::new(false) };
     /// Des changements non enregistrés dans la page (message `modifie`) : fermer demande confirmation.
@@ -83,6 +89,29 @@ define_class!(
             Bool::NO
         }
 
+        /// Une réponse calculée sur un autre fil (géocodage) : le JS est évalué ici, sur le fil principal.
+        #[unsafe(method(executer:))]
+        fn executer(&self, code: Id) {
+            if !code.is_null() {
+                js(&unsafe { (*(code as *const NSString)).to_string() });
+            }
+        }
+
+        #[unsafe(method(agrandir:))]
+        fn agrandir(&self, _envoyeur: Id) {
+            zoomer(1);
+        }
+
+        #[unsafe(method(reduire:))]
+        fn reduire(&self, _envoyeur: Id) {
+            zoomer(-1);
+        }
+
+        #[unsafe(method(tailleReelle:))]
+        fn taille_reelle(&self, _envoyeur: Id) {
+            zoomer(0);
+        }
+
         #[unsafe(method(windowWillClose:))]
         fn ferme(&self, _notification: Id) {
             if SEUL.get() {
@@ -116,7 +145,9 @@ fn recevoir(message: Value) {
             let chemin = config::chemin();
             match enregistrer(&chemin, message["barre"].clone()) {
                 Ok(manuel) => {
-                    js(&format!("tactile.enregistre({}, {})", json!(manuel), version(&chemin, 1).exists()));
+                    // Ce que `--verifier` signalerait (app absente, débordement…) : enregistré, mais dit tout de suite.
+                    let avis = config::lire(&std::fs::read_to_string(&chemin).unwrap_or_default()).map(|b| barres::avertissements(&b)).unwrap_or_default();
+                    js(&format!("tactile.enregistre({}, {}, {})", json!(manuel), version(&chemin, 1).exists(), json!(avis)));
                     if message["fermer"].as_bool() == Some(true) {
                         fermer();
                     }
@@ -147,8 +178,28 @@ fn recevoir(message: Value) {
         "fermer" => fermer(),
         "verifierApp" => {
             let nom = message["nom"].as_str().unwrap_or("");
-            let (trouvee, proche) = chercher_app(nom);
-            js(&format!("tactile.appVerifiee({}, {trouvee}, {})", json!(nom), json!(proche)));
+            let (trouvee, proche, localise) = chercher_app(nom);
+            js(&format!("tactile.appVerifiee({}, {trouvee}, {}, {localise})", json!(nom), json!(proche)));
+        }
+        "mesurer" => {
+            // La même estimation que `--verifier` : combien d'éléments de la principale la Touch Bar cachera.
+            let caches = serde_json::from_value::<Barre>(message["barre"].clone())
+                .ok()
+                .and_then(|b| crate::barre::debordement(&b.elements, crate::barre::largeur_barre(b.masquer_control_strip)))
+                .map_or(0, |(_, n)| n);
+            js(&format!("tactile.deborde({caches})"));
+        }
+        "chercherVille" => chercher_ville(message["nom"].as_str().unwrap_or(""), message["langue"].as_str().unwrap_or("fr")),
+        "meteo" => {
+            let (lat, lon) = (message["latitude"].as_f64().unwrap_or(f64::NAN), message["longitude"].as_f64().unwrap_or(f64::NAN));
+            match barres::meteo(message["nom"].as_str().unwrap_or("meteo"), lat, lon) {
+                Ok((source, element)) => js(&format!("tactile.meteoPrete({}, {})", json!(source), json!(element))),
+                Err(e) => js(&format!("tactile.villes(null, {})", json!(e))),
+            }
+        }
+        "ouvrirReglages" => {
+            // Adresse fixe : la page ne choisit pas ce qui est ouvert.
+            let _ = Command::new("/usr/bin/open").arg("x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility").status();
         }
         "prereglage" => {
             // Fichier illisible : il est mis de côté avant que la barre toute faite puisse le remplacer.
@@ -165,9 +216,9 @@ fn recevoir(message: Value) {
                 "developpeur" => include_str!("../../exemples/developpeur.toml"),
                 _ => include_str!("../../exemples/barre.toml"),
             };
-            // Une barre toute faite remplace la principale ; les barres par application de l'utilisateur restent.
-            let applications = config::charger().map(|b| b.applications).unwrap_or_default();
-            match config::lire(toml).map(|b| Barre { applications, ..b }) {
+            // Une barre toute faite remplace la principale ; les barres par application de l'utilisateur restent,
+            // avec les sources qu'elles citent.
+            match config::lire(toml).map(|b| barres::prereglage(config::charger().ok(), b)) {
                 Ok(barre) => {
                     js(&format!("tactile.charger({}, {})", json!(barre), version(&chemin, 1).exists()));
                     if let Some(nom) = garde {
@@ -237,7 +288,15 @@ fn recevoir(message: Value) {
             preparer_import(paquet, nom);
         }
         "confirmerImport" => {
-            let Some(paquet) = IMPORT.take() else { return };
+            let Some(mut paquet) = IMPORT.take() else { return };
+            // « Ajouter à ma barre » : la barre de la page (enregistrée ou non) reçoit celle importée ; les logos
+            // importés gardent leurs chemins temporaires, que `installer` réécrit comme pour un remplacement.
+            if message["ajouter"].as_bool() == Some(true) {
+                match serde_json::from_value::<Barre>(message["barre"].clone()) {
+                    Ok(mienne) => paquet.barre = barres::fusionner(mienne, paquet.barre.clone()),
+                    Err(e) => return js(&format!("tactile.partageRefuse({})", json!(partage::Texte { fr: format!("ta barre est illisible : {e}"), en: format!("your bar is unreadable: {e}") }))),
+                }
+            }
             match partage::installer(&paquet, &config::chemin()) {
                 Ok(manuel) => {
                     envoyer_config(config::charger());
@@ -318,9 +377,12 @@ fn importer_image(copie: Result<PathBuf, String>) {
 fn preparer_import(paquet: Result<partage::Paquet, partage::Texte>, nom: &str) {
     match paquet {
         Ok(p) => {
+            // Avis sans numéro de ligne ni « bundle id » : le fichier reçu, personne ne l'a lu.
+            let avis: Vec<partage::Texte> = p.avis.iter().map(|a| if a.fr == a.en { barres::avis_humain(&a.fr) } else { a.clone() }).collect();
             let apercu = json!({
                 "nom": Path::new(nom).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                "barre": p.barre, "commandes": p.commandes, "avis": p.avis, "logos": p.logos(), "alertes": p.alertes(),
+                "barre": p.barre, "commandes": p.commandes, "avis": avis, "logos": p.logos(), "alertes": p.alertes(),
+                "code": barres::execute_du_code(&p.barre),
             });
             IMPORT.set(Some(p));
             js(&format!("tactile.importPret({apercu})"));
@@ -512,11 +574,15 @@ fn a_un_commentaire(ligne: &str) -> bool {
     false
 }
 
-/// Le nom sera-t-il trouvé par `open -a` (`actions::app_existe`, comme `--verifier`) ? Sinon, l'app installée au nom le plus proche.
-fn chercher_app(nom: &str) -> (bool, Option<String>) {
+/// Le nom sera-t-il trouvé par `open -a` (`actions::app_existe`, comme `--verifier`) ? Sinon, l'app dont c'est le nom
+/// traduit (« Musique » → « Music », `localise`), ou l'app installée au nom le plus proche.
+fn chercher_app(nom: &str) -> (bool, Option<String>, bool) {
     let nom = nom.trim();
     if nom.is_empty() || crate::actions::app_existe(nom) {
-        return (true, None);
+        return (true, None, false);
+    }
+    if let Some(app) = app_au_nom_traduit(nom) {
+        return (false, Some(app), true);
     }
     let sortie = Command::new("/usr/bin/mdfind").arg("kMDItemContentType == 'com.apple.application-bundle'").output();
     let noms: Vec<String> = sortie
@@ -525,7 +591,167 @@ fn chercher_app(nom: &str) -> (bool, Option<String>) {
         .lines()
         .filter_map(|l| Path::new(l).file_stem().map(|n| n.to_string_lossy().into_owned()))
         .collect();
-    (false, suggestion(nom, &noms))
+    (false, suggestion(nom, &noms), false)
+}
+
+/// Le Finder et le Dock montrent le nom traduit (« Musique », « Calendrier », « Réglages Système ») ; `open -a`
+/// ne connaît que le nom du dossier (« Music »). Cherche, dans les dossiers d'apps, celle dont un nom traduit
+/// (`CFBundleDisplayName` ou `CFBundleName`, dans n'importe quelle langue) est `nom`, sans casse.
+fn app_au_nom_traduit(nom: &str) -> Option<String> {
+    let cherche = nom.to_lowercase();
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dossiers = ["/Applications", "/Applications/Utilities", "/System/Applications", "/System/Applications/Utilities", &format!("{home}/Applications")];
+    dossiers
+        .iter()
+        .filter_map(|d| std::fs::read_dir(d).ok())
+        .flatten()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().is_some_and(|x| x == "app"))
+        .find(|app| noms_traduits(app).iter().any(|n| n.to_lowercase() == cherche))
+        .and_then(|app| app.file_stem().map(|n| n.to_string_lossy().into_owned()))
+}
+
+/// Les noms d'une app dans toutes ses langues : `InfoPlist.loctable` (apps d'Apple) ou `<langue>.lproj/InfoPlist.strings`.
+fn noms_traduits(app: &Path) -> Vec<String> {
+    let ressources = app.join("Contents/Resources");
+    let mut tables = Vec::new();
+    // La loctable est un dictionnaire { langue: { clé: texte } } ; un .strings, directement { clé: texte }.
+    if let Some(loc) = dictionnaire(&ressources.join("InfoPlist.loctable")) {
+        let valeurs: Id = unsafe { msg_send![loc, allValues] };
+        let n: usize = unsafe { msg_send![valeurs, count] };
+        tables.extend((0..n).map(|i| -> Id { unsafe { msg_send![valeurs, objectAtIndex: i] } }));
+    }
+    if let Ok(entrees) = std::fs::read_dir(&ressources) {
+        for e in entrees.flatten().filter(|e| e.path().extension().is_some_and(|x| x == "lproj")) {
+            tables.extend(dictionnaire(&e.path().join("InfoPlist.strings")));
+        }
+    }
+    let mut noms = Vec::new();
+    for table in tables {
+        let est_dico: Bool = unsafe { msg_send![table, isKindOfClass: class!(NSDictionary)] };
+        if !est_dico.as_bool() {
+            continue;
+        }
+        for cle in ["CFBundleDisplayName", "CFBundleName"] {
+            let v: Id = unsafe { msg_send![table, objectForKey: &*texte(cle)] };
+            let est_texte: Bool = if v.is_null() { Bool::NO } else { unsafe { msg_send![v, isKindOfClass: class!(NSString)] } };
+            if est_texte.as_bool() {
+                noms.push(unsafe { (*(v as *const NSString)).to_string() });
+            }
+        }
+    }
+    noms
+}
+
+/// Un fichier plist (ou .strings) lu en `NSDictionary`, s'il existe et se lit.
+fn dictionnaire(chemin: &Path) -> Option<Id> {
+    if !chemin.exists() {
+        return None;
+    }
+    let d: Id = unsafe { msg_send![class!(NSDictionary), dictionaryWithContentsOfFile: &*texte(&chemin.to_string_lossy())] };
+    (!d.is_null()).then_some(d)
+}
+
+/// Géocodage Open-Meteo, seulement quand l'utilisateur cherche une ville : par `curl` comme les sources http,
+/// sur un autre fil (la fenêtre reste vivante), réponse `tactile.villes(liste, erreur)` sur le fil principal.
+fn chercher_ville(nom: &str, langue: &str) {
+    if nom.trim().is_empty() {
+        return;
+    }
+    let adresse = barres::adresse_geocodage(nom, langue);
+    let pont = PONT.get() as usize;
+    std::thread::spawn(move || {
+        let processus = crate::barre::Processus::new(std::sync::Mutex::new(Some(Vec::new())));
+        let code = match crate::sources::http::requete(&adresse, &[], None, std::time::Duration::from_secs(8), &processus).and_then(|r| r.valeur()) {
+            Ok(v) => format!("tactile.villes({}, null)", Value::Array(barres::villes(&v))),
+            Err(e) => format!("tactile.villes(null, {})", json!(e)),
+        };
+        let code = texte(&code);
+        unsafe { let _: () = msg_send![pont as Id, performSelectorOnMainThread: sel!(executer:), withObject: &*code, waitUntilDone: Bool::NO]; }
+    });
+}
+
+/// Paliers de zoom de la page (⌘+ / ⌘− / ⌘0), comme Safari ; le choix est gardé d'une ouverture à l'autre.
+const ZOOMS: [f64; 9] = [0.75, 0.85, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0, 2.5];
+const CLE_ZOOM: &str = "TactileZoomEditeur";
+
+/// `sens` : 1 agrandit, -1 réduit, 0 revient à 100 %.
+fn zoomer(sens: i32) {
+    let vue = VUE.get();
+    if vue.is_null() {
+        return;
+    }
+    unsafe {
+        let actuel: f64 = msg_send![vue, pageZoom];
+        let i = ZOOMS.iter().position(|z| (z - actuel).abs() < 0.01).unwrap_or(2) as i32;
+        let z = if sens == 0 { 1.0 } else { ZOOMS[(i + sens).clamp(0, ZOOMS.len() as i32 - 1) as usize] };
+        let _: () = msg_send![vue, setPageZoom: z];
+        let reglages: Id = msg_send![class!(NSUserDefaults), standardUserDefaults];
+        let _: () = msg_send![reglages, setDouble: z, forKey: &*texte(CLE_ZOOM)];
+    }
+}
+
+/// Menu principal de l'app quand la fenêtre est ouverte : sans lui, ⌘C, ⌘V, ⌘X, ⌘A et ⌘Z ne font rien dans les champs
+/// de la page (AppKit cherche ces raccourcis dans le menu). Édition vise le premier répondeur (la WKWebView), comme
+/// toute app ; Fichier › Fermer passe par `windowShouldClose:` ; Présentation règle le zoom de la page.
+fn menu_principal(pont: Id, seul: bool, fr: bool) -> Id {
+    let l = |f: &'static str, e: &'static str| if fr { f } else { e };
+    unsafe {
+        let barre = sous_menu_vide("");
+        let app = sous_menu(barre, "Tactile");
+        if seul {
+            entree(app, l("Quitter Tactile", "Quit Tactile"), Some(sel!(terminate:)), "q", std::ptr::null_mut());
+        }
+        let fichier = sous_menu(barre, l("Fichier", "File"));
+        entree(fichier, l("Fermer", "Close"), Some(sel!(performClose:)), "w", std::ptr::null_mut());
+        let edition = sous_menu(barre, l("Édition", "Edit"));
+        entree(edition, l("Annuler", "Undo"), Some(sel!(undo:)), "z", std::ptr::null_mut());
+        entree(edition, l("Rétablir", "Redo"), Some(sel!(redo:)), "Z", std::ptr::null_mut());
+        let separateur: Id = msg_send![class!(NSMenuItem), separatorItem];
+        let _: () = msg_send![edition, addItem: separateur];
+        entree(edition, l("Couper", "Cut"), Some(sel!(cut:)), "x", std::ptr::null_mut());
+        entree(edition, l("Copier", "Copy"), Some(sel!(copy:)), "c", std::ptr::null_mut());
+        entree(edition, l("Coller", "Paste"), Some(sel!(paste:)), "v", std::ptr::null_mut());
+        entree(edition, l("Tout sélectionner", "Select All"), Some(sel!(selectAll:)), "a", std::ptr::null_mut());
+        let presentation = sous_menu(barre, l("Présentation", "View"));
+        entree(presentation, l("Agrandir", "Zoom In"), Some(sel!(agrandir:)), "+", pont);
+        // ⌘= aussi (la touche + sans Maj sur un clavier américain), sans ligne de plus dans le menu.
+        let egal = entree(presentation, l("Agrandir", "Zoom In"), Some(sel!(agrandir:)), "=", pont);
+        let _: () = msg_send![egal, setHidden: Bool::YES];
+        let _: () = msg_send![egal, setAllowsKeyEquivalentWhenHidden: Bool::YES];
+        entree(presentation, l("Réduire", "Zoom Out"), Some(sel!(reduire:)), "-", pont);
+        entree(presentation, l("Taille réelle", "Actual Size"), Some(sel!(tailleReelle:)), "0", pont);
+        barre
+    }
+}
+
+unsafe fn sous_menu_vide(titre: &str) -> Id {
+    unsafe {
+        let menu: Id = msg_send![class!(NSMenu), alloc];
+        msg_send![menu, initWithTitle: &*texte(titre)]
+    }
+}
+
+/// Ajoute à `barre` un menu titré `titre` et le renvoie.
+unsafe fn sous_menu(barre: Id, titre: &str) -> Id {
+    unsafe {
+        let menu = sous_menu_vide(titre);
+        let item = entree(barre, titre, None, "", std::ptr::null_mut());
+        let _: () = msg_send![item, setSubmenu: menu];
+        menu
+    }
+}
+
+/// Une entrée ⌘`cle` (une majuscule ajoute ⇧) ; `cible` nulle : le premier répondeur qui sait faire l'action.
+unsafe fn entree(menu: Id, titre: &str, action: Option<Sel>, cle: &str, cible: Id) -> Id {
+    unsafe {
+        let item: Id = msg_send![class!(NSMenuItem), alloc];
+        let item: Id = msg_send![item, initWithTitle: &*texte(titre), action: action, keyEquivalent: &*texte(cle)];
+        let _: () = msg_send![item, setTarget: cible];
+        let _: () = msg_send![menu, addItem: item];
+        item
+    }
 }
 
 /// Le nom installé le plus proche : le plus court qui contient la saisie (« Photoshop » → « Adobe Photoshop 2025 »),
@@ -727,6 +953,16 @@ pub fn ouvrir() {
             let _: () = msg_send![fenetre, center];
             FENETRE.set(fenetre);
             VUE.set(vue);
+            PONT.set(pont);
+            let reglages: Id = msg_send![class!(NSUserDefaults), standardUserDefaults];
+            let zoom: f64 = msg_send![reglages, doubleForKey: &*texte(CLE_ZOOM)];
+            if ZOOMS.contains(&zoom) {
+                let _: () = msg_send![vue, setPageZoom: zoom];
+            }
+            let langues: Id = msg_send![class!(NSLocale), preferredLanguages];
+            let premiere: Id = msg_send![langues, firstObject];
+            let fr = !premiere.is_null() && (*(premiere as *const NSString)).to_string().starts_with("fr");
+            let _: () = msg_send![app, setMainMenu: menu_principal(pont, SEUL.get(), fr)];
         }
         let _: () = msg_send![FENETRE.get(), makeKeyAndOrderFront: std::ptr::null_mut::<AnyObject>()];
         let _: Bool = msg_send![app, activateIgnoringOtherApps: Bool::YES];
@@ -927,10 +1163,65 @@ mod tests {
     #[test]
     #[cfg_attr(ci, ignore = "apps installées et index Spotlight : propres à ce Mac")]
     fn app_installee_ou_non() {
-        assert_eq!(chercher_app("Safari"), (true, None));
-        assert_eq!(chercher_app("safari"), (true, None));
-        assert_eq!(chercher_app("com.apple.Safari"), (true, None));
+        assert_eq!(chercher_app("Safari"), (true, None, false));
+        assert_eq!(chercher_app("safari"), (true, None, false));
+        assert_eq!(chercher_app("com.apple.Safari"), (true, None, false));
         assert!(!chercher_app("AppQuiNexistePasDuTout").0);
+        // Nadia (0.3) : le Finder français dit « Musique », la barre a besoin de « Music ».
+        assert_eq!(chercher_app("Musique"), (false, Some("Music".into()), true));
+        assert_eq!(chercher_app("calendrier"), (false, Some("Calendar".into()), true));
+        assert_eq!(chercher_app("Réglages Système"), (false, Some("System Settings".into()), true));
+    }
+
+    /// Sans menu Édition, ⌘C ⌘V ⌘X ⌘A ⌘Z ne font rien dans les champs : chaque raccourci vise l'action standard
+    /// du premier répondeur (cible nulle), le zoom vise le pont.
+    #[test]
+    fn menu_principal_complet() {
+        let pont: Id = Retained::into_raw(unsafe { msg_send![Pont::class(), new] }) as Id;
+        let menu = menu_principal(pont, true, true);
+        let mut vus = Vec::new();
+        unsafe {
+            let n: isize = msg_send![menu, numberOfItems];
+            for i in 0..n {
+                let haut: Id = msg_send![menu, itemAtIndex: i];
+                let sous: Id = msg_send![haut, submenu];
+                let m: isize = msg_send![sous, numberOfItems];
+                for j in 0..m {
+                    let item: Id = msg_send![sous, itemAtIndex: j];
+                    let action: Option<Sel> = msg_send![item, action];
+                    let cle: Id = msg_send![item, keyEquivalent];
+                    let cible: Id = msg_send![item, target];
+                    let titre: Id = msg_send![item, title];
+                    if let Some(a) = action {
+                        vus.push((a.name().to_str().unwrap().to_string(), (*(cle as *const NSString)).to_string(), cible == pont, (*(titre as *const NSString)).to_string()));
+                    }
+                }
+            }
+        }
+        let attendu = [
+            ("terminate:", "q", false, "Quitter Tactile"),
+            ("performClose:", "w", false, "Fermer"),
+            ("undo:", "z", false, "Annuler"),
+            ("redo:", "Z", false, "Rétablir"),
+            ("cut:", "x", false, "Couper"),
+            ("copy:", "c", false, "Copier"),
+            ("paste:", "v", false, "Coller"),
+            ("selectAll:", "a", false, "Tout sélectionner"),
+            ("agrandir:", "+", true, "Agrandir"),
+            ("agrandir:", "=", true, "Agrandir"),
+            ("reduire:", "-", true, "Réduire"),
+            ("tailleReelle:", "0", true, "Taille réelle"),
+        ];
+        assert_eq!(vus, attendu.map(|(a, c, p, t)| (a.to_string(), c.to_string(), p, t.to_string())));
+        // Le pont sait répondre au zoom (sinon le menu le griserait).
+        let repond: Bool = unsafe { msg_send![pont, respondsToSelector: sel!(agrandir:)] };
+        assert!(repond.as_bool());
+        // Hors `--personnaliser`, ⌘Q ne quitte pas la barre depuis la fenêtre.
+        let barre_seule = menu_principal(pont, false, false);
+        let app: Id = unsafe { msg_send![barre_seule, itemAtIndex: 0isize] };
+        let sous: Id = unsafe { msg_send![app, submenu] };
+        let n: isize = unsafe { msg_send![sous, numberOfItems] };
+        assert_eq!(n, 0);
     }
 
     #[test]
