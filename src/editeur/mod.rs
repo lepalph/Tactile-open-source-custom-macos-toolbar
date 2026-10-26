@@ -4,12 +4,12 @@
 //! JS → Rust, un objet JSON `{ "type": … }` : `pret`, `enregistrer { barre, fermer? }`, `revenir`,
 //! `prereglage { nom }`, `symboles { noms }`, `choisirApp`, `verifierApp { nom }`, `modifie { valeur }`,
 //! `fermer`, `ouvrirFichier`, `relire`, `titre { texte }`, `journal { texte }`, `capture { chemin }`,
-//! `choisirImage`, `deposerImage { nom, donnees }` (fichier glissé, en base64), `importerImage { chemin }`
+//! `iconesApps { noms }`, `choisirImage`, `deposerImage { nom, donnees }` (fichier glissé, en base64), `importerImage { chemin }`
 //! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`,
 //! `exporter { barre, zip? }` (NSSavePanel), `exporterVers { barre, chemin }`, `importer` (NSOpenPanel),
 //! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport`, `annulerImport`.
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
-//! `tactile.glyphes({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
+//! `tactile.glyphes({nom: dataURL|null})`, `tactile.iconesApps({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
 //! `tactile.abimeGarde(nom)`, `tactile.erreur(texte)`, `tactile.appChoisie(nom)`,
 //! `tactile.appVerifiee(nom, trouvee, suggestion)`, `tactile.demanderFermeture()`,
 //! `tactile.imageChoisie(chemin, dataURL)`, `tactile.imageRefusee(texte)`, `tactile.images({chemin: dataURL|null})`,
@@ -210,6 +210,12 @@ fn recevoir(message: Value) {
                 .map(|c| (c.to_string(), icones::apercu(c).map_or(Value::Null, Value::String)))
                 .collect();
             js(&format!("tactile.images({})", Value::Object(images)));
+        }
+        "iconesApps" => {
+            let noms = message["noms"].as_array().cloned().unwrap_or_default();
+            let icones: serde_json::Map<String, Value> =
+                noms.iter().filter_map(Value::as_str).map(|n| (n.to_string(), icone_app(n).map_or(Value::Null, Value::String))).collect();
+            js(&format!("tactile.iconesApps({})", Value::Object(icones)));
         }
         "exporter" | "exporterVers" => exporter(&message),
         "importer" => {
@@ -558,6 +564,14 @@ fn glyphe(nom: &str) -> Option<String> {
     }
 }
 
+/// L'icône de l'app (nom, bundle id ou chemin) telle que le lanceur la dessine dans la barre, sans le point « ouverte »,
+/// en data URL PNG. L'image vient du cache de la barre (`barre::icone_app`). `None` si l'app est introuvable.
+fn icone_app(nom: &str) -> Option<String> {
+    let chemin = crate::actions::chemin_app(nom.trim()).filter(|_| !nom.trim().is_empty())?;
+    let image = crate::barre::icone_app(&chemin, false)?;
+    unsafe { icones::png(image) }.map(|png| format!("data:image/png;base64,{}", icones::base64(&png)))
+}
+
 /// Image PNG de la page, rendue par WebKit lui-même (`takeSnapshotWithConfiguration:`) : elle marche écran
 /// verrouillé, là où `CGWindowListCreateImage` rend du blanc, et sans l'autorisation « Enregistrement de l'écran ».
 /// Asynchrone : le PNG est écrit quand WebKit rend la main, une fraction de seconde plus tard.
@@ -867,6 +881,16 @@ mod tests {
         let barre = config::lire("[[element]]\ntype = \"bouton\"\nsymbole = \"truc.machin\"\n").unwrap();
         let erreur = verifier(&barre.elements).unwrap_err();
         assert!(erreur.contains("truc.machin"), "{erreur}");
+    }
+
+    #[test]
+    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    fn icone_d_app_pour_l_apercu() {
+        let safari = icone_app("Safari").unwrap();
+        assert!(safari.starts_with("data:image/png;base64,iVBOR"), "{}", &safari[..40]);
+        assert_eq!(icone_app("com.apple.Safari"), Some(safari));
+        assert_eq!(icone_app("AppQuiNexistePas"), None);
+        assert_eq!(icone_app("  "), None);
     }
 
     /// Ce que l'éditeur ne sait pas régler (image, keycode, [[application]]…) doit traverser JSON → Barre → TOML sans se perdre.
