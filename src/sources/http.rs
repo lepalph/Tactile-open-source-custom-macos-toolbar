@@ -167,6 +167,48 @@ pub(crate) mod tests {
         assert!(requete("https://x/", &[("A\nB".into(), "v".into())], None, Duration::from_secs(1), &p).unwrap_err().contains("invalide"));
     }
 
+    /// L'adresse vient d'un fichier de barre, peut-être importé : un retour à la ligne n'y ajoute pas d'option à curl
+    /// (`output = …` écrirait la réponse où le fichier le veut).
+    #[test]
+    fn une_adresse_n_ajoute_pas_d_option_a_curl() {
+        let adresse = serveur(|_, _, _| (200, "text/plain", "contenu choisi par le serveur".into()));
+        let cible = std::env::temp_dir().join(format!("tactile-injection-{}", std::process::id()));
+        let _ = std::fs::remove_file(&cible);
+        let p = processus();
+        for url in [format!("{adresse}/x\noutput = {}\n#", cible.display()), format!("{adresse}/x\routput = {}\r#", cible.display())] {
+            let _ = requete(&url, &[], None, Duration::from_secs(5), &p);
+            assert!(!cible.exists(), "curl a écrit {} pour {url:?}", cible.display());
+        }
+        let _ = std::fs::remove_file(&cible);
+    }
+
+    /// Une sortie de curl tronquée ou mutée : réponse ou erreur, jamais de panique.
+    #[test]
+    fn sortie_de_curl_abimee_sans_panique() {
+        let bonne = "HTTP/1.1 100 Continue\r\n\r\nHTTP/2 200\r\ncontent-type: application/json\r\nmcp-session-id: s1\r\n\r\n{\"é\":[1,2]}";
+        let mut h = crate::essais::Hasard::new(5);
+        for k in 0..2000 {
+            let mut car: Vec<char> = bonne.chars().collect();
+            match h.jusqua(3) {
+                0 => car.truncate(h.jusqua(car.len() + 1)),
+                1 => {
+                    let i = h.jusqua(car.len());
+                    car[i] = *h.parmi(&['\r', '\n', ':', ' ', 'H', '9', 'é', '\0']);
+                }
+                _ => {
+                    let i = h.jusqua(car.len());
+                    car.insert(i, *h.parmi(&['\r', '\n', ':', ' ']));
+                }
+            }
+            let brut: String = car.into_iter().collect();
+            let _ = crate::essais::sans_panique(|| analyser(&brut)).unwrap_or_else(|p| panic!("cas {k} : {brut:?} : {p}"));
+        }
+        assert_eq!(analyser("").unwrap_err(), "réponse HTTP illisible");
+        assert_eq!(analyser("HTTP/1.1 404 Not Found\r\nX: y").unwrap().statut, 404);
+        let erreur = Reponse { statut: 500, entetes: vec![], corps: "é".repeat(500) }.valeur().unwrap_err();
+        assert_eq!(erreur.chars().count(), "HTTP 500 : ".chars().count() + 120);
+    }
+
     #[test]
     fn reponse_apres_un_100_continue() {
         let r = analyser("HTTP/1.1 100 Continue\r\n\r\nHTTP/2 200\r\ncontent-type: application/json\r\n\r\n{}").unwrap();

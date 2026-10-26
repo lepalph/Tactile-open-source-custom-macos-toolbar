@@ -316,6 +316,63 @@ mod tests {
         assert!(valeurs.recv_timeout(Duration::from_secs(3)).is_err_and(|e| e == RecvTimeoutError::Disconnected));
     }
 
+    /// Par propriétés : un chemin construit depuis les clés d'une valeur générée la retrouve ; un gabarit quelconque
+    /// (accolades orphelines, accents, émojis) se rend sans panique et ne signale chaque champ manquant qu'une fois.
+    #[test]
+    fn champs_et_gabarits_generes() {
+        let mut h = crate::essais::Hasard::new(11);
+        fn generer(h: &mut crate::essais::Hasard, profondeur: usize) -> Value {
+            match h.jusqua(if profondeur < 3 { 7 } else { 4 }) {
+                0 => Value::Null,
+                1 => json!(h.pile()),
+                2 => json!(h.nombre()),
+                3 => json!(h.texte()),
+                4 | 5 => Value::Object((0..h.jusqua(4)).map(|k| (format!("{}{k}", h.parmi(&["a", "é", "x y", "0"])), generer(h, profondeur + 1))).collect()),
+                _ => Value::Array((0..h.jusqua(4)).map(|_| generer(h, profondeur + 1)).collect()),
+            }
+        }
+        fn chemins(v: &Value, prefixe: &str, sortie: &mut Vec<(String, Value)>) {
+            sortie.push((prefixe.to_string(), v.clone()));
+            let suite = |c: &str| if prefixe.is_empty() { c.to_string() } else { format!("{prefixe}.{c}") };
+            match v {
+                Value::Object(o) => o.iter().filter(|(k, _)| !k.contains('.')).for_each(|(k, x)| chemins(x, &suite(k), sortie)),
+                Value::Array(a) => a.iter().enumerate().for_each(|(i, x)| chemins(x, &suite(&i.to_string()), sortie)),
+                _ => {}
+            }
+        }
+        for k in 0..300 {
+            let v = generer(&mut h, 0);
+            let mut tous = Vec::new();
+            chemins(&v, "", &mut tous);
+            for (chemin, attendu) in &tous {
+                assert_eq!(champ(&v, chemin), Some(attendu), "cas {k}, {chemin} dans {v}");
+            }
+            let morceaux = ["{", "}", "{a0}", "{é1.0}", "{ x y2 }", "{0.0.0}", "texte", "°C", "🎵", "{texte}", "{}"];
+            let gabarit: String = (0..h.jusqua(6)).map(|_| *h.parmi(&morceaux)).collect();
+            let r = crate::essais::sans_panique(|| rendre(&gabarit, None, None, &v)).unwrap_or_else(|p| panic!("cas {k} : « {gabarit} » : {p}"));
+            let mut uniques = r.manquants.clone();
+            uniques.dedup();
+            assert_eq!(uniques.len(), r.manquants.len(), "cas {k} : {:?}", r.manquants);
+        }
+    }
+
+    /// Un secret lu dans le trousseau ne ressort dans aucun message, où qu'il soit et même répété ; un secret vide
+    /// ne masque rien.
+    #[test]
+    fn secrets_jamais_affiches() {
+        let mut secrets = Vec::new();
+        let lire = |s: &str| Ok(format!("cle-{s}-0123456789"));
+        let entete = deverrouiller("a=trousseau:un b=trousseau:deux trousseau:un", &mut secrets, lire).unwrap();
+        assert_eq!(entete, "a=cle-un-0123456789 b=cle-deux-0123456789 cle-un-0123456789");
+        assert_eq!(secrets.len(), 3);
+        let message = format!("401 {entete} {}", entete.to_uppercase());
+        let masque = masquer(&message, &secrets);
+        assert!(!masque.contains("cle-un-0123456789") && !masque.contains("cle-deux-0123456789"), "{masque}");
+        assert_eq!(masquer("rien à cacher", &[String::new()]), "rien à cacher");
+        // `trousseau:` sans service : erreur du trousseau, pas de valeur vide envoyée.
+        assert!(deverrouiller("Bearer trousseau:", &mut secrets, |s: &str| if s.is_empty() { Err("service vide".into()) } else { Ok("x".into()) }).is_err());
+    }
+
     #[test]
     fn seules_https_et_localhost() {
         for (url, permise) in [
