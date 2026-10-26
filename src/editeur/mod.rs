@@ -893,6 +893,16 @@ mod tests {
         assert_eq!(icone_app("  "), None);
     }
 
+    /// Un nombre du fichier passe par la page (JSON) et revient au bit près : serde_json, par défaut, se trompe parfois d'un cran.
+    #[test]
+    fn un_nombre_traverse_le_json_au_bit_pres() {
+        for largeur in [508.278_594_479_536_37_f64, 0.1, 59.761, 1e6 / 3.0] {
+            let barre = Barre { masquer_control_strip: true, elements: vec![Element::Espace { largeur }], applications: vec![], sources: vec![] };
+            let json = serde_json::to_string(&barre).unwrap();
+            assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre, "{json}");
+        }
+    }
+
     /// Ce que l'éditeur ne sait pas régler (image, keycode, [[application]]…) doit traverser JSON → Barre → TOML sans se perdre.
     #[test]
     fn le_json_ne_perd_aucun_champ() {
