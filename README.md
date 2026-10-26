@@ -121,7 +121,7 @@ The French keys are the canonical form, the one the editor writes and the error 
 
 `masquer_control_strip` / `hide_control_strip`, at the top of the file, `true` by default. `true` gives your bar the full width (1004 points). `false` keeps Apple's Control Strip on the right, which leaves 685 points and adds a system ✕ on the left.
 
-A button, the clock or now playing without a `largeur` / `width` is capped at 200 points (the text is cut with …). Whatever doesn't fit in the bar is not shown, and the log says so ("la barre déborde … n élément(s) seront cachés": *the bar overflows, n items will be hidden*).
+A button, the clock or now playing without a `largeur` / `width` is capped at 200 points (the text is cut with …). Whatever doesn't fit in the bar is not shown, and the log says so ("la barre principale déborde … n éléments seront cachés": *the main bar overflows, n items will be hidden*).
 
 ### Elements
 
@@ -342,7 +342,7 @@ Errors are written to `~/Library/Logs/Tactile.log` (menu → **Voir le journal**
 | `champ manquant «x»` | missing field `x` |
 | `type invalide` / `valeur invalide` | invalid type / invalid value |
 | `symbole SF inconnu` / `image introuvable` | unknown SF Symbol / image not found (the item shows its name as text) |
-| `la barre déborde … n élément(s) seront cachés` | the bar overflows, n items will be hidden |
+| `la barre principale déborde … n éléments seront cachés` | the main bar overflows, n items will be hidden |
 | `attention : …` | warning: the bar runs, but something will not show or work as written |
 | `le symbole SF « x » n'existe pas` / `la couleur « x » doit s'écrire #RRGGBB` | unknown SF Symbol / the color must be written `#RRGGBB` (`#F00` and `red` are not accepted) |
 | `app « x » introuvable` | app not found: neither a bundle id nor the name of an installed app |
