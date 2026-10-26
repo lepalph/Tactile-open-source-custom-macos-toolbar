@@ -93,7 +93,8 @@ fn deplier(chemin: &str) -> PathBuf {
 }
 
 /// Tout ce que la barre peut lancer : actions `shell`, `applescript`, `touche`, `keycode`, `app`, `url` autre que
-/// http(s), actions système (app d'Apple ou frappe simulée), les apps des `lanceur` et les commandes des `script`. Dans l'ordre de la barre, principale d'abord.
+/// http(s), actions système (app d'Apple ou frappe simulée), les apps des `lanceur`, les commandes des `script`, puis
+/// les `[[source]]` (commande, serveur MCP lancé ou appelé, adresse lue). Dans l'ordre de la barre, principale d'abord.
 pub(super) fn commandes(barre: &Barre) -> Vec<Commande> {
     let mut liste = Vec::new();
     let principale = tx("Barre principale", "Main bar");
@@ -101,6 +102,25 @@ pub(super) fn commandes(barre: &Barre) -> Vec<Commande> {
     for app in &barre.applications {
         let ou = tx(format!("Barre de « {} »", app.app), format!("“{}” bar", app.app));
         parcourir(&app.elements, &ou, "", &mut liste);
+    }
+    for s in &barre.sources {
+        let ou = tx(format!("Source « {} »", s.nom), format!("“{}” source", s.nom));
+        let n = s.toutes_les.unwrap_or(crate::sources::DEFAUT);
+        if let Some(c) = &s.commande {
+            liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Commande relancée toutes les {n} s"), format!("Command run every {n} s")), valeur: c.clone() });
+        }
+        if let Some(u) = &s.http {
+            liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Adresse lue toutes les {n} s"), format!("Address fetched every {n} s")), valeur: u.clone() });
+        }
+        if let Some(m) = &s.mcp {
+            let outil = &m.outil;
+            if let Some(c) = &m.commande {
+                liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Serveur MCP lancé (outil « {outil} »)"), format!("MCP server started (tool “{outil}”)")), valeur: c.clone() });
+            }
+            if let Some(u) = &m.url {
+                liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Serveur MCP distant appelé (outil « {outil} »)"), format!("Remote MCP server called (tool “{outil}”)")), valeur: u.clone() });
+            }
+        }
     }
     liste
 }
@@ -863,6 +883,31 @@ mod tests {
             assert_eq!(commandes(&b).len(), 1, "{a}");
         }
         assert!(commandes(&config::lire("[[element]]\ntype = \"souple\"\n").unwrap()).is_empty());
+    }
+
+    #[test]
+    fn les_sources_sont_listees() {
+        let barre = config::lire(
+            "[[source]]\nnom = \"cmd\"\ncommande = \"uptime\"\ntoutes_les = 30\n\n\
+             [[source]]\nnom = \"meteo\"\nhttp = \"https://api.open-meteo.com/v1/forecast\"\n\n\
+             [[source]]\nnom = \"local\"\nmcp = { commande = \"python3 serveur.py\", outil = \"heure\" }\n\n\
+             [[source]]\nnom = \"loin\"\nmcp = { url = \"https://exemple.com/mcp\", outil = \"etat\" }\n\n\
+             [[element]]\ntype = \"texte\"\nsource = \"cmd\"\ngabarit = \"{texte}\"\n",
+        )
+        .unwrap();
+        let liste: Vec<(String, String, String)> = commandes(&barre).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect();
+        let attendu = [
+            ("Source « cmd »", "Commande relancée toutes les 30 s", "uptime"),
+            ("Source « meteo »", "Adresse lue toutes les 60 s", "https://api.open-meteo.com/v1/forecast"),
+            ("Source « local »", "Serveur MCP lancé (outil « heure »)", "python3 serveur.py"),
+            ("Source « loin »", "Serveur MCP distant appelé (outil « etat »)", "https://exemple.com/mcp"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(liste, attendu);
+        let en: Vec<(String, String)> = commandes(&barre).into_iter().map(|c| (c.ou.en, c.quoi.en)).collect();
+        assert_eq!(en[1], ("“meteo” source".into(), "Address fetched every 60 s".into()));
+        assert_eq!(en[2].1, "MCP server started (tool “heure”)");
+        assert_eq!(en[3].1, "Remote MCP server called (tool “etat”)");
     }
 
     #[test]

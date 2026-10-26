@@ -4,7 +4,7 @@ use objc2::runtime::Bool;
 use objc2::{class, msg_send, sel};
 use std::time::{Duration, Instant};
 
-use super::rafraichi::Rafraichi;
+use super::rafraichi::{self, Lien, Rafraichi};
 use super::vues::{barre_touch, couleur, icone_app, image, item_vue, lacher, largeur_fixe, largeur_max, styler, symbole, texte};
 use super::{cible, Commande, Etat, Id, PREFIXE};
 use crate::actions::{self, Action};
@@ -142,7 +142,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
     for (i, element) in elements.iter().enumerate() {
         let ident = format!("{prefixe}.{}", i + 1);
         let item = match element {
-            Element::Bouton { texte: t, symbole: s, image: i, gabarit, couleur: c, couleur_texte, taille, affichage, largeur, action, appui_long } => {
+            Element::Bouton { texte: t, symbole: s, image: i, gabarit, couleur: c, couleur_texte, taille, affichage, largeur, action, appui_long, source } => {
                 let index = enregistrer(etat, action.clone().map(Commande::Systeme), appui_long.clone().map(Commande::Systeme));
                 // Une image posée passe avant le symbole (l'éditeur le dit à côté du choix d'image).
                 let icone = i.as_deref().map(|chemin| Icone::Image(chemin, *gabarit)).or(s.as_deref().map(Icone::Symbole));
@@ -158,6 +158,26 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                     None if t.is_some() => largeur_max(b, LARGEUR_MAX_TEXTE),
                     None => {}
                 }
+                if let Some(source) = source {
+                    let gabarit = t.clone().unwrap_or_else(|| "{texte}".into());
+                    let style = Some((couleur_texte.clone(), *taille));
+                    rafraichi::lier(etat, b, source, Lien { source: None, gabarit, symbole_selon: None, couleur_selon: None, style, element: ident.clone() });
+                }
+                item_vue(&ident, b)
+            }
+            Element::Texte { source, gabarit, symbole_selon, couleur_selon, largeur, action } => {
+                let b = bouton_texte(etat, action.clone());
+                largeur_fixe(b, largeur_script(*largeur));
+                etat.controles.push((format!("texte {}", source.as_deref().unwrap_or("")), b));
+                let lien = Lien {
+                    source: None,
+                    gabarit: gabarit.clone().unwrap_or_else(|| "{texte}".into()),
+                    symbole_selon: symbole_selon.clone(),
+                    couleur_selon: couleur_selon.clone(),
+                    style: None,
+                    element: ident.clone(),
+                };
+                rafraichi::lier(etat, b, source.as_deref().unwrap_or(""), lien);
                 item_vue(&ident, b)
             }
             Element::Slider { reglage, symbole: s } => {
@@ -297,7 +317,7 @@ fn largeur_estimee(element: &Element) -> f64 {
         Element::Lanceur { texte: t, .. } => t.as_deref().map_or(LARGEUR_GROUPE, |t| texte(t).max(LARGEUR_GROUPE) + 24.0),
         Element::Heure { format } => texte(format.as_deref().unwrap_or("HH:mm")),
         Element::EnCours { largeur: None } => LARGEUR_MAX_TEXTE,
-        Element::Script { largeur, .. } => largeur_script(*largeur),
+        Element::Script { largeur, .. } | Element::Texte { largeur, .. } => largeur_script(*largeur),
         Element::Batterie { largeur, .. } => largeur.unwrap_or(LARGEUR_BATTERIE),
         Element::Slider { .. } | Element::Groupe { .. } => LARGEUR_GROUPE,
         Element::Souple => 0.0,
@@ -379,6 +399,7 @@ mod tests {
             largeur,
             action: None,
             appui_long: None,
+            source: None,
         };
         let defaut = crate::config::lire(include_str!("../../exemples/barre.toml")).unwrap();
         assert_eq!(debordement(&defaut.elements, largeur_barre(true)), None);
@@ -394,8 +415,8 @@ mod tests {
         assert_eq!(caches, 25 - 13); // la vraie barre en cache 13 : l'estimation est à un élément près
         // 15 boutons à texte court : la vraie barre en cache 3 ; l'estimation en annonce 2 (avant : aucun message).
         let courts: Vec<Element> = (1..=15).map(|n| match bouton(Some(&format!("B{n}")), None) {
-            Element::Bouton { symbole: _, texte, image, gabarit, couleur, couleur_texte, taille, affichage, largeur, action, appui_long } =>
-                Element::Bouton { symbole: None, texte, image, gabarit, couleur, couleur_texte, taille, affichage, largeur, action, appui_long },
+            Element::Bouton { symbole: _, texte, image, gabarit, couleur, couleur_texte, taille, affichage, largeur, action, appui_long, source } =>
+                Element::Bouton { symbole: None, texte, image, gabarit, couleur, couleur_texte, taille, affichage, largeur, action, appui_long, source },
             autre => autre,
         }).collect();
         assert_eq!(debordement(&courts, 1004.0).map(|d| d.1), Some(2));

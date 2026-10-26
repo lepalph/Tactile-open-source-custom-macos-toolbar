@@ -1,0 +1,25 @@
+# Une barre qui affiche le résultat d'un outil MCP : ici le serveur de démonstration exemples/mcp/horloge-mcp.py
+# (outil « heure », sans dépendance). Remplace le chemin par celui de ton clone de Tactile.
+# Le serveur est lancé une fois et gardé vivant ; Tactile appelle l'outil toutes les `toutes_les` secondes.
+# Un vrai serveur : mcp = { commande = "/opt/homebrew/bin/npx -y @modelcontextprotocol/server-xyz", outil = "…", arguments = { … } }
+# Un serveur distant (Streamable HTTP) : mcp = { url = "https://exemple.org/mcp", outil = "…" }
+
+[[element]]
+type = "bouton"
+symbole = "apple.logo"
+largeur = 56
+action = "barre_apple"
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "texte"
+source = "horloge"
+gabarit = "MCP {heure}"
+largeur = 130
+
+[[source]]
+nom = "horloge"
+mcp = { commande = "/usr/bin/python3 ~/code/tactile/exemples/mcp/horloge-mcp.py", outil = "heure" }
+toutes_les = 5

@@ -5,6 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use toml::de::{DeTable, DeValue, ValueDeserializer};
 use toml::Spanned;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
@@ -23,6 +24,65 @@ pub struct Barre {
     /// Barres propres à une app, montrées quand elle passe au premier plan.
     #[serde(rename = "application", default, skip_serializing_if = "Vec::is_empty")]
     pub applications: Vec<Application>,
+    /// Sources de données (`[[source]]`) qu'un élément `texte` ou un bouton affiche par leur `nom`.
+    #[serde(rename = "source", default, skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<Source>,
+}
+
+/// `[[source]]` : une donnée relue toutes les `toutes_les` secondes, par HTTP, une commande ou un serveur MCP (un seul des trois).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Source {
+    #[serde(alias = "name")]
+    pub nom: String,
+    /// `https://…` (ou `http://localhost`), lue par `/usr/bin/curl`.
+    pub http: Option<String>,
+    /// Commande zsh dont la sortie (JSON ou texte) est la valeur.
+    #[serde(alias = "command")]
+    pub commande: Option<String>,
+    pub mcp: Option<SourceMcp>,
+    /// Secondes entre deux lectures : 60 par défaut, 5 au minimum.
+    #[serde(alias = "every")]
+    pub toutes_les: Option<f64>,
+    /// En-têtes HTTP ; `trousseau:service` y est remplacé à l'exécution par le mot de passe du trousseau.
+    #[serde(default, alias = "headers", skip_serializing_if = "BTreeMap::is_empty")]
+    pub entetes: BTreeMap<String, String>,
+}
+
+/// `mcp = { commande = "…", outil = "…", arguments = { … } }` (serveur stdio) ou `{ url = "https://…/mcp", outil = "…" }`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SourceMcp {
+    #[serde(alias = "command")]
+    pub commande: Option<String>,
+    pub url: Option<String>,
+    #[serde(alias = "tool")]
+    pub outil: String,
+    pub arguments: Option<serde_json::Value>,
+}
+
+/// `symbole_selon = { champ = "a.b", valeurs = { "0" = "sun.max.fill" }, defaut = "cloud.fill" }`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SymboleSelon {
+    #[serde(alias = "field")]
+    pub champ: String,
+    #[serde(default, alias = "values")]
+    pub valeurs: BTreeMap<String, String>,
+    #[serde(alias = "default")]
+    pub defaut: Option<String>,
+}
+
+/// `couleur_selon = { champ = "a.b", seuils = [10, 25], couleurs = ["#…", "#…", "#…"] }` : une couleur de plus que de seuils.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CouleurSelon {
+    #[serde(alias = "field")]
+    pub champ: String,
+    #[serde(alias = "thresholds")]
+    pub seuils: Vec<f64>,
+    #[serde(alias = "colors")]
+    pub couleurs: Vec<String>,
 }
 
 /// `[[application]]` : la barre montrée quand cette app est au premier plan.
@@ -94,6 +154,23 @@ pub enum Element {
         action: Option<Action>,
         #[serde(alias = "long_press")]
         appui_long: Option<Action>,
+        /// Nom d'une `[[source]]` : `texte` devient un gabarit (`{champ.sous_champ}`) ; `gabarit` est déjà le booléen de l'image.
+        source: Option<String>,
+    },
+    /// Texte vivant, lié à une `[[source]]`.
+    #[serde(alias = "text")]
+    Texte {
+        source: Option<String>,
+        /// `{a.b.c}` est remplacé par la valeur à ce chemin ; `{texte}` par défaut (sortie qui n'est pas du JSON).
+        #[serde(alias = "template")]
+        gabarit: Option<String>,
+        #[serde(alias = "symbol_by")]
+        symbole_selon: Option<SymboleSelon>,
+        #[serde(alias = "color_by")]
+        couleur_selon: Option<CouleurSelon>,
+        #[serde(alias = "width")]
+        largeur: Option<f64>,
+        action: Option<Action>,
     },
     Slider {
         #[serde(alias = "setting")]
@@ -222,6 +299,14 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
         let debut = position(&document, &[("application", k)]);
         return Err(situer(debut, format!("[[application]] « {} » sans élément : ajoute au moins un [[application.element]]", barre.applications[k].app)));
     }
+    for (k, source) in barre.sources.iter().enumerate() {
+        let sortes = [source.http.is_some(), source.commande.is_some(), source.mcp.is_some()].iter().filter(|&&s| s).count();
+        let mcp = source.mcp.as_ref().is_none_or(|m| m.commande.is_some() != m.url.is_some());
+        if sortes != 1 || !mcp {
+            let message = if sortes != 1 { "écris un seul de http, commande ou mcp" } else { "mcp demande commande ou url, pas les deux" };
+            return Err(situer(position(&document, &[("source", k)]), format!("[[source]] « {} » : {message}", source.nom)));
+        }
+    }
     Ok(barre)
 }
 
@@ -293,8 +378,9 @@ fn premiere_erreur<T: DeserializeOwned>(valeur: &Spanned<DeValue>) -> Option<(us
     let DeValue::Table(table) = valeur.get_ref() else { return Some(situee(erreur)) };
     let mut erreurs: Vec<(usize, String)> = tables(table, "element").iter().filter_map(premiere_erreur::<Element>).collect();
     erreurs.extend(tables(table, "application").iter().filter_map(premiere_erreur::<Application>));
+    erreurs.extend(tables(table, "source").iter().filter_map(premiere_erreur::<Source>));
     let mut seule = table.clone();
-    for cle in ["element", "item", "application"] {
+    for cle in ["element", "item", "application", "source"] {
         seule.remove(cle);
     }
     if let Err(e) = T::deserialize(ValueDeserializer::from(Spanned::new(valeur.span(), DeValue::Table(seule)))) {
@@ -360,7 +446,25 @@ impl std::fmt::Display for Avis {
 /// décrite deux fois, barre vide). Avec le texte du fichier, chaque avis a sa ligne et un `[[element]]` écrit
 /// après un `[[application]]` est signalé. Les avis sont dans l'ordre du fichier, ceux de toute la barre à la fin.
 pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
-    let mut c = Controle { document: texte.and_then(|t| document(t).ok().map(|d| (t, d))), avis: Vec::new() };
+    let sources = barre.sources.iter().map(|s| s.nom.clone()).collect();
+    let mut c = Controle { document: texte.and_then(|t| document(t).ok().map(|d| (t, d))), avis: Vec::new(), sources };
+    for (k, source) in barre.sources.iter().enumerate() {
+        let (ici, lieu) = ([("source", k)], format!("source « {} »", source.nom));
+        if barre.sources[..k].iter().any(|s| s.nom == source.nom) {
+            c.signaler(false, &ici, &lieu, format!("le nom « {} » est déjà pris par une autre source : renomme-la", source.nom));
+        }
+        for url in [source.http.as_deref(), source.mcp.as_ref().and_then(|m| m.url.as_deref())].into_iter().flatten() {
+            if !crate::sources::url_permise(url) {
+                c.signaler(false, &ici, &lieu, format!("« {url} » : seules les adresses https:// (et http://localhost) sont lues ; la source restera vide"));
+            }
+        }
+        if source.toutes_les.is_some_and(|t| t < crate::sources::MINIMUM) {
+            c.signaler(false, &ici, &lieu, format!("toutes_les est ramené à {} secondes, le minimum", crate::sources::MINIMUM));
+        }
+        for nom in source.entetes.iter().filter(|(_, v)| crate::sources::cle_en_clair(v)).map(|(n, _)| n) {
+            c.signaler(false, &ici, &lieu, format!("l'en-tête « {nom} » semble contenir une clé en clair : range-la dans le trousseau et écris trousseau:service"));
+        }
+    }
     if barre.elements.is_empty() {
         c.signaler(true, &[], "", "aucun élément : la barre principale serait vide, ajoute au moins un [[element]]".into());
     }
@@ -396,6 +500,8 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
 struct Controle<'a> {
     document: Option<(&'a str, DeTable<'a>)>,
     avis: Vec<Avis>,
+    /// Noms des `[[source]]`, pour les éléments qui en citent une.
+    sources: Vec<String>,
 }
 
 impl Controle<'_> {
@@ -452,6 +558,30 @@ impl Controle<'_> {
             }
             if let Element::Groupe { elements, .. } = element {
                 self.elements(elements, chemin, &format!("{lieu}groupe {}, ", i + 1));
+            }
+            let source = match element {
+                Element::Bouton { source, .. } | Element::Texte { source, .. } => source.as_deref(),
+                _ => None,
+            };
+            if let Some(s) = source.filter(|s| !self.sources.iter().any(|n| n == s)) {
+                self.signaler(false, chemin, &ici, format!("aucune [[source]] ne s'appelle « {s} » : l'élément affichera ⚠ source"));
+            }
+            if let Element::Texte { source, gabarit, symbole_selon, couleur_selon, .. } = element {
+                if source.is_none() && gabarit.is_some() {
+                    self.signaler(false, chemin, &ici, "un gabarit sans source n'affiche rien : ajoute source = \"…\"".into());
+                }
+                let symboles = symbole_selon.iter().flat_map(|s| s.valeurs.values().chain(&s.defaut));
+                for s in symboles.filter(|s| crate::barre::symbole(s).is_none()) {
+                    self.signaler(false, chemin, &ici, format!("le symbole SF « {s} » n'existe pas : il ne sera pas affiché"));
+                }
+                if let Some(c) = couleur_selon {
+                    for couleur in c.couleurs.iter().filter(|c| rgb(c).is_none()) {
+                        self.signaler(false, chemin, &ici, format!("la couleur « {couleur} » doit s'écrire #RRGGBB : elle sera ignorée"));
+                    }
+                    if c.couleurs.len() != c.seuils.len() + 1 {
+                        self.signaler(false, chemin, &ici, format!("couleur_selon : {} pour {} : il faut une couleur de plus que de seuils", nombre(c.couleurs.len(), "couleur"), nombre(c.seuils.len(), "seuil")));
+                    }
+                }
             }
             chemin.pop();
         }
@@ -648,6 +778,28 @@ type = "souple"
 type = "espace"
 largeur = 10
 
+[[element]]
+type = "texte"
+source = "meteo"
+gabarit = "{current.temperature_2m} °C"
+symbole_selon = { champ = "current.weather_code", valeurs = { "0" = "sun.max.fill" }, defaut = "cloud.fill" }
+couleur_selon = { champ = "current.temperature_2m", seuils = [10, 25], couleurs = ["#0A84FF", "#30D158", "#FF9F0A"] }
+
+[[element]]
+type = "bouton"
+texte = "{heure}"
+source = "horloge"
+
+[[source]]
+nom = "meteo"
+http = "https://api.open-meteo.com/v1/forecast?latitude=48.85&longitude=2.35&current=temperature_2m,weather_code"
+toutes_les = 600
+entetes = { Authorization = "Bearer trousseau:meteo" }
+
+[[source]]
+nom = "horloge"
+mcp = { commande = "python3 horloge-mcp.py", outil = "heure", arguments = { ville = "Paris", jours = 2 } }
+
 [[application]]
 app = "com.apple.Safari"
 herite = true
@@ -685,6 +837,7 @@ mod tests {
             largeur,
             action: Some(action),
             appui_long: None,
+            source: None,
         }
     }
 
@@ -714,6 +867,7 @@ mod tests {
                 },
             ],
             applications: vec![],
+            sources: vec![],
         };
         assert_eq!(lire(PAR_DEFAUT), Ok(attendu));
     }
@@ -768,6 +922,7 @@ mod tests {
                     masquer_control_strip: true,
                     elements: vec![bouton(action)],
                     applications: vec![],
+                    sources: vec![],
                 }),
                 "{ecrit}"
             );
@@ -914,13 +1069,41 @@ largeur = 100
   symbole = false
   largeur = 80
 
+[[element]]
+type = "texte"
+source = "meteo"
+gabarit = "{current.temperature_2m} °C"
+symbole_selon = { champ = "current.weather_code", valeurs = { "0" = "sun.max.fill" }, defaut = "cloud.fill" }
+couleur_selon = { champ = "current.temperature_2m", seuils = [10, 25], couleurs = ["#0A84FF", "#30D158", "#FF9F0A"] }
+largeur = 110
+action = "suivant"
+
 [[application]]
 app = "com.apple.Safari"
 herite = true
   [[application.element]]
   type = "bouton"
-  texte = "Onglet"
+  texte = "{heure}"
+  source = "horloge"
   action = { touche = "cmd+t" }
+
+[[source]]
+nom = "meteo"
+http = "https://example.org/meteo.json"
+toutes_les = 600
+entetes = { Authorization = "Bearer trousseau:meteo" }
+
+[[source]]
+nom = "horloge"
+mcp = { commande = "python3 horloge-mcp.py", outil = "heure", arguments = { ville = "Paris" } }
+
+[[source]]
+nom = "distante"
+mcp = { url = "https://example.org/mcp", outil = "heure" }
+
+[[source]]
+nom = "uptime"
+commande = "uptime"
 "##;
 
     const TOUT_EN: &str = r##"
@@ -1062,20 +1245,48 @@ width = 100
   symbol = false
   width = 80
 
+[[item]]
+type = "text"
+source = "meteo"
+template = "{current.temperature_2m} °C"
+symbol_by = { field = "current.weather_code", values = { "0" = "sun.max.fill" }, default = "cloud.fill" }
+color_by = { field = "current.temperature_2m", thresholds = [10, 25], colors = ["#0A84FF", "#30D158", "#FF9F0A"] }
+width = 110
+action = "next"
+
 [[application]]
 app = "com.apple.Safari"
 inherit = true
   [[application.item]]
   type = "button"
-  text = "Onglet"
+  text = "{heure}"
+  source = "horloge"
   action = { key = "cmd+t" }
+
+[[source]]
+name = "meteo"
+http = "https://example.org/meteo.json"
+every = 600
+headers = { Authorization = "Bearer trousseau:meteo" }
+
+[[source]]
+name = "horloge"
+mcp = { command = "python3 horloge-mcp.py", tool = "heure", arguments = { ville = "Paris" } }
+
+[[source]]
+name = "distante"
+mcp = { url = "https://example.org/mcp", tool = "heure" }
+
+[[source]]
+name = "uptime"
+command = "uptime"
 "##;
 
     #[test]
     fn alias_anglais_donnent_la_meme_barre() {
         let fr = lire(TOUT_FR).unwrap();
         assert_eq!(lire(TOUT_EN), Ok(fr.clone()));
-        assert_eq!(fr.elements.len(), 24);
+        assert_eq!((fr.elements.len(), fr.sources.len()), (25, 4));
         assert_eq!((fr.applications.len(), fr.applications[0].herite), (1, true));
         assert_eq!(lire(include_str!("../exemples/barre.en.toml")), lire(PAR_DEFAUT));
         // Une erreur dans un [[item]] garde sa ligne.
@@ -1107,6 +1318,38 @@ inherit = true
         }
         // README.md et README.fr.md donnent le même glossaire.
         assert_eq!(glossaires[0], glossaires[1]);
+    }
+
+    #[test]
+    fn sources_lues_et_controlees() {
+        let barre = lire(TOUT_FR).unwrap();
+        assert_eq!(barre.sources[1].mcp.as_ref().unwrap().arguments, Some(serde_json::json!({ "ville": "Paris" })));
+        assert_eq!(barre.sources[0].entetes["Authorization"], "Bearer trousseau:meteo");
+        // Une source écrit un seul de http, commande ou mcp ; mcp, commande ou url.
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[source]]\nnom = \"x\"\nhttp = \"https://a\"\ncommande = \"b\"\n").unwrap_err();
+        assert_eq!(erreur, "ligne 4 : [[source]] « x » : écris un seul de http, commande ou mcp");
+        let erreur = lire("[[source]]\nnom = \"x\"\nmcp = { outil = \"t\" }\n").unwrap_err();
+        assert_eq!(erreur, "ligne 1 : [[source]] « x » : mcp demande commande ou url, pas les deux");
+        assert!(lire("[[source]]\nnom = \"x\"\nhtp = \"https://a\"\n").unwrap_err().starts_with("ligne 3 : champ inconnu «htp»"));
+        let texte = "[[element]]\ntype = \"texte\"\nsource = \"metoe\"\n\n[[element]]\ntype = \"texte\"\ngabarit = \"{a}\"\n\n[[element]]\ntype = \"texte\"\nsource = \"m\"\ncouleur_selon = { champ = \"t\", seuils = [1], couleurs = [\"bleu\"] }\nsymbole_selon = { champ = \"c\", valeurs = { \"0\" = \"soleil\" } }\n\n[[element]]\ntype = \"bouton\"\nsource = \"inconnue\"\n\n[[source]]\nnom = \"m\"\nhttp = \"http://example.org/x\"\ntoutes_les = 1\nentetes = { Authorization = \"Bearer sk_live_0123456789abcdefghij\", Accept = \"application/json\" }\n\n[[source]]\nnom = \"m\"\nmcp = { url = \"https://example.org/mcp\", outil = \"t\" }\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(
+            avis,
+            [
+                "ligne 1 : aucune [[source]] ne s'appelle « metoe » : l'élément affichera ⚠ source",
+                "ligne 5 : un gabarit sans source n'affiche rien : ajoute source = \"…\"",
+                "ligne 9 : le symbole SF « soleil » n'existe pas : il ne sera pas affiché",
+                "ligne 9 : la couleur « bleu » doit s'écrire #RRGGBB : elle sera ignorée",
+                "ligne 9 : couleur_selon : 1 couleur pour 1 seuil : il faut une couleur de plus que de seuils",
+                "ligne 15 : aucune [[source]] ne s'appelle « inconnue » : l'élément affichera ⚠ source",
+                "ligne 19 : « http://example.org/x » : seules les adresses https:// (et http://localhost) sont lues ; la source restera vide",
+                "ligne 19 : toutes_les est ramené à 5 secondes, le minimum",
+                "ligne 19 : l'en-tête « Authorization » semble contenir une clé en clair : range-la dans le trousseau et écris trousseau:service",
+                "ligne 25 : le nom « m » est déjà pris par une autre source : renomme-la",
+            ]
+        );
+        // La clé elle-même n'apparaît dans aucun avis.
+        assert!(avis.iter().all(|a| !a.contains("sk_live")));
     }
 
     #[test]
@@ -1361,6 +1604,7 @@ symbole = "speaker.wave.2.fill"
                 largeur: None,
                 action: None,
                 appui_long: None,
+                source: None,
             }
         );
         for (ecrit, attendu) in [("texte", Affichage::Texte), ("les_deux", Affichage::LesDeux)] {
@@ -1400,6 +1644,8 @@ symbole = "speaker.wave.2.fill"
             include_str!("../exemples/developpeur.toml"),
             include_str!("../exemples/par-application.toml"),
             include_str!("../exemples/lanceur.toml"),
+            include_str!("../exemples/meteo.toml"),
+            include_str!("../exemples/mcp.toml"),
             BARRE_COMPLETE,
         ] {
             let barre = lire(texte).unwrap();

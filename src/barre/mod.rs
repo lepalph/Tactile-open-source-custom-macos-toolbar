@@ -18,7 +18,7 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool, NSObject};
 use objc2::{class, define_class, msg_send, sel, ClassType};
 use plateau::{installer_plateau, PLATEAU};
-use rafraichi::{rafraichir, Processus, Rafraichi, Sortie};
+use rafraichi::{rafraichir, Rafraichi, Sortie};
 use std::cell::RefCell;
 use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -29,6 +29,11 @@ pub(crate) use elements::{debordement, largeur_barre};
 pub(crate) use vues::{controler_image, icone_app, image, reduire, symbole};
 #[cfg(test)]
 pub(crate) use vues::{memoire_max, png_annonce};
+/// Pour `sources` : ses processus (`curl`, commandes, serveurs MCP) meurent avec la barre, comme les scripts.
+pub(crate) use rafraichi::{executer, inscrire, retirer, tuer_groupe};
+#[cfg(test)]
+pub(crate) use rafraichi::tuer_tous;
+pub(crate) type Processus = rafraichi::Processus;
 
 type Id = *mut AnyObject;
 
@@ -58,6 +63,9 @@ struct Etat {
     prochain_media: Instant,
     envoi: Sender<(usize, Sortie)>,
     reception: Receiver<(usize, Sortie)>,
+    /// Un canal d'arrêt par `[[source]]` : les lâcher (barre remplacée) arrête leurs fils.
+    sources: Vec<Sender<()>>,
+    valeurs: Receiver<crate::sources::Valeur>,
     /// Contrôles nommés (« ouvrir sun.max.fill », « fermer », « slider luminosite »…), pour l'autotest.
     controles: Vec<(String, Id)>,
     /// Bouton de chaque lanceur à icône et chemin de son app, pour le point « ouverte ».
@@ -144,6 +152,11 @@ define_class!(
                     elements::marquer_lanceurs(&e.lanceurs);
                 }
             });
+        }
+
+        #[unsafe(method(quitter:))]
+        fn quitter(&self, _notification: Id) {
+            ETAT.with_borrow(|e| e.iter().for_each(|e| rafraichi::tuer_tous(&e.processus)));
         }
 
         #[unsafe(method(tic:))]
@@ -379,7 +392,10 @@ fn installer(config: &Barre) {
     }
     PLEIN_ECRAN.set(config.masquer_control_strip);
     let (envoi, reception) = channel();
+    let (envoi_valeurs, valeurs) = channel();
     let mut etat = Etat {
+        sources: Vec::new(),
+        valeurs,
         config: config.clone(),
         erreur: Vec::new(),
         commandes: Vec::new(),
@@ -411,6 +427,12 @@ fn installer(config: &Barre) {
         *place = Some(etat);
     });
     presenter(a_presenter.or(base()).unwrap_or(principale));
+    // Les sources ne lisent rien (réseau, serveurs MCP) avant que la barre soit présentée.
+    ETAT.with_borrow_mut(|etat| {
+        if let Some(etat) = etat.as_mut() {
+            etat.sources = crate::sources::demarrer(&config.sources, envoi_valeurs, &etat.processus);
+        }
+    });
     if vide {
         eprintln!("tactile : {CONFIG_VIDE}");
         afficher_erreur(CONFIG_VIDE);
@@ -431,6 +453,7 @@ unsafe extern "C" {
     static NSWorkspaceDidActivateApplicationNotification: Id;
     static NSWorkspaceDidLaunchApplicationNotification: Id;
     static NSWorkspaceDidTerminateApplicationNotification: Id;
+    static NSApplicationWillTerminateNotification: Id;
 }
 
 /// La cible, pour `reveiller` depuis le fil de surveillance du fichier (elle vit jusqu'à la fin du programme).
@@ -458,6 +481,9 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
             let _: () = msg_send![centre, addObserver: cible(), selector: sel!(appLanceeOuQuittee:), name: nom, object: std::ptr::null_mut::<AnyObject>()];
         }
         CIBLE_PARTAGEE.store(cible(), Ordering::Release);
+        // Quitter tue aussi scripts, `curl` et serveurs MCP en cours (`terminate:` n'appelle pas les `Drop`).
+        let centre: Id = msg_send![class!(NSNotificationCenter), defaultCenter];
+        let _: () = msg_send![centre, addObserver: cible(), selector: sel!(quitter:), name: NSApplicationWillTerminateNotification, object: std::ptr::null_mut::<AnyObject>()];
         RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
         installer_plateau();
         crate::menu::installer();
