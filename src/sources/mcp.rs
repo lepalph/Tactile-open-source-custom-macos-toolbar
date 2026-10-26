@@ -334,6 +334,19 @@ mod tests {
         assert_eq!(p.lock().unwrap().as_ref().unwrap().len(), 0, "le sleep 39 est tué");
     }
 
+    /// S3 : un serveur qui écrit 50 Mo sans fin de ligne. La ligne est coupée à 1 Mo et le serveur tué, sans que la
+    /// mémoire du test prenne les 50 Mo (avant : `lines()` gardait toute la ligne).
+    #[test]
+    fn une_ligne_geante_arrete_le_serveur() {
+        let p = processus();
+        let avant = crate::essais::pic_memoire();
+        let debut = Instant::now();
+        assert!(Client::stdio("head -c 50000000 /dev/zero; sleep 21", &p, Duration::from_secs(30)).is_err());
+        let pris = crate::essais::pic_memoire() - avant;
+        assert!(debut.elapsed() < Duration::from_secs(10), "pas tué au dépassement : {:?}", debut.elapsed());
+        assert!(pris < 30 << 20, "{} Mo de plus en mémoire", pris >> 20);
+    }
+
     /// Streamable HTTP sur un serveur local : moderne en JSON, puis ancien (sonde refusée en 400, session, SSE).
     #[test]
     fn streamable_http() {

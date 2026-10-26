@@ -270,6 +270,12 @@ fn envoyer_config(config: Result<Barre, String>) {
     }
 }
 
+/// Aujourd'hui, tout chemin venu de la page est suivi (corrigé au commit suivant).
+#[cfg_attr(not(test), allow(dead_code))]
+fn chemin_permis(_chemin: &str, _pilote: bool, _accorde: Option<&Path>) -> bool {
+    true
+}
+
 /// La copie faite (chemin avec `~` et aperçu), ou la raison du refus.
 fn importer_image(copie: Result<PathBuf, String>) {
     match copie {
@@ -720,6 +726,45 @@ mod tests {
         let d = std::env::temp_dir().join(format!("tactile-editeur-{nom}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
+    }
+
+    /// S5 (revue 0.3, trouvaille 4) : un chemin venu de la page n'est suivi qu'en mode pilote, dans le dossier
+    /// temporaire ou le dépôt, ou s'il vient d'être rendu par un sélecteur de fichier.
+    #[test]
+    fn chemins_venus_de_la_page() {
+        let d = dossier_essai("chemins");
+        std::fs::create_dir_all(&d).unwrap();
+        let dans_tmp = d.join("capture.png").to_string_lossy().into_owned();
+        let depot = std::env::current_dir().unwrap().join("docs/capture.png").to_string_lossy().into_owned();
+        // Sans pilote : rien, sauf le fichier que le sélecteur vient de rendre.
+        assert!(!chemin_permis(&dans_tmp, false, None));
+        assert!(!chemin_permis(&depot, false, None));
+        assert!(chemin_permis("/Users/x/Desktop/barre.toml", false, Some(Path::new("/Users/x/Desktop/barre.toml"))));
+        assert!(!chemin_permis("/Users/x/Desktop/autre.toml", false, Some(Path::new("/Users/x/Desktop/barre.toml"))));
+        // Pilote : dossier temporaire et dépôt seulement.
+        assert!(chemin_permis(&dans_tmp, true, None));
+        assert!(chemin_permis(&depot, true, None));
+        assert!(chemin_permis("/tmp/x.png", true, None));
+        let home = std::env::var("HOME").unwrap();
+        let refuses = [
+            "/etc/passwd".to_string(),
+            format!("{home}/.ssh/authorized_keys"),
+            format!("{home}/Library/LaunchAgents/x.plist"),
+            "~/.zshrc".into(),
+            "capture.png".into(),
+            format!("{}/../../../etc/passwd", d.display()),
+            d.join("absent/x.png").to_string_lossy().into_owned(),
+            String::new(),
+        ];
+        for c in &refuses {
+            assert!(!chemin_permis(c, true, None), "{c}");
+        }
+        // Un lien posé dans le dossier temporaire ne mène pas ailleurs.
+        std::os::unix::fs::symlink("/etc", d.join("lien")).unwrap();
+        std::os::unix::fs::symlink("/etc/hosts", d.join("hosts")).unwrap();
+        assert!(!chemin_permis(&d.join("lien/passwd").to_string_lossy(), true, None));
+        assert!(!chemin_permis(&d.join("hosts").to_string_lossy(), true, None));
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

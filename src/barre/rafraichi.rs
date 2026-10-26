@@ -134,6 +134,9 @@ fn appliquer(bouton: Id, riche: &Riche, element: &str) {
     styler(bouton, riche.couleur_texte.as_deref(), None);
 }
 
+/// La valeur d'une commande dont la sortie dépasse `sources::TAILLE_MAX`.
+pub(crate) const TROP_LONG: &str = "⚠ trop long";
+
 /// Ce qu'un fil renvoie : la sortie à afficher, et ce qui a cloché (vide si rien).
 pub(crate) struct Sortie {
     pub texte: String,
@@ -373,6 +376,25 @@ mod tests {
         assert_eq!(sortie.erreur, "code 3, oups");
         assert_eq!(executer_script("echo bien", Duration::from_secs(5), &p).erreur, "");
         assert_eq!(p.lock().unwrap().as_ref().unwrap().len(), 0);
+    }
+
+    use crate::essais::pic_memoire;
+
+    /// S3 (revue 0.3, trouvaille 2) : 50 Mo sur la sortie. La lecture s'arrête à 1 Mo, le groupe est tué, la valeur
+    /// dit « ⚠ trop long » ; la mémoire du test ne prend pas les 50 Mo (avant : tout était gardé, deux fois).
+    #[test]
+    fn une_sortie_geante_est_coupee_sans_remplir_la_memoire() {
+        let avant = pic_memoire();
+        let debut = Instant::now();
+        let sortie = executer_script("head -c 50000000 /dev/zero; sleep 20", Duration::from_secs(30), &processus());
+        let pris = pic_memoire() - avant;
+        assert!(debut.elapsed() < Duration::from_secs(10), "pas tué au dépassement : {:?}", debut.elapsed());
+        assert_eq!(sortie.texte, TROP_LONG);
+        assert_eq!(sortie.erreur, "sortie de plus de 1 Mo, commande arrêtée");
+        assert!(pris < 30 << 20, "{} Mo de plus en mémoire", pris >> 20);
+        assert_eq!(vivants("head -c 50000000 /dev/zero; sleep 20"), 0, "le groupe survit");
+        // Sous la limite, rien ne change.
+        assert_eq!(executer_script("head -c 1000 /dev/zero", Duration::from_secs(5), &processus()).texte.len(), 1000);
     }
 
     #[test]
