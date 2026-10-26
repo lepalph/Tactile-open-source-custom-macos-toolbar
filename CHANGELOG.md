@@ -4,9 +4,18 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
-- Editor: redesigned like macOS System Settings (sidebar, grouped rows, switches, light and dark), suggests the closest symbol for a typo, and `capture` now uses WebKit snapshots that work with the screen locked (`TACTILE_APPARENCE=clair|sombre` forces the theme).
+### Added
+
 - Editor: add your own logo to a button with Choose an image… or by dropping a file from the Finder; it is copied to `~/.config/tactile/icones/` (SVG, PDF and icns converted to PNG), with a monochrome switch. A button with both an image and a symbol now shows the image.
 - Export and import a bar: Export… / Import… in the editor (or drop a `.toml` / `.zip` on the window) and `tactile --export <file>` / `tactile --import <file> [--yes]`. A bar with logos is exported as a `.zip` (`barre.toml` + the `icones/` it uses, paths made relative). Import shows a preview and lists everything the bar can run (shell, AppleScript, shortcuts, scripts, apps, non-web URLs) before **Replace my bar**; the current bar goes into the history. Untrusted archives are read in memory: entries with `..`, absolute paths or symlinks are refused, limits of 10 MB per archive, 2 MB per image, 200 files and 1 MB of TOML, and logos are redrawn as PNG.
+- `lanceur` element (`launcher`): an app's real icon, a tap opens it or brings it to the front, a dot under the icon while it runs; `texte`, `affichage`, `largeur`, `appui_long`. A missing app shows its name as text and `--verifier` warns. In a `groupe`, launchers make an app drawer (`exemples/lanceur.toml`).
+- System actions: `mission_control`, `fenetres_app` (`app_windows`), `bureau` (`show_desktop`), `launchpad`, `capture_options` (`screenshot_options`) through Apple's own apps; `spotlight`, `capture_ecran` (`screenshot`), `capture_zone` (`screenshot_area`), `emojis` (`emoji`), `verrouiller` (`lock_screen`), `forcer_quitter` (`force_quit`) as macOS's default shortcuts.
+- `TACTILE_MESURE=1` logs how long reloads, app switches and sub-bars take.
+
+### Changed
+
+- Editor: redesigned like macOS System Settings (sidebar, grouped rows, switches, light and dark), suggests the closest symbol for a typo, and `capture` now uses WebKit snapshots that work with the screen locked (`TACTILE_APPARENCE=clair|sombre` forces the theme).
+- The bar follows a saved file in under 300 ms (was up to 1 s): the file is checked every 0.2 s, the new bar is applied right away, and warnings are computed after it.
 - Editor: a file dropped in the window is limited to 10 MB, with a clear message (it was unbounded on the Rust side).
 
 ## [0.2.0] - 2026-10-26

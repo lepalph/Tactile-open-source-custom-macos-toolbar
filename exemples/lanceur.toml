@@ -1,0 +1,82 @@
+# Tes apps dans la barre : un `lanceur` montre la vraie icône d'une app, l'ouvre ou la met au premier plan,
+# et un petit point dessous dit qu'elle est ouverte, comme dans le Dock.
+# `app` prend le nom du dossier .app sans l'extension, son bundle id ou son chemin, comme l'action `app`.
+
+masquer_control_strip = true
+
+# Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène celle-ci.
+[[element]]
+type = "bouton"
+symbole = "apple.logo"
+largeur = 56
+action = "barre_apple"
+
+# Deux apps toujours à portée, dans la barre principale.
+[[element]]
+type = "lanceur"
+app = "Safari"
+
+[[element]]
+type = "lanceur"
+app = "Notes"
+
+# Le tiroir d'apps : un groupe ouvre une sous-barre de lanceurs, ✕ la referme.
+[[element]]
+type = "groupe"
+symbole = "square.grid.2x2"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Calendar"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Music"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Mail"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Finder"
+
+  # Par bundle id, avec son nom à côté de l'icône ; un appui long ouvre Launchpad.
+  [[element.element]]
+  type = "lanceur"
+  app = "com.apple.systempreferences"
+  texte = "Réglages"
+  appui_long = "launchpad"
+
+[[element]]
+type = "souple"
+
+# Les raccourcis système, sans lancer d'app à la main.
+[[element]]
+type = "bouton"
+symbole = "rectangle.3.group"
+action = "mission_control"
+appui_long = "fenetres_app"
+
+[[element]]
+type = "bouton"
+symbole = "magnifyingglass"
+action = "spotlight"
+
+[[element]]
+type = "bouton"
+symbole = "camera.viewfinder"
+action = "capture_zone"
+appui_long = "capture_options"
+
+[[element]]
+type = "bouton"
+symbole = "lock.fill"
+action = "verrouiller"
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "heure"
+format = "HH:mm"

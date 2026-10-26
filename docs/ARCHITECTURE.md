@@ -8,12 +8,14 @@ Ce document sert à reprendre le code : où est quoi, comment ajouter quelque ch
 main.rs
  ├─ --personnaliser → editeur::lancer_seul()   la fenêtre de réglage seule, sans Touch Bar (voir plus bas)
  ├─ config::charger()          lit ~/.config/tactile/barre.toml (ou la barre par défaut)
- ├─ config::surveiller()       fil qui relit le fichier quand sa date change, envoie la nouvelle barre par un canal
+ ├─ config::surveiller()       fil qui relève la date du fichier toutes les 0,2 s ; s'il a changé, envoie la nouvelle barre
+ │                             par un canal, puis barre::reveiller() (tic: tout de suite sur le fil principal)
  └─ barre::lancer()            app AppKit sans icône dans le Dock
      ├─ plateau                icône ✳ dans le Control Strip d'Apple
      ├─ menu                   icône de la barre des menus
      ├─ installer(config)      construit les items de la principale et d'une barre par [[application]], présente la base
      ├─ observateur NSWorkspace → appActivee:   suit l'app active (aucun sondage)
+     ├─ observateur NSWorkspace → appLanceeOuQuittee:   point « ouverte » sous l'icône des lanceurs
      └─ minuteur 0,1 s → tic   applique une config rechargée, rafraîchit heure / musique / scripts
 
 appui sur un bouton
@@ -38,16 +40,16 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 |---|---|
 | `src/main.rs` | Ligne de commande (`--help`, `--version`, `--verifier`, `--exporter`, `--importer`), démarrage, journal `~/Library/Logs/Tactile.log` quand il n'y a pas de terminal. |
 | `src/config.rs` | Types `Barre`, `Element`, `Reglage`, `Application` (barre par app : `application_pour`, fusion `herite` dans `elements_avec`) ; lecture TOML avec erreurs en français (`lire` : `[[item]]` fondus dans `[[element]]` dans l'ordre du fichier, première erreur dans l'ordre du fichier) ; validateur partagé `controler` (couleur, symbole, image, app, débordement de chaque barre, app en double, `[[element]]` égaré, barre vide) appelé par `--verifier`, l'éditeur et le chargement de la barre ; surveillance du fichier. Tests de la config. |
-| `src/actions/mod.rs` | Enum `Action` (ce qu'on écrit dans `action = …`) et `executer`. |
+| `src/actions/mod.rs` | Enum `Action` (ce qu'on écrit dans `action = …`) et `executer` ; apps (`app_existe`, `chemin_app`, `app_ouverte`) ; raccourcis système : par l'app d'Apple quand elle existe (`open -b com.apple.exposelauncher [--args 1|2]`, Launchpad, Capture d'écran), sinon au clavier (`raccourci_systeme`). |
 | `src/actions/luminosite.rs` | Luminosité de l'écran intégré (DisplayServices, privé). |
 | `src/actions/volume.rs` | Volume et muet de la sortie par défaut (CoreAudio). |
 | `src/actions/media.rs` | Titre en cours et commandes de lecture (via `media-control`). |
 | `src/actions/clavier.rs` | Frappes simulées : `echap`, `{ touche = "cmd+shift+4" }` (type `Touche`, vérifié à la lecture de la config), `{ touche = "cmd+shift+keycode:21" }` (un code avec modificateurs), `{ keycode = n }`. Les caractères sont résolus sur la disposition clavier courante (`UCKeyTranslate`) : « a » donne le bon code en AZERTY, `\` y ajoute ⌥⇧, et un chiffre vise toujours la rangée du haut. |
 | `src/barre/mod.rs` | État de la barre, classe `TactileCible` (reçoit appuis, sliders, minuteur), présentation, `afficher` / `masquer`. |
-| `src/barre/elements.rs` | Transforme chaque `Element` en item de Touch Bar ; sous-barres (`depliable`). |
+| `src/barre/elements.rs` | Transforme chaque `Element` en item de Touch Bar ; sous-barres (`depliable`) ; point des lanceurs (`marquer_lanceurs`). |
 | `src/barre/rafraichi.rs` | Éléments vivants : heure, titre en cours, scripts (texte brut ou JSON `Riche`), batterie. |
 | `src/barre/batterie.rs` | Lecture et analyse de `pmset -g batt`, symbole de pile selon le niveau. |
-| `src/barre/vues.rs` | Outils AppKit (texte, symbole SF, image de fichier réduite et gardée en cache par chemin, couleur, style du titre, largeur, barre, `lacher`). |
+| `src/barre/vues.rs` | Outils AppKit (texte, symbole SF, image de fichier et icône d'app réduites et gardées en cache par chemin, couleur, style du titre, largeur, barre, `lacher`). |
 | `src/barre/plateau.rs` | Icône ✳ du Control Strip. |
 | `src/menu.rs` | Icône de la barre des menus, lancement au démarrage (`SMAppService`). |
 | `src/editeur/mod.rs` | Fenêtre « Personnaliser ma barre » : NSWindow + WKWebView, pont JS ⇄ Rust, écriture et vérification du fichier. |
@@ -57,6 +59,7 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire ; préréglage « Musique » de l'éditeur. `barre.en.toml` : la même avec les alias anglais (test `alias_anglais_donnent_la_meme_barre`). |
 | `exemples/simple.toml`, `exemples/developpeur.toml` | Les deux autres préréglages de l'éditeur. |
 | `exemples/par-application.toml` | Barres par application commentées (testé par `aller_retour_toml`). |
+| `exemples/lanceur.toml` | Lanceurs, tiroir d'apps (un `groupe` de lanceurs) et raccourcis système (testé par `aller_retour_toml`). |
 | `scripts/empaqueter.sh` | `Tactile.app` universelle signée ad hoc + `Tactile.zip`. |
 
 ## Recettes
@@ -100,7 +103,7 @@ Rien de ce que l'utilisateur a écrit ne se perd :
 
 Les logos (`image` d'un bouton) : « Choisir une image… » ouvre un NSOpenPanel côté Rust ; le fichier est copié dans `icones/`, à côté du fichier de config (`TACTILE_CONFIG` compris), et `image` pointe vers la copie, avec `~` si elle est dans le home. Un fichier glissé depuis le Finder (sur un bouton de l'aperçu ou sur la ligne « Image ») passe par le JS : la page ne voit pas son chemin, elle le lit avec `FileReader` et l'envoie en base64 (`deposerImage`), Rust l'écrit dans un dossier temporaire puis l'importe comme un fichier choisi. Tout autre dépôt de fichier est refusé par la page, sinon la WKWebView ouvrirait le fichier à sa place. `importerImage { chemin }` fait la même copie sans sélecteur : c'est ce qu'utilise un pilote `TACTILE_EDITEUR_JS`. L'aperçu affiche l'image que la barre affichera (`barre::image`, réduite à 40 px, en data URL) ; monochrome (`gabarit`), un `filter: brightness(0) invert(1)` la rend blanche d'après sa transparence, comme un gabarit AppKit. Introuvable : `null`, et la page propose d'en choisir une autre. La barre préfère l'image au symbole quand les deux sont là.
 
-Exporter et importer (`partage.rs`). L'export part de la barre affichée dans la page (enregistrée ou non) ; sans logo, un `.toml` ; avec, un `.zip` dont le `barre.toml` pointe vers `icones/<nom>` et qui ne contient que les images utilisées. Un `.toml` choisi pour une barre à logos : `exportAvertir`, la page propose le `.zip`. L'import traite le fichier comme non fiable : reconnu `.zip` à sa signature `PK`, lu en mémoire (jamais extrait sous ses propres noms) ; une entrée avec `..`, un chemin absolu (`/`, `\`, `C:`) ou un lien symbolique fait refuser toute l'archive ; seuls `barre.toml` et `icones/<image>` sont gardés (le reste est listé en avis) ; limites : 10 Mo d'archive (vérifiée avant lecture), 200 entrées, 2 Mo par image et 1 Mo de TOML, relues avec `take` puisque la taille annoncée peut mentir. Les images partent dans un dossier temporaire supprimé avec le `Paquet`. Puis `config::lire`, `config::controler` (grave = refus, le reste en avis) et `verifier`. `commandes` liste ce qui lance quelque chose (`shell`, `applescript`, `touche`, `keycode`, `app`, `url` non http(s), commande d'un `script`, appui long compris) ; la page l'affiche avec l'aperçu de la barre et donne le focus à Annuler s'il y en a. « Remplacer ma barre » : chaque logo passe par `icones::importer_en_png` (toujours redessiné en PNG, jamais copié tel quel ; un suffixe `-<8 hex>` du nom d'origine est retiré avant de rajouter le hachage du contenu), puis `enregistrer` écrit avec l'historique. Un `.toml` seul peut emporter les images relatives `icones/x.png` posées à côté de lui (un `.zip` décompressé), sous les mêmes limites. Le dépôt d'un fichier dans la page (image ou barre) est limité à 10 Mo, vérifié par le JS et par Rust avant de décoder le base64 (`icones::decoder_depot`). Le `.zip` exporté réécrit la barre par `config::ecrire` : les commentaires du fichier n'y sont pas ; un `.toml` exporté en ligne de commande recopie le fichier tel quel.
+Exporter et importer (`partage.rs`). L'export part de la barre affichée dans la page (enregistrée ou non) ; sans logo, un `.toml` ; avec, un `.zip` dont le `barre.toml` pointe vers `icones/<nom>` et qui ne contient que les images utilisées. Un `.toml` choisi pour une barre à logos : `exportAvertir`, la page propose le `.zip`. L'import traite le fichier comme non fiable : reconnu `.zip` à sa signature `PK`, lu en mémoire (jamais extrait sous ses propres noms) ; une entrée avec `..`, un chemin absolu (`/`, `\`, `C:`) ou un lien symbolique fait refuser toute l'archive ; seuls `barre.toml` et `icones/<image>` sont gardés (le reste est listé en avis) ; limites : 10 Mo d'archive (vérifiée avant lecture), 200 entrées, 2 Mo par image et 1 Mo de TOML, relues avec `take` puisque la taille annoncée peut mentir. Les images partent dans un dossier temporaire supprimé avec le `Paquet`. Puis `config::lire`, `config::controler` (grave = refus, le reste en avis) et `verifier`. `commandes` liste ce qui lance quelque chose (`shell`, `applescript`, `touche`, `keycode`, `app`, `url` non http(s), actions système, app d'un `lanceur`, commande d'un `script`, appui long compris) ; la page l'affiche avec l'aperçu de la barre et donne le focus à Annuler s'il y en a. « Remplacer ma barre » : chaque logo passe par `icones::importer_en_png` (toujours redessiné en PNG, jamais copié tel quel ; un suffixe `-<8 hex>` du nom d'origine est retiré avant de rajouter le hachage du contenu), puis `enregistrer` écrit avec l'historique. Un `.toml` seul peut emporter les images relatives `icones/x.png` posées à côté de lui (un `.zip` décompressé), sous les mêmes limites. Le dépôt d'un fichier dans la page (image ou barre) est limité à 10 Mo, vérifié par le JS et par Rust avant de décoder le base64 (`icones::decoder_depot`). Le `.zip` exporté réécrit la barre par `config::ecrire` : les commentaires du fichier n'y sont pas ; un `.toml` exporté en ligne de commande recopie le fichier tel quel.
 
 Les symboles SF n'existent pas dans le web : Rust les rend en PNG (`NSImage imageWithSystemSymbolName:` → `TIFFRepresentation` → `NSBitmapImageRep`), les envoie en data URL, et la page les affiche en `mask-image` sur `currentColor`. Un nom inconnu renvoie `null` : la page le signale et l'enregistrement le refuse (un symbole inconnu fait planter la barre, cf. SYNTHESE A1).
 
@@ -144,6 +147,25 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 - Une config sans élément dans la barre principale (fichier vide, `>` au lieu de `>>`) laissait la Touch Bar noire, sans esc : `installer` montre la barre par défaut (`exemples/barre.toml`, embarquée) avec le badge « ⚠ config vide » (`config_affichee`).
 - Le badge « ⚠ config » est ajouté à la principale **et** à chaque barre d'application (un bouton par barre : une vue n'a qu'un parent) : on édite souvent sa config dans l'app qui a sa propre barre.
 - Un avertissement `NSLayoutConstraint … exceeds internal limits` apparaît au lancement. Il est inoffensif ; sa source n'est pas encore identifiée.
+- `Mission Control.app` n'est qu'un lanceur : il envoie `CoreDockSendNotification` au Dock et quitte. Son premier argument choisit la notification (lu dans son code : rien = `com.apple.expose.awake`, `1` = `com.apple.showdesktop.awake`, `2` = `com.apple.expose.front.awake`). D'où `mission_control`, `bureau` et `fenetres_app` sans touche simulée ni Accessibilité ; un second appel referme. Pareil pour Launchpad (`com.apple.launchpad.toggle`) et `Screenshot.app` (⌘⇧5, lance `screencaptureui`).
+- Spotlight, ⌘⇧3, ⌘⇧4, émojis, verrouiller et forcer à quitter n'ont ni app ni API publique : ce sont les raccourcis par défaut, simulés. Sans l'autorisation Accessibilité, `CGEventPost` ne fait rien, sans erreur ; lancé depuis un terminal, c'est l'autorisation du terminal qui compte. Dictée, Ne pas déranger et luminosité du clavier n'ont pas d'action : aucun moyen public fiable (raccourci de dictée choisi par l'utilisateur, Focus sans API, touches `NX_KEYTYPE_ILLUMINATION` non vérifiables et le réglage de CoreBrightness ignoré écran verrouillé).
+- Le point d'un lanceur suit `NSWorkspaceDidLaunch/DidTerminateApplicationNotification` : à la notification de fin, l'app quittée est encore dans `runningApplicationsWithBundleIdentifier:`, marquée `isTerminated` (`actions::app_ouverte` l'écarte).
+- Les avis de `config::controler` (apps, images, symboles) sont calculés **après** l'envoi de la barre rechargée : avant, ils retardaient le rechargement, et le fil de surveillance relisait les images sans cache (le cache d'images est par fil).
+
+## Mesures
+
+`TACTILE_MESURE=1` écrit au journal une ligne `mesure : …` par passage : `installer`, « enregistrement du fichier → barre rechargée » (de la date du fichier à la fin d'`installer`), « appui → sous-barre montrée », « ✕ → base montrée », « app activée → barre de l'app montrée » (le travail de Tactile après la notification ; le dessin par la Touch Bar ne se mesure pas d'ici). Mesuré sur un MacBook Pro M1 13 pouces, macOS 15.8.1, binaire release, barre de l'utilisateur + une `[[application]]` (TextEdit, `herite`), 8 enregistrements à 1,3 s d'écart, puis autotest :
+
+| | Cible | Avant (0.2.0) | Après |
+|---|---|---|---|
+| Enregistrement → barre rechargée | < 300 ms | 137 à 1025 ms (moyenne 620) | 86 à 256 ms (moyenne 172) |
+| `installer` complet | | 20 à 43 ms | 20 à 48 ms (avec 4 lanceurs) |
+| Appui sur un groupe → sous-barre | < 30 ms | 0,1 à 0,2 ms | 0,0 à 0,2 ms |
+| ✕ → base | | 0,2 à 1,2 ms | 0,1 à 0,7 ms |
+| App activée → barre de l'app | < 50 ms | 0,3 ms | 2,4 ms |
+| CPU au repos (`top`, 5 × 3 s) | ≤ 0,2 % | 0,2 % | 0,1 à 0,2 % |
+
+Le rechargement attendait le sondage d'une seconde, puis les avis de `controler`, puis le `tic` suivant (jusqu'à 0,1 s). Maintenant : sondage à 0,2 s (un `stat`, sans effet mesurable sur le CPU), barre envoyée avant les avis, et `reveiller` lance le `tic` aussitôt. `installer` reconstruit toutes les barres à chaque rechargement ; les images de fichier et les icônes d'app sont en cache (par chemin et date), les symboles SF passent par le cache d'AppKit, les sliders relisent luminosité et volume. Aucune animation n'est ajoutée : `montrer` change le contenu de la barre système sans nouvelle présentation. Écran verrouillé pendant ces mesures : l'app au premier plan était simulée (`APP_SIMULEE`), la latence entre l'activation réelle et la notification n'est pas mesurée.
 
 ## Vérifier un changement
 

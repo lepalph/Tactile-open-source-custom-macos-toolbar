@@ -20,6 +20,7 @@ use objc2::{class, define_class, msg_send, sel, ClassType};
 use plateau::{installer_plateau, PLATEAU};
 use rafraichi::{rafraichir, Processus, Rafraichi, Sortie};
 use std::cell::RefCell;
+use std::sync::atomic::{AtomicPtr, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 use vues::{barre_touch, texte};
@@ -57,6 +58,8 @@ struct Etat {
     reception: Receiver<(usize, Sortie)>,
     /// Contrôles nommés (« ouvrir sun.max.fill », « fermer », « slider luminosite »…), pour l'autotest.
     controles: Vec<(String, Id)>,
+    /// Bouton de chaque lanceur à icône et chemin de son app, pour le point « ouverte ».
+    lanceurs: Vec<(Id, String)>,
 }
 
 /// Les barres et formateurs créés à +1 sont à `Etat` : les remplacer libère toute l'ancienne barre (items, boutons, images).
@@ -131,11 +134,27 @@ define_class!(
             suivre_app();
         }
 
+        /// `NSWorkspaceDidLaunchApplicationNotification` / `…DidTerminate…` : le point des lanceurs.
+        #[unsafe(method(appLanceeOuQuittee:))]
+        fn app_lancee_ou_quittee(&self, _notification: Id) {
+            ETAT.with_borrow(|e| {
+                if let Some(e) = e.as_ref() {
+                    elements::marquer_lanceurs(&e.lanceurs);
+                }
+            });
+        }
+
         #[unsafe(method(tic:))]
         fn tic(&self, _minuteur: Id) {
             let recharge = RECHARGES.with_borrow(|r| r.as_ref().and_then(|r| r.try_recv().ok()));
             match recharge {
-                Some(Ok(config)) => installer(&config),
+                Some(Ok(config)) => {
+                    mesurer("installer", || installer(&config));
+                    if mesure() {
+                        let depuis = std::fs::metadata(crate::config::chemin()).and_then(|m| m.modified()).ok().and_then(|d| d.elapsed().ok()).unwrap_or_default();
+                        eprintln!("mesure : enregistrement du fichier → barre rechargée {:.1} ms", depuis.as_secs_f64() * 1000.0);
+                    }
+                }
                 Some(Err(e)) => {
                     eprintln!("tactile : config ignorée, {e}");
                     afficher_erreur(&e);
@@ -167,12 +186,26 @@ fn declencher(index: isize, long: bool) {
     match trouve {
         Some((Commande::Systeme(Action::BarreApple), _)) => masquer(),
         Some((Commande::Systeme(action), _)) => signaler(actions::executer(&action)),
-        Some((Commande::Ouvrir(k), barres)) => montrer(barres[k]),
-        Some((Commande::Fermer, barres)) => montrer(base().unwrap_or(barres[0])),
+        Some((Commande::Ouvrir(k), barres)) => mesurer("appui → sous-barre montrée", || montrer(barres[k])),
+        Some((Commande::Fermer, barres)) => mesurer("✕ → base montrée", || montrer(base().unwrap_or(barres[0]))),
         None => {}
     }
 }
 
+
+/// `TACTILE_MESURE=1` : les durées des chemins qui doivent sembler instantanés vont au journal (docs/ARCHITECTURE.md, « Mesures »).
+fn mesure() -> bool {
+    std::env::var_os("TACTILE_MESURE").is_some()
+}
+
+fn mesurer<R>(quoi: &str, f: impl FnOnce() -> R) -> R {
+    let debut = Instant::now();
+    let r = f();
+    if mesure() {
+        eprintln!("mesure : {quoi} {:.1} ms", debut.elapsed().as_secs_f64() * 1000.0);
+    }
+    r
+}
 
 fn cible() -> Id {
     CIBLE.with_borrow(|c| Retained::as_ptr(c.as_ref().unwrap()) as Id)
@@ -249,6 +282,10 @@ fn base() -> Option<Id> {
 /// Montre la barre de l'app au premier plan (appelée par l'observateur de `NSWorkspace`, et par l'autotest quand il simule l'app). Une sous-barre ouverte reste jusqu'à son ✕, qui ramène alors la bonne base ;
 /// sous la barre d'Apple, seul le contenu change, sans nouvelle présentation.
 pub(super) fn suivre_app() {
+    mesurer("app activée → barre de l'app montrée", suivre);
+}
+
+fn suivre() {
     let Some(voulue) = base() else { return };
     let courante = COURANTE.get();
     let sur_une_base = ETAT.with_borrow(|e| e.as_ref().is_some_and(|e| courante == e.barres[0] || e.applis.contains(&courante)));
@@ -345,6 +382,7 @@ fn installer(config: &Barre) {
         erreur: Vec::new(),
         commandes: Vec::new(),
         controles: Vec::new(),
+        lanceurs: Vec::new(),
         barres: vec![std::ptr::null_mut()],
         applis: Vec::new(),
         rafraichis: Vec::new(),
@@ -389,6 +427,19 @@ fn preparer_cible() {
 #[link(name = "AppKit", kind = "framework")]
 unsafe extern "C" {
     static NSWorkspaceDidActivateApplicationNotification: Id;
+    static NSWorkspaceDidLaunchApplicationNotification: Id;
+    static NSWorkspaceDidTerminateApplicationNotification: Id;
+}
+
+/// La cible, pour `reveiller` depuis le fil de surveillance du fichier (elle vit jusqu'à la fin du programme).
+static CIBLE_PARTAGEE: AtomicPtr<AnyObject> = AtomicPtr::new(std::ptr::null_mut());
+
+/// Applique tout de suite une config rechargée, sans attendre le `tic` suivant (jusqu'à 0,1 s de plus). Tout fil.
+pub fn reveiller() {
+    let cible = CIBLE_PARTAGEE.load(Ordering::Acquire);
+    if !cible.is_null() {
+        unsafe { let _: () = msg_send![cible, performSelectorOnMainThread: sel!(tic:), withObject: std::ptr::null_mut::<AnyObject>(), waitUntilDone: Bool::NO]; }
+    }
 }
 
 pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
@@ -401,6 +452,10 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         let espace: Id = msg_send![class!(NSWorkspace), sharedWorkspace];
         let centre: Id = msg_send![espace, notificationCenter];
         let _: () = msg_send![centre, addObserver: cible(), selector: sel!(appActivee:), name: NSWorkspaceDidActivateApplicationNotification, object: std::ptr::null_mut::<AnyObject>()];
+        for nom in [NSWorkspaceDidLaunchApplicationNotification, NSWorkspaceDidTerminateApplicationNotification] {
+            let _: () = msg_send![centre, addObserver: cible(), selector: sel!(appLanceeOuQuittee:), name: nom, object: std::ptr::null_mut::<AnyObject>()];
+        }
+        CIBLE_PARTAGEE.store(cible(), Ordering::Release);
         RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
         installer_plateau();
         crate::menu::installer();

@@ -34,7 +34,7 @@ const HAUTEUR_IMAGE: f64 = 20.0;
 /// Densité de l'écran de la Touch Bar : une image est gardée à 2 pixels par point.
 const ECHELLE: f64 = 2.0;
 
-/// Chemin et gabarit → date du fichier et image réduite.
+/// Chemin et gabarit (ou `app:chemin` et ouverte) → date du fichier et image réduite.
 type Cache = HashMap<(String, bool), (Option<SystemTime>, Retained<AnyObject>)>;
 
 thread_local! {
@@ -50,13 +50,32 @@ pub(crate) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
         Some(suite) => format!("{}/{suite}", std::env::var("HOME").unwrap_or_default()),
         None => chemin.to_string(),
     };
-    let date = std::fs::metadata(&chemin).ok()?.modified().ok();
-    let cle = (chemin, gabarit);
+    en_cache(&chemin, (chemin.clone(), gabarit), || reduire(&chemin, gabarit))
+}
+
+/// L'icône du `.app` à `chemin` (celle du Finder et du Dock), réduite comme une image de fichier et gardée dans le même
+/// cache (clé `app:chemin`), relue si l'app change. `ouverte` : un point dessous, comme dans le Dock.
+pub(crate) fn icone_app(chemin: &str, ouverte: bool) -> Option<Id> {
+    en_cache(chemin, (format!("app:{chemin}"), ouverte), || unsafe {
+        let espace: Id = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let icone: Id = msg_send![espace, iconForFile: &*texte(chemin)];
+        let cote = HAUTEUR_IMAGE - POINT;
+        let cadre = NSRect::new(NSPoint::new(POINT / 2.0, POINT), NSSize::new(cote, cote));
+        redessiner(&*icone, NSSize::new(HAUTEUR_IMAGE, HAUTEUR_IMAGE), cadre, ouverte, false)
+    })
+}
+
+/// Hauteur réservée sous une icône d'app au point « ouverte » (le bas d'une icône d'app est déjà transparent).
+const POINT: f64 = 2.5;
+
+/// L'image de `cle` tant que `fichier` n'a pas changé de date, sinon `creer` la refait. `None` si `fichier` n'existe pas.
+fn en_cache(fichier: &str, cle: (String, bool), creer: impl FnOnce() -> Option<Retained<AnyObject>>) -> Option<Id> {
+    let date = std::fs::metadata(fichier).ok()?.modified().ok();
     IMAGES.with_borrow_mut(|cache| {
         if let Some((_, i)) = cache.get(&cle).filter(|(d, _)| *d == date) {
             return Some(Retained::as_ptr(i) as Id);
         }
-        let image = reduire(&cle.0, gabarit)?;
+        let image = creer()?;
         let id = Retained::as_ptr(&image) as Id;
         cache.insert(cle, (date, image));
         Some(id)
@@ -74,11 +93,18 @@ pub(crate) fn reduire(chemin: &str, gabarit: bool) -> Option<Retained<AnyObject>
             return None;
         }
         let points = NSSize::new(taille.width * HAUTEUR_IMAGE / taille.height, HAUTEUR_IMAGE);
+        redessiner(&source, points, NSRect::new(NSPoint::new(0.0, 0.0), points), false, gabarit)
+    }
+}
+
+/// Une image de `points` (à `ECHELLE` pixels par point) où `source` occupe `cadre`, avec le point « ouverte » en bas si `point`.
+fn redessiner(source: &AnyObject, points: NSSize, cadre: NSRect, point: bool, gabarit: bool) -> Option<Retained<AnyObject>> {
+    unsafe {
         let rep: Id = msg_send![class!(NSBitmapImageRep), alloc];
         let rep: Retained<AnyObject> = Retained::from_raw(msg_send![rep,
             initWithBitmapDataPlanes: std::ptr::null_mut::<*mut u8>(),
             pixelsWide: (points.width * ECHELLE).ceil().max(1.0) as isize,
-            pixelsHigh: (HAUTEUR_IMAGE * ECHELLE) as isize,
+            pixelsHigh: (points.height * ECHELLE) as isize,
             bitsPerSample: 8isize,
             samplesPerPixel: 4isize,
             hasAlpha: Bool::YES,
@@ -91,7 +117,14 @@ pub(crate) fn reduire(chemin: &str, gabarit: bool) -> Option<Retained<AnyObject>
         let _: () = msg_send![class!(NSGraphicsContext), saveGraphicsState];
         let _: () = msg_send![class!(NSGraphicsContext), setCurrentContext: contexte];
         // 2 = NSCompositingOperationSourceOver.
-        let _: () = msg_send![&*source, drawInRect: NSRect::new(NSPoint::new(0.0, 0.0), points), fromRect: NSRect::ZERO, operation: 2usize, fraction: 1.0f64];
+        let _: () = msg_send![source, drawInRect: cadre, fromRect: NSRect::ZERO, operation: 2usize, fraction: 1.0f64];
+        if point {
+            let gris: Id = msg_send![class!(NSColor), colorWithWhite: 0.85f64, alpha: 1.0f64];
+            let _: () = msg_send![gris, set];
+            let rond = NSRect::new(NSPoint::new((points.width - POINT) / 2.0, 0.0), NSSize::new(POINT, POINT));
+            let chemin: Id = msg_send![class!(NSBezierPath), bezierPathWithOvalInRect: rond];
+            let _: () = msg_send![chemin, fill];
+        }
         let _: () = msg_send![class!(NSGraphicsContext), restoreGraphicsState];
         let image: Id = msg_send![class!(NSImage), alloc];
         let image: Retained<AnyObject> = Retained::from_raw(msg_send![image, initWithSize: points])?;
@@ -219,5 +252,27 @@ mod tests {
         assert_ne!(image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", false), Some(i));
         assert!(image("~/image-qui-nexiste-pas.png", false).is_none());
         assert!(image("/etc/hosts", false).is_none());
+    }
+
+    #[test]
+    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    fn icone_d_app_reduite_avec_ou_sans_point() {
+        let chemin = "/System/Applications/TextEdit.app";
+        let (fermee, ouverte) = (icone_app(chemin, false).unwrap(), icone_app(chemin, true).unwrap());
+        assert_ne!(fermee, ouverte);
+        assert_eq!(icone_app(chemin, false), Some(fermee), "gardée en cache");
+        let taille: NSSize = unsafe { msg_send![ouverte, size] };
+        assert_eq!((taille.width, taille.height), (HAUTEUR_IMAGE, HAUTEUR_IMAGE));
+        // Le point : un pixel clair au milieu du bas de l'image ouverte, transparent sur la fermée.
+        let bas = |i: Id| unsafe {
+            let reps: Id = msg_send![i, representations];
+            let rep: Id = msg_send![reps, firstObject];
+            // y = 0 en haut : les 5 dernières lignes (2,5 pt) sont celles du point.
+            let couleur: Id = msg_send![rep, colorAtX: 20isize, y: 37isize];
+            let alpha: f64 = msg_send![couleur, alphaComponent];
+            alpha
+        };
+        assert!(bas(ouverte) > 0.9 && bas(fermee) < 0.1, "{} {}", bas(ouverte), bas(fermee));
+        assert!(icone_app("/Applications/Nexiste.app", false).is_none());
     }
 }

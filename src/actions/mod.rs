@@ -52,6 +52,31 @@ pub enum Action {
     Url(String),
     /// `{ applescript = "tell application \"Music\" to playpause" }`, lancé avec `osascript -e`.
     Applescript(String),
+    MissionControl,
+    /// App Exposé : les fenêtres de l'app active.
+    #[serde(alias = "app_windows")]
+    FenetresApp,
+    Launchpad,
+    #[serde(alias = "show_desktop")]
+    Bureau,
+    Spotlight,
+    /// ⌘⇧3 : tout l'écran.
+    #[serde(alias = "screenshot")]
+    CaptureEcran,
+    /// ⌘⇧4 : une zone.
+    #[serde(alias = "screenshot_area")]
+    CaptureZone,
+    /// ⌘⇧5 : la palette de capture et d'enregistrement.
+    #[serde(alias = "screenshot_options")]
+    CaptureOptions,
+    #[serde(alias = "lock_screen")]
+    Verrouiller,
+    /// La palette des émojis et symboles.
+    #[serde(alias = "emoji")]
+    Emojis,
+    /// La fenêtre « Forcer à quitter ».
+    #[serde(alias = "force_quit")]
+    ForcerQuitter,
 }
 
 const PAS: f32 = 1.0 / 16.0;
@@ -83,7 +108,31 @@ pub fn executer(action: &Action) -> Resultat<()> {
         Action::App(app) => journaliser("/usr/bin/open", &[if est_bundle(app) { "-b" } else { "-a" }, app]),
         Action::Url(url) => journaliser("/usr/bin/open", &[url]),
         Action::Applescript(script) => journaliser("/usr/bin/osascript", &["-e", script]),
+        // L'app « Mission Control » prévient le Dock ; son argument choisit l'écran (1 = bureau, 2 = fenêtres de l'app, lu dans son code).
+        Action::MissionControl => journaliser("/usr/bin/open", &["-b", MISSION_CONTROL]),
+        Action::FenetresApp => journaliser("/usr/bin/open", &["-b", MISSION_CONTROL, "--args", "2"]),
+        Action::Bureau => journaliser("/usr/bin/open", &["-b", MISSION_CONTROL, "--args", "1"]),
+        Action::Launchpad => journaliser("/usr/bin/open", &["-b", "com.apple.launchpad.launcher"]),
+        Action::CaptureOptions => journaliser("/usr/bin/open", &["-b", "com.apple.screenshot.launcher"]),
+        Action::Spotlight | Action::CaptureEcran | Action::CaptureZone | Action::Verrouiller | Action::Emojis | Action::ForcerQuitter => {
+            clavier::raccourci(&clavier::Touche::try_from(raccourci_systeme(action).unwrap_or_default().to_string())?)
+        }
     }
+}
+
+const MISSION_CONTROL: &str = "com.apple.exposelauncher";
+
+/// Raccourcis d'Apple sans app ni API publique pour les déclencher : simulés au clavier (Accessibilité), touches par défaut de macOS.
+fn raccourci_systeme(action: &Action) -> Option<&'static str> {
+    Some(match action {
+        Action::Spotlight => "cmd+espace",
+        Action::CaptureEcran => "cmd+shift+3",
+        Action::CaptureZone => "cmd+shift+4",
+        Action::Verrouiller => "ctrl+cmd+q",
+        Action::Emojis => "ctrl+cmd+espace",
+        Action::ForcerQuitter => "alt+cmd+esc",
+        _ => return None,
+    })
 }
 
 /// Le bundle id d'une app installée (`com.apple.Safari`), d'après LaunchServices.
@@ -99,17 +148,41 @@ fn est_bundle(nom: &str) -> bool {
 /// Une app installée, par bundle id, chemin ou nom (celui qu'`open -a` trouve), sans lancer de processus.
 /// Partagée par `--verifier` (`config::controler`) et l'éditeur (qui y ajoute une suggestion).
 pub fn app_existe(nom: &str) -> bool {
+    chemin_app(nom).is_some()
+}
+
+/// Le chemin du `.app` (pour son icône), trouvé comme `app_existe`.
+pub fn chemin_app(nom: &str) -> Option<String> {
     // `fullPathForApplication:` répond pour n'importe quel chemin, même absent.
     if nom.starts_with('/') {
-        return std::path::Path::new(nom).exists();
+        return std::path::Path::new(nom).exists().then(|| nom.to_string());
     }
-    let chemin = objc2_foundation::NSString::from_str(nom);
-    est_bundle(nom)
-        || unsafe {
-            let espace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
-            let chemin: *mut AnyObject = msg_send![espace, fullPathForApplication: &*chemin];
-            !chemin.is_null()
+    let texte = objc2_foundation::NSString::from_str(nom);
+    unsafe {
+        let espace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let url: *mut AnyObject = msg_send![espace, URLForApplicationWithBundleIdentifier: &*texte];
+        let chemin: *const objc2_foundation::NSString = if url.is_null() { msg_send![espace, fullPathForApplication: &*texte] } else { msg_send![url, path] };
+        chemin.as_ref().map(|c| c.to_string())
+    }
+}
+
+/// L'app de ce `.app` tourne-t-elle ? Par son bundle id, comme le point du Dock.
+pub fn app_ouverte(chemin: &str) -> bool {
+    unsafe {
+        let bundle: *mut AnyObject = msg_send![class!(NSBundle), bundleWithPath: &*objc2_foundation::NSString::from_str(chemin)];
+        let id: *mut AnyObject = if bundle.is_null() { bundle } else { msg_send![bundle, bundleIdentifier] };
+        if id.is_null() {
+            return false;
         }
+        let apps: *mut AnyObject = msg_send![class!(NSRunningApplication), runningApplicationsWithBundleIdentifier: id];
+        let n: usize = msg_send![apps, count];
+        // À la notification de fin, l'app quittée peut encore être listée, marquée terminée.
+        (0..n).any(|i| {
+            let app: *mut AnyObject = msg_send![apps, objectAtIndex: i];
+            let terminee: bool = msg_send![app, isTerminated];
+            !terminee
+        })
+    }
 }
 
 /// Lance la commande dans un fil et écrit son erreur au journal si elle échoue (app introuvable, AppleScript faux).
@@ -165,5 +238,17 @@ mod tests {
         assert!(!app_existe("/Applications/Nexiste.app"), "chemin absent");
         assert!(!app_existe("AppQuiNexistePas") && !app_existe("com.exemple.nexiste.pas"));
         assert!(est_bundle("com.apple.Safari") && !est_bundle("Safari"));
+        assert_eq!(chemin_app("com.apple.TextEdit").as_deref(), Some("/System/Applications/TextEdit.app"));
+        assert_eq!(chemin_app("TextEdit"), chemin_app("com.apple.TextEdit"));
+        assert_eq!(chemin_app("AppQuiNexistePas"), None);
+    }
+
+    #[test]
+    #[cfg_attr(ci, ignore = "processus d'une session ouverte (Finder) : pas de session sur un runner de CI")]
+    fn app_ouverte_selon_ses_processus() {
+        assert!(app_ouverte(&chemin_app("com.apple.finder").unwrap()), "le Finder tourne toujours");
+        let grapher = std::process::Command::new("/usr/bin/pgrep").args(["-x", "Grapher"]).status().unwrap().success();
+        assert_eq!(app_ouverte("/System/Applications/Utilities/Grapher.app"), grapher);
+        assert!(!app_ouverte("/nexiste/pas.app"));
     }
 }

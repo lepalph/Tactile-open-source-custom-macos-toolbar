@@ -93,7 +93,7 @@ fn deplier(chemin: &str) -> PathBuf {
 }
 
 /// Tout ce que la barre peut lancer : actions `shell`, `applescript`, `touche`, `keycode`, `app`, `url` autre que
-/// http(s), et les commandes des `script`. Dans l'ordre de la barre, principale d'abord.
+/// http(s), actions système (app d'Apple ou frappe simulée), les apps des `lanceur` et les commandes des `script`. Dans l'ordre de la barre, principale d'abord.
 pub(super) fn commandes(barre: &Barre) -> Vec<Commande> {
     let mut liste = Vec::new();
     let principale = tx("Barre principale", "Main bar");
@@ -123,6 +123,13 @@ fn parcourir(elements: &[Element], barre: &Texte, parent: &str, liste: &mut Vec<
                     liste.push(Commande { ou, quoi, ..c });
                 }
             }
+            Element::Lanceur { app, appui_long, .. } => {
+                liste.push(Commande { ou: ou.clone(), quoi: tx("Ouvre l’app", "Opens the app"), valeur: app.clone() });
+                if let Some(c) = appui_long.as_ref().and_then(lancement) {
+                    let quoi = tx(format!("{} (appui long)", c.quoi.fr), format!("{} (long press)", c.quoi.en));
+                    liste.push(Commande { ou, quoi, ..c });
+                }
+            }
             Element::Script { commande, intervalle, action, .. } => {
                 let quoi = tx(format!("Commande relancée toutes les {intervalle} s"), format!("Command run every {intervalle} s"));
                 liste.push(Commande { ou: ou.clone(), quoi, valeur: commande.clone() });
@@ -145,9 +152,26 @@ fn lancement(action: &Action) -> Option<Commande> {
         Action::Keycode(n) => (tx("Touche simulée", "Simulated key"), format!("keycode {n}")),
         Action::App(a) => (tx("Ouvre l’app", "Opens the app"), a.clone()),
         Action::Url(u) if !["http://", "https://"].iter().any(|p| u.to_lowercase().starts_with(p)) => (tx("Ouvre l’adresse", "Opens the address"), u.clone()),
+        // Les actions système : une app d'Apple lancée, ou une frappe simulée (comme `touche`).
+        Action::MissionControl => (tx("Ouvre Mission Control", "Opens Mission Control"), nom(action)),
+        Action::FenetresApp => (tx("Montre les fenêtres de l’app (Mission Control)", "Shows the app’s windows (Mission Control)"), nom(action)),
+        Action::Bureau => (tx("Affiche le bureau (Mission Control)", "Shows the desktop (Mission Control)"), nom(action)),
+        Action::Launchpad => (tx("Ouvre Launchpad", "Opens Launchpad"), nom(action)),
+        Action::CaptureOptions => (tx("Ouvre l’outil de capture d’écran", "Opens the screenshot tool"), nom(action)),
+        Action::Spotlight => (tx("Ouvre Spotlight (simule ⌘ espace)", "Opens Spotlight (simulates ⌘ space)"), nom(action)),
+        Action::CaptureEcran => (tx("Capture l’écran (simule ⌘⇧3)", "Takes a screenshot (simulates ⌘⇧3)"), nom(action)),
+        Action::CaptureZone => (tx("Capture une zone (simule ⌘⇧4)", "Screenshots an area (simulates ⌘⇧4)"), nom(action)),
+        Action::Emojis => (tx("Ouvre les émojis (simule ⌃⌘ espace)", "Opens emoji (simulates ⌃⌘ space)"), nom(action)),
+        Action::Verrouiller => (tx("Verrouille l’écran (simule ⌃⌘Q)", "Locks the screen (simulates ⌃⌘Q)"), nom(action)),
+        Action::ForcerQuitter => (tx("Ouvre « Forcer à quitter » (simule ⌥⌘esc)", "Opens “Force Quit” (simulates ⌥⌘esc)"), nom(action)),
         _ => return None,
     };
     Some(Commande { ou: tx("", ""), quoi, valeur })
+}
+
+/// L'action telle qu'écrite dans le fichier : `verrouiller`.
+fn nom(action: &Action) -> String {
+    serde_json::to_value(action).ok().and_then(|v| v.as_str().map(String::from)).unwrap_or_default()
 }
 
 // ---------- Export ----------
@@ -793,6 +817,29 @@ mod tests {
         assert_eq!(liste[7], ("Barre de « Safari », élément 1".into(), "Commande shell".into(), "open -a Mail".into()));
         assert_eq!(liste.len(), 8);
         assert_eq!(commandes(&barre)[0].ou.en, "Main bar, item 1 “Build”");
+        // Un lanceur ouvre son app ; les actions système lancent une app d'Apple ou simulent des touches.
+        let barre = config::lire(
+            "[[element]]\ntype = \"lanceur\"\napp = \"Safari\"\nappui_long = \"forcer_quitter\"\n\n\
+             [[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"bouton\"\n  action = \"verrouiller\"\n  appui_long = \"lecture_pause\"\n\n\
+             [[element]]\ntype = \"bouton\"\naction = \"mission_control\"\nappui_long = \"capture_zone\"\n",
+        )
+        .unwrap();
+        let liste: Vec<(String, String, String)> = commandes(&barre).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect();
+        let attendu = [
+            ("Barre principale, élément 1", "Ouvre l’app", "Safari"),
+            ("Barre principale, élément 1", "Ouvre « Forcer à quitter » (simule ⌥⌘esc) (appui long)", "forcer_quitter"),
+            ("Barre principale, élément 2 › 1", "Verrouille l’écran (simule ⌃⌘Q)", "verrouiller"),
+            ("Barre principale, élément 3", "Ouvre Mission Control", "mission_control"),
+            ("Barre principale, élément 3", "Capture une zone (simule ⌘⇧4) (appui long)", "capture_zone"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(liste, attendu);
+        assert_eq!(commandes(&barre)[2].quoi.en, "Locks the screen (simulates ⌃⌘Q)");
+        // Chaque action système est listée.
+        for a in ["mission_control", "fenetres_app", "bureau", "launchpad", "capture_options", "spotlight", "capture_ecran", "capture_zone", "emojis", "verrouiller", "forcer_quitter"] {
+            let b = config::lire(&format!("[[element]]\ntype = \"bouton\"\naction = \"{a}\"\n")).unwrap();
+            assert_eq!(commandes(&b).len(), 1, "{a}");
+        }
         assert!(commandes(&config::lire("[[element]]\ntype = \"souple\"\n").unwrap()).is_empty());
     }
 

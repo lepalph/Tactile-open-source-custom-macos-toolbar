@@ -142,6 +142,31 @@ Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 point
 | `espace` | `largeur` (obligatoire) | Un vide de largeur fixe. |
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
 | `groupe` | `texte`, `symbole`, `largeur` (72 par défaut), puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
+| `lanceur` | `app` (obligatoire : le nom du dossier `.app`, un bundle id ou un chemin, comme l'action `app`), `texte`, `affichage` (comme un bouton), `largeur`, `appui_long` | L'icône de l'app. Un appui l'ouvre ou la met au premier plan ; un petit point sous l'icône dit qu'elle est ouverte, comme dans le Dock. Une app introuvable affiche son nom en texte, et `tactile --verifier` le signale. |
+
+#### Un tiroir d'apps
+
+Des lanceurs dans un groupe font un tiroir d'apps : une icône de la barre principale ouvre une sous-barre d'apps, ✕ la referme. Exemple complet : [exemples/lanceur.toml](exemples/lanceur.toml).
+
+```toml
+[[element]]
+type = "lanceur"
+app = "Safari"
+
+[[element]]
+type = "groupe"
+symbole = "square.grid.2x2"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "Calendar"
+
+  [[element.element]]
+  type = "lanceur"
+  app = "com.apple.systempreferences"
+  texte = "Réglages"
+  appui_long = "launchpad"
+```
 
 ### Les actions
 
@@ -163,6 +188,10 @@ Une action s'écrit soit comme un mot (`action = "suivant"`), soit comme une tab
 | `{ url = "https://…" }` | Ouvre l'adresse dans le navigateur par défaut (ou un fichier, un dossier). |
 | `{ applescript = 'tell application "Music" to playpause' }` | Lance l'AppleScript avec `osascript`. Avec des apostrophes autour, les guillemets du script restent lisibles. Son erreur éventuelle va au journal. |
 | `"barre_apple"` | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène celle de Tactile. |
+| `"mission_control"`, `"fenetres_app"`, `"bureau"` | Mission Control, les fenêtres de l'app au premier plan (App Exposé) ou le bureau, par l'app Mission Control d'Apple. |
+| `"launchpad"` | Ouvre le Launchpad. |
+| `"capture_options"` | La palette de capture et d'enregistrement de l'écran (⌘⇧5), par l'app Capture d'écran d'Apple. |
+| `"spotlight"`, `"capture_ecran"`, `"capture_zone"`, `"emojis"`, `"verrouiller"`, `"forcer_quitter"` | Spotlight (⌘Espace), capture de tout l'écran (⌘⇧3) ou d'une zone (⌘⇧4), la palette des émojis et symboles (⌃⌘Espace), verrouiller l'écran (⌃⌘Q), la fenêtre « Forcer à quitter » (⌥⌘⎋). Envoie le raccourci par défaut de macOS (Accessibilité) ; si tu l'as changé dans Réglages Système, écris le tien avec `{ touche = "…" }`. |
 | `{ shell = "commande" }` | Lance la commande avec `zsh -c`, sans attendre sa fin. `~` est accepté. |
 
 #### Trouver le nom d'une app
@@ -224,12 +253,24 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | `url` | `url` |
 | `applescript` | `applescript` |
 | `herite` | `inherit` |
+| `lanceur` | `launcher` |
+| `mission_control` | `mission_control` |
+| `fenetres_app` | `app_windows` |
+| `launchpad` | `launchpad` |
+| `bureau` | `show_desktop` |
+| `spotlight` | `spotlight` |
+| `capture_ecran` | `screenshot` |
+| `capture_zone` | `screenshot_area` |
+| `capture_options` | `screenshot_options` |
+| `verrouiller` | `lock_screen` |
+| `emojis` | `emoji` |
+| `forcer_quitter` | `force_quit` |
 
 Dans la sortie JSON d'un `script` aussi : `text`, `symbol`, `color`, `text_color`.
 
 ### Un exemple complet en anglais
 
-[exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut écrite avec les clés anglaises ; [exemples/barre.toml](exemples/barre.toml), la même en français. Les autres exemples de [exemples/](exemples/) : [simple.toml](exemples/simple.toml) et [developpeur.toml](exemples/developpeur.toml), les barres Simple et Développeur de l'éditeur. Pour partir de l'un d'eux, copie-le vers `~/.config/tactile/barre.toml`.
+[exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut écrite avec les clés anglaises ; [exemples/barre.toml](exemples/barre.toml), la même en français. Les autres exemples de [exemples/](exemples/) : [simple.toml](exemples/simple.toml) et [developpeur.toml](exemples/developpeur.toml), les barres Simple et Développeur de l'éditeur ; [lanceur.toml](exemples/lanceur.toml), des lanceurs, un tiroir d'apps et des raccourcis système. Pour partir de l'un d'eux, copie-le vers `~/.config/tactile/barre.toml`.
 
 ## Une barre par application
 

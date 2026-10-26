@@ -5,7 +5,7 @@ use objc2::{class, msg_send, sel};
 use std::time::{Duration, Instant};
 
 use super::rafraichi::Rafraichi;
-use super::vues::{barre_touch, couleur, image, item_vue, lacher, largeur_fixe, largeur_max, styler, symbole, texte};
+use super::vues::{barre_touch, couleur, icone_app, image, item_vue, lacher, largeur_fixe, largeur_max, styler, symbole, texte};
 use super::{cible, Commande, Etat, Id, PREFIXE};
 use crate::actions::{self, Action};
 use crate::config::{Affichage, Element, Reglage};
@@ -15,6 +15,8 @@ use crate::config::{Affichage, Element, Reglage};
 pub(super) enum Icone<'a> {
     Symbole(&'a str),
     Image(&'a str, bool),
+    /// L'icône d'une app (nom, bundle id ou chemin), avec le point si elle est ouverte.
+    App(&'a str),
 }
 
 impl<'a> Icone<'a> {
@@ -22,12 +24,13 @@ impl<'a> Icone<'a> {
         match self {
             Icone::Symbole(nom) => symbole(nom),
             Icone::Image(chemin, gabarit) => image(chemin, gabarit),
+            Icone::App(app) => actions::chemin_app(app).and_then(|c| icone_app(&c, actions::app_ouverte(&c))),
         }
     }
 
     pub(super) fn nom(self) -> &'a str {
         match self {
-            Icone::Symbole(nom) | Icone::Image(nom, _) => nom,
+            Icone::Symbole(nom) | Icone::Image(nom, _) | Icone::App(nom) => nom,
         }
     }
 
@@ -36,6 +39,7 @@ impl<'a> Icone<'a> {
         match self {
             Icone::Symbole(nom) => (nom, "symbole SF inconnu"),
             Icone::Image(chemin, _) => (chemin.rsplit('/').next().unwrap_or(chemin), "image introuvable"),
+            Icone::App(app) => (app.rsplit('/').next().unwrap_or(app).trim_end_matches(".app"), "app introuvable"),
         }
     }
 }
@@ -142,11 +146,7 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 let index = enregistrer(etat, action.clone().map(Commande::Systeme), appui_long.clone().map(Commande::Systeme));
                 // Une image posée passe avant le symbole (l'éditeur le dit à côté du choix d'image).
                 let icone = i.as_deref().map(|chemin| Icone::Image(chemin, *gabarit)).or(s.as_deref().map(Icone::Symbole));
-                let (titre, icone) = match affichage {
-                    Some(Affichage::Texte) if t.is_some() => (t.as_deref(), None),
-                    Some(Affichage::Icone) if icone.is_some() => (None, icone),
-                    _ => (t.as_deref(), icone),
-                };
+                let (titre, icone) = selon(*affichage, t.as_deref(), icone);
                 let b = bouton(titre, icone, index, appui_long.is_some(), &ident);
                 etat.controles.push((t.clone().or(s.clone()).or(i.clone()).unwrap_or_default(), b));
                 if let Some(col) = c.as_deref().and_then(couleur) {
@@ -213,6 +213,21 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 lacher(vue);
                 item
             }
+            Element::Lanceur { app, texte: t, affichage, largeur, appui_long } => {
+                let index = enregistrer(etat, Some(Commande::Systeme(Action::App(app.clone()))), appui_long.clone().map(Commande::Systeme));
+                let (titre, icone) = selon(*affichage, t.as_deref(), Some(Icone::App(app)));
+                let b = bouton(titre, icone, index, appui_long.is_some(), &ident);
+                etat.controles.push((t.clone().unwrap_or(app.clone()), b));
+                if let Some(chemin) = icone.and_then(|_| actions::chemin_app(app)) {
+                    etat.lanceurs.push((b, chemin));
+                }
+                match largeur {
+                    Some(l) => largeur_fixe(b, *l),
+                    None if titre.is_some() => largeur_max(b, LARGEUR_MAX_TEXTE),
+                    None => {}
+                }
+                item_vue(&ident, b)
+            }
             Element::Souple => std::ptr::null_mut(),
             Element::Groupe { texte: t, symbole: s, largeur, elements: enfants } => {
                 let sous_items = construire(enfants, &ident, etat);
@@ -222,6 +237,28 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
         items.push(item);
     }
     items
+}
+
+/// Le titre et l'icône que montre un bouton ou un lanceur selon son `affichage` (sans texte, l'icône reste, et inversement).
+fn selon<'a>(affichage: Option<Affichage>, texte: Option<&'a str>, icone: Option<Icone<'a>>) -> (Option<&'a str>, Option<Icone<'a>>) {
+    match affichage {
+        Some(Affichage::Texte) if texte.is_some() => (texte, None),
+        Some(Affichage::Icone) if icone.is_some() => (None, icone),
+        _ => (texte, icone),
+    }
+}
+
+/// Met le point « ouverte » sous l'icône de chaque lanceur dont l'app tourne, et l'enlève sinon, à chaque lancement
+/// ou fin d'une app (`appLanceeOuQuittee:`) ; `construire` dessine déjà l'état du moment.
+pub(super) fn marquer_lanceurs(lanceurs: &[(Id, String)]) {
+    for (b, chemin) in lanceurs {
+        if let Some(i) = icone_app(chemin, actions::app_ouverte(chemin)) {
+            let actuelle: Id = unsafe { msg_send![*b, image] };
+            if actuelle != i {
+                unsafe { let _: () = msg_send![*b, setImage: i]; }
+            }
+        }
+    }
 }
 
 /// Largeur d'un widget script sans `largeur` : sa sortie change, et une sortie qui grandit
@@ -256,6 +293,8 @@ fn largeur_estimee(element: &Element) -> f64 {
     match element {
         Element::Bouton { largeur: Some(l), .. } | Element::EnCours { largeur: Some(l) } | Element::Espace { largeur: l } | Element::Groupe { largeur: Some(l), .. } => *l,
         Element::Bouton { texte: t, symbole: s, image: i, .. } => t.as_deref().map_or(LARGEUR_GROUPE, |t| texte(t).max(LARGEUR_GROUPE)) + if t.is_some() && (s.is_some() || i.is_some()) { 24.0 } else { 0.0 },
+        Element::Lanceur { largeur: Some(l), .. } => *l,
+        Element::Lanceur { texte: t, .. } => t.as_deref().map_or(LARGEUR_GROUPE, |t| texte(t).max(LARGEUR_GROUPE) + 24.0),
         Element::Heure { format } => texte(format.as_deref().unwrap_or("HH:mm")),
         Element::EnCours { largeur: None } => LARGEUR_MAX_TEXTE,
         Element::Script { largeur, .. } => largeur_script(*largeur),
