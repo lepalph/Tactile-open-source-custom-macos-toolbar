@@ -21,7 +21,10 @@ Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, br
 
 ![Tactile's default bar](docs/barre.png)
 
-![The "Customize my bar" window, with the Music bar loaded](docs/editeur-musique.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/editeur-sombre.png">
+  <img src="docs/editeur-clair.png" alt="The &quot;Customize my bar&quot; window, with the Music bar loaded and the volume slider selected">
+</picture>
 
 ## Why Tactile
 
@@ -363,7 +366,7 @@ Errors are written to `~/Library/Logs/Tactile.log` (menu → **Voir le journal**
 | Esc or a shortcut does nothing | Allow Tactile in **System Settings → Privacy & Security → Accessibility**. |
 | `{ app = "…" }` opens nothing | Use the `.app` folder's name ([finding an app's name](#finding-an-apps-name)); the log says "Unable to find application". |
 
-![An error shown in the editor window](docs/editeur-erreur.png)
+![A misspelled symbol in the editor window: saving is refused and the closest symbol is suggested](docs/editeur-erreur-sombre.png)
 
 ### Why media-control
 

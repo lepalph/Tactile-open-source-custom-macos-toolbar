@@ -21,7 +21,10 @@ Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : b
 
 ![La barre par défaut de Tactile](docs/barre.png)
 
-![La fenêtre Personnaliser ma barre, avec la barre Musique](docs/editeur-musique.png)
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/editeur-sombre.png">
+  <img src="docs/editeur-clair.png" alt="La fenêtre Personnaliser ma barre, avec la barre Musique et le curseur de volume sélectionné">
+</picture>
 
 ## Pourquoi Tactile
 
@@ -291,7 +294,7 @@ Les erreurs s'écrivent dans `~/Library/Logs/Tactile.log` (menu → **Voir le jo
 | La touche esc ou un raccourci ne fait rien | Autorise Tactile dans **Réglages Système → Confidentialité et sécurité → Accessibilité**. |
 | `{ app = "…" }` n'ouvre rien | Le nom est celui du dossier `.app` ([trouver le nom d'une app](#trouver-le-nom-dune-app)) ; le journal dit « Unable to find application ». |
 
-![Une erreur affichée dans la fenêtre de réglage](docs/editeur-erreur.png)
+![Un symbole mal écrit dans la fenêtre de réglage : l'enregistrement est refusé et le symbole le plus proche est proposé](docs/editeur-erreur-sombre.png)
 
 ### Pourquoi media-control
 
