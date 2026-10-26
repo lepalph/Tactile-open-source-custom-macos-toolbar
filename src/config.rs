@@ -12,7 +12,8 @@ const PAR_DEFAUT: &str = include_str!("../exemples/barre.toml");
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Barre {
-    #[serde(default)]
+    /// `true` par défaut : toute la largeur pour la barre, sans le Control Strip d'Apple.
+    #[serde(default = "vrai")]
     pub masquer_control_strip: bool,
     #[serde(rename = "element", default)]
     pub elements: Vec<Element>,
@@ -64,6 +65,10 @@ pub enum Element {
 pub enum Reglage {
     Luminosite,
     Volume,
+}
+
+fn vrai() -> bool {
+    true
 }
 
 pub fn chemin() -> PathBuf {
@@ -262,12 +267,18 @@ mod tests {
             assert_eq!(
                 lire(&texte),
                 Ok(Barre {
-                    masquer_control_strip: false,
+                    masquer_control_strip: true,
                     elements: vec![bouton(action)]
                 }),
                 "{ecrit}"
             );
         }
+    }
+
+    #[test]
+    fn control_strip_masque_par_defaut() {
+        assert!(lire("").unwrap().masquer_control_strip);
+        assert!(!lire("masquer_control_strip = false\n").unwrap().masquer_control_strip);
     }
 
     #[test]

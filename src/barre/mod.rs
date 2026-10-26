@@ -243,6 +243,10 @@ fn afficher_erreur(message: &str) {
 }
 
 fn installer(config: &Barre) {
+    // Le placement n'est lu qu'à une nouvelle présentation : s'il change, on retire la barre d'abord.
+    if PLEIN_ECRAN.get() != config.masquer_control_strip && !MODALE.get().is_null() {
+        unsafe { let _: () = msg_send![class!(NSTouchBar), minimizeSystemModalTouchBar: MODALE.get()]; }
+    }
     PLEIN_ECRAN.set(config.masquer_control_strip);
     let (envoi, reception) = channel();
     let mut etat = Etat {
