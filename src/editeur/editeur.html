@@ -4,154 +4,238 @@
 <meta charset="utf-8">
 <title>Personnaliser ma barre</title>
 <style>
+/* Réglages Système (macOS Sequoia) : bande du haut sous la barre de titre, barre latérale grise, encarts groupés.
+   Les couleurs système de WebKit (-apple-system-*) ne passent pas toutes l'AA à 13 px : jetons propres, clair et sombre. */
 :root {
-  --bg: #ececec; --panneau: #f7f7f7; --champ: #ffffff; --bord: #d2d2d4; --filet: #e3e3e5;
-  --texte: #1d1d1f; --texte2: #65656b; --accent: #0a60ff; --accent-texte: #ffffff;
-  --erreur: #b3261e; --erreur-fond: #fbeae8; --ok: #2f7a3a;
-  --tb-fond: #000; --tb-bouton: #363636; --tb-bouton-survol: #4a4a4a; --tb-texte: #fff;
-  --radius: 6px; --m: 20px;
   color-scheme: light dark;
+  --fenetre: #f6f6f7;            /* même ton que la barre de titre transparente */
+  --laterale: #ebebed;
+  --encart: #ffffff; --encart-bord: rgb(0 0 0 / 0.08); --filet: rgb(0 0 0 / 0.09);
+  --eleve: #ffffff;              /* ce qui flotte : dialogue */
+  --texte: #1d1d1f; --texte2: #636366; --texte3: #8e8e93;
+  --champ: #ffffff; --champ-bord: rgb(0 0 0 / 0.16);
+  --bouton: #ffffff; --bouton-bord: rgb(0 0 0 / 0.14); --survol: rgb(0 0 0 / 0.05); --appui: rgb(0 0 0 / 0.1);
+  --rail: rgb(0 0 0 / 0.07); --rail-choisi: #ffffff;
+  --accent: #0063e1; --accent-plein: #0063e1; --accent-texte: #ffffff;
+  --anneau: rgb(0 99 225 / 0.35);
+  --tuile: #8e8e93;
+  --ok: #1d7a34; --erreur: #c4001b; --erreur-fond: #fdeced; --erreur-bord: rgb(196 0 27 / 0.22);
+  --chevrons: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12'%3E%3Cpath d='M1 4.5 4 1.5l3 3M1 7.5l3 3 3-3' fill='none' stroke='%23636366' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  --tb-fond: #000; --tb-bouton: #363636; --tb-bouton-survol: #4a4a4a; --tb-texte: #fff;
+  --r-champ: 6px; --r-encart: 10px; --marge: 20px;
+  --vite: 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-@supports (color: AccentColor) { :root { --accent: AccentColor; } }
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg: #262628; --panneau: #1e1e20; --champ: #2c2c2e; --bord: #3c3c3f; --filet: #333336;
-    --texte: #f2f2f4; --texte2: #a4a4aa; --erreur: #ff6b5e; --erreur-fond: #3a1f1c; --ok: #5fcf72;
+    --fenetre: #282829; --laterale: #212123;
+    --encart: #323234; --encart-bord: rgb(255 255 255 / 0.06); --filet: rgb(255 255 255 / 0.08);
+    --eleve: #38383a;
+    --texte: #e8e8ea; --texte2: #a1a1a6; --texte3: #7c7c80;
+    --champ: #2a2a2c; --champ-bord: rgb(255 255 255 / 0.14);
+    --bouton: #48484a; --bouton-bord: rgb(255 255 255 / 0.06); --survol: rgb(255 255 255 / 0.07); --appui: rgb(255 255 255 / 0.12);
+    --rail: rgb(255 255 255 / 0.08); --rail-choisi: #636366;
+    --accent: #3b9bff; --accent-plein: #0a6ae0; --anneau: rgb(59 155 255 / 0.45);
+    --tuile: #6e6e73;
+    --ok: #30d158; --erreur: #ff6961; --erreur-fond: #3b2224; --erreur-bord: rgb(255 105 97 / 0.3);
+    --chevrons: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='12' viewBox='0 0 8 12'%3E%3Cpath d='M1 4.5 4 1.5l3 3M1 7.5l3 3 3-3' fill='none' stroke='%23a1a1a6' stroke-width='1.4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
   }
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
 body {
-  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
-  color: var(--texte); background: var(--bg);
+  font: 13px/1.38 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  color: var(--texte); background: var(--fenetre);
   display: grid; grid-template-rows: auto auto 1fr; min-width: 1060px;
-  -webkit-user-select: none; user-select: none;
+  -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased;
 }
-input, select, textarea, button { font: inherit; color: inherit; }
-input, select, textarea { -webkit-user-select: text; user-select: text; }
-h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
-h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--texte2); margin: 0 0 8px; }
-.aide { margin: 2px 0 0; color: var(--texte2); }
-:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input, select, textarea, button { font: inherit; color: inherit; margin: 0; }
+input, textarea { -webkit-user-select: text; user-select: text; }
+h1 { font-size: 20px; line-height: 1.2; font-weight: 600; margin: 0; letter-spacing: -0.012em; display: flex; align-items: center; }
+h2 { font-size: 11px; font-weight: 600; color: var(--texte2); margin: 0; }
+p { margin: 0; }
+:focus-visible { outline: 3px solid var(--anneau); outline-offset: 1px; }
 ::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+::placeholder { color: var(--texte3); }
 
-/* Boutons de l'interface */
-button { cursor: default; border-radius: var(--radius); border: 1px solid var(--bord); background: var(--champ); min-height: 44px; padding: 0 14px; }
-button:hover { background: color-mix(in srgb, var(--champ) 85%, var(--texte) 15%); }
-button:active { background: color-mix(in srgb, var(--champ) 70%, var(--texte) 30%); }
+/* Boutons poussoirs macOS : 28 px, rayon 6, filet fin */
+button { cursor: default; min-height: 28px; padding: 0 12px; border-radius: var(--r-champ); border: 1px solid var(--bouton-bord); background: var(--bouton); white-space: nowrap; }
+button:hover:not(:disabled) { background: color-mix(in srgb, var(--bouton), var(--texte) 5%); }
+button:active:not(:disabled) { background: color-mix(in srgb, var(--bouton), var(--texte) 12%); }
 button:disabled { opacity: 0.45; }
-button.primaire { background: var(--accent); color: var(--accent-texte); border-color: transparent; font-weight: 600; }
-button.primaire:hover { filter: brightness(0.95); background: var(--accent); }
-button.secondaire { background: transparent; }
-button.lien { border: 0; background: none; color: var(--accent); padding: 0 4px; min-height: 44px; }
-button.lien:hover { background: none; text-decoration: underline; }
+button.primaire { background: var(--accent-plein); color: var(--accent-texte); border-color: transparent; font-weight: 500; }
+button.primaire:hover:not(:disabled) { background: color-mix(in srgb, var(--accent-plein), #000 8%); }
+button.primaire:active:not(:disabled) { background: color-mix(in srgb, var(--accent-plein), #000 18%); }
+button.lien { border: 0; background: none; color: var(--accent); padding: 0 2px; min-height: 28px; }
+button.lien:hover:not(:disabled) { background: none; text-decoration: underline; }
+button.icone { width: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
 
-/* En-tête */
-header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--m); padding: 18px var(--m) 10px; }
+/* Champs */
+input[type="text"], input[type="search"], input[type="number"], textarea, select {
+  height: 28px; padding: 0 8px; border: 1px solid var(--champ-bord); border-radius: var(--r-champ); background: var(--champ); outline: none;
+}
+input[type="text"]:focus, input[type="search"]:focus, input[type="number"]:focus, textarea:focus, select:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px var(--anneau); }
+input[type="search"] { -webkit-appearance: none; appearance: none; padding-left: 10px; }
+textarea { height: auto; padding: 6px 8px; font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; resize: vertical; min-height: 52px; }
+/* Menu local (pop-up button) */
+select { -webkit-appearance: none; appearance: none; background: var(--chevrons) right 9px center / 8px 12px no-repeat, var(--bouton); border-color: var(--bouton-bord); padding-right: 26px; min-width: 120px; }
+select:hover { background-color: color-mix(in srgb, var(--bouton), var(--texte) 5%); }
+input[type="color"] { -webkit-appearance: none; appearance: none; width: 44px; height: 28px; padding: 3px; border: 1px solid var(--bouton-bord); border-radius: var(--r-champ); background: var(--bouton); }
+input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 3px; }
+input[type="range"] { width: 200px; accent-color: var(--accent-plein); }
+
+/* Interrupteur (les cases à cocher de la page) */
+input.interrupteur { -webkit-appearance: none; appearance: none; flex: none; width: 34px; height: 20px; border-radius: 10px; background: var(--rail); position: relative; cursor: default;
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.06); }
+input.interrupteur::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); }
+input.interrupteur:checked { background: var(--accent-plein); }
+input.interrupteur:checked::after { transform: translateX(14px); }
+input.interrupteur:disabled { opacity: 0.45; }
+label.bascule { display: inline-flex; align-items: center; gap: 10px; min-height: 28px; }
+
+/* Contrôle segmenté */
+.segmente { display: inline-flex; padding: 2px; gap: 2px; border-radius: 7px; background: var(--rail); }
+.segmente button { min-height: 24px; min-width: 40px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; }
+.segmente button[aria-pressed="true"] { background: var(--rail-choisi); box-shadow: 0 1px 2px rgb(0 0 0 / 0.14); font-weight: 500; }
+
+/* Bande du haut : titre, actions, aperçu */
+header { display: flex; align-items: center; justify-content: space-between; gap: var(--marge); padding: 6px var(--marge) 14px; }
+.aide { margin-top: 3px; color: var(--texte2); }
 .outils { display: flex; gap: 8px; align-items: center; }
-.langues { display: inline-flex; border: 1px solid var(--bord); border-radius: var(--radius); overflow: hidden; }
-.langues button { border: 0; border-radius: 0; min-width: 44px; }
-.langues button + button { border-left: 1px solid var(--bord); }
-.langues button[aria-pressed="true"] { background: var(--texte); color: var(--bg); }
+.modifie { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 12px; font-weight: 400; color: var(--texte2); letter-spacing: 0; }
+.modifie::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.modifie[hidden] { display: none; }
+.apercu { padding: 0 var(--marge) 12px; border-bottom: 1px solid var(--filet); }
 
-/* Aperçu : la Touch Bar à l'échelle 1 */
-.apercu { padding: 6px var(--m) 14px; border-bottom: 1px solid var(--bord); }
-.scene { display: flex; justify-content: center; align-items: center; gap: 0; height: 60px; }
+/* Encart groupé (inset grouped) : lignes séparées par un filet en retrait */
+.encart { background: var(--encart); border: 1px solid var(--encart-bord); border-radius: var(--r-encart); }
+.encart + .encart, .encart + h3 { margin-top: 18px; }
+h3 { font-size: 13px; font-weight: 600; margin: 0 0 8px 2px; }
+.ligne { display: flex; align-items: center; justify-content: space-between; gap: 16px; min-height: 44px; padding: 8px 12px; position: relative; }
+.ligne + .ligne::before { content: ""; position: absolute; top: 0; left: 12px; right: 12px; border-top: 1px solid var(--filet); }
+.ligne.haute { align-items: flex-start; }
+.ligne.haute > .nom { padding-top: 5px; }
+.ligne > .nom { flex: 1 1 auto; min-width: 0; }
+.ligne > .ctrl { flex: 0 1 auto; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; min-width: 0; max-width: 62%; text-align: right; }
+.ligne.pleine { display: block; }
+.ligne.pleine > .ctrl { max-width: none; align-items: stretch; text-align: left; }
+.legende { display: block; margin-top: 2px; font-size: 11px; line-height: 1.35; color: var(--texte2); max-width: 46ch; }
+.cote { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+.cote .valeur { min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; color: var(--texte2); }
+
+/* L'aperçu : la Touch Bar à l'échelle 1, l'objet reste noir */
+.apercu .encart { overflow: hidden; }
+.scene { display: flex; justify-content: center; align-items: center; height: 92px; padding: 0 8px; }
 .touchbar {
   width: 1004px; height: 60px; background: var(--tb-fond); border-radius: 8px;
   display: flex; align-items: center; gap: 8px; padding: 0 8px; position: relative; flex: none;
-  color: var(--tb-texte);
+  color: var(--tb-texte); box-shadow: 0 0 0 1px rgb(255 255 255 / 0.04);
 }
 .touchbar.courte { width: 685px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
-.strip { width: 319px; height: 60px; flex: none; background: #141414; border-radius: 0 8px 8px 0; color: #7a7a7a; font-size: 12px;
+.strip { width: 319px; height: 60px; flex: none; background: #141414; border-radius: 0 8px 8px 0; color: #8a8a8e; font-size: 12px;
   display: none; align-items: center; justify-content: center; border-left: 1px solid #2a2a2a; }
 .touchbar.courte + .strip { display: flex; }
-.touchbar .vide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9a9a9a; font-size: 13px; pointer-events: none; }
+.touchbar .vide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #a1a1a6; font-size: 13px; pointer-events: none; }
 .el { height: 60px; display: flex; align-items: center; flex: none; position: relative; border-radius: 8px; cursor: grab; }
 .el[data-type="souple"] { flex: 1 1 24px; min-width: 24px; }
 .el:focus-visible { outline: none; }
-.el.sel .face, .el:focus-visible .face { outline: 2px solid var(--accent); outline-offset: 2px; }
-.el.avant::before, .el.apres::after { content: ""; position: absolute; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--accent); }
+.el.sel .face, .el:focus-visible .face { outline: 2px solid #3b9bff; outline-offset: 2px; }
+.el.avant::before, .el.apres::after { content: ""; position: absolute; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: #3b9bff; }
 .el.avant::before { left: -6px; } .el.apres::after { right: -6px; }
 .el.glisse { opacity: 0.4; }
 .face { height: 30px; min-width: 56px; padding: 0 14px; border-radius: 6px; background: var(--tb-bouton); color: var(--tb-texte);
   display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; white-space: nowrap; overflow: hidden; }
 .el:hover .face { background: var(--tb-bouton-survol); }
-.face.plat { background: transparent; }
+.face.plat, .el:hover .face.plat { background: transparent; }
 .el[data-type="souple"] .face { height: 30px; background: transparent; width: 100%; min-width: 0; padding: 0; }
-.el[data-type="souple"] .face::before { content: "⟷"; color: #5a5a5a; font-size: 14px; }
-.el[data-type="espace"] .face { background: transparent; border: 1px dashed #4a4a4a; min-width: 0; padding: 0; }
-.face.mono { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: #d0d0d0; }
+.el[data-type="souple"] .face::before { content: "⟷"; color: #5a5a5e; font-size: 14px; }
+.el[data-type="espace"] .face { background: transparent; border: 1px dashed #4a4a4e; min-width: 0; padding: 0; }
+.face.mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 13px; color: #d0d0d4; }
 .sf { display: inline-block; width: 17px; height: 17px; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; flex: none; }
-.sf.inconnu { width: auto; height: auto; background: none; -webkit-mask: none; mask: none; font-size: 11px; color: #ff8a80; overflow: hidden; text-overflow: ellipsis; }
-.chevron { color: #9a9a9a; font-size: 13px; }
-.bas { display: flex; justify-content: space-between; align-items: center; gap: var(--m); margin-top: 10px; min-height: 44px; }
-.etat { margin: 0; min-height: 20px; flex: 1; }
-.etat.erreur { color: var(--erreur); background: var(--erreur-fond); border: 1px solid color-mix(in srgb, var(--erreur) 40%, transparent); border-radius: var(--radius); padding: 10px 12px; font-weight: 500; }
+.sf.alerte { color: #ff9f0a; }
+.sf.texte { width: auto; height: auto; background: none; -webkit-mask: none; mask: none; }
+.chevron { color: #9a9a9e; font-size: 13px; }
+.bascule-strip { min-height: 44px; border-top: 1px solid var(--filet); }
+.etat { display: flex; align-items: center; gap: 6px; min-height: 18px; margin-top: 8px; font-size: 12px; color: var(--texte2); }
+.etat:empty { display: none; }
+.etat .sf { width: 14px; height: 14px; }
 .etat.ok { color: var(--ok); }
-.case { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; }
-.case input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+.etat.erreur { color: var(--texte); background: var(--erreur-fond); border: 1px solid var(--erreur-bord); border-radius: 8px; padding: 8px 10px; font-size: 13px; }
+.etat.erreur .sf { color: var(--erreur); }
 
-/* Corps : palette + propriétés */
-main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
-.palette { background: var(--panneau); border-right: 1px solid var(--bord); padding: 16px; overflow: auto; }
-.palette .liste { display: grid; gap: 6px; margin-bottom: 22px; }
-.palette .liste button { display: flex; align-items: center; gap: 10px; text-align: left; justify-content: flex-start; padding: 0 12px; }
-.palette .liste button .ico { width: 22px; text-align: center; color: var(--texte2); font-size: 15px; flex: none; }
-.proprietes { padding: 16px var(--m) 24px; overflow: auto; }
-.proprietes .ligne { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--filet); padding: 4px 0; }
-.proprietes .ligne.haute { align-items: start; padding-top: 10px; }
-.proprietes label.nom, .proprietes .nom { color: var(--texte2); }
-.proprietes input[type="text"], .proprietes input[type="search"], .proprietes input[type="number"], .proprietes select, .proprietes textarea {
-  width: 100%; max-width: 480px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--bord); border-radius: var(--radius); background: var(--champ);
-}
-.proprietes textarea { font-family: "SF Mono", Menlo, monospace; font-size: 12px; resize: vertical; min-height: 60px; }
-.proprietes input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--bord); border-radius: var(--radius); background: var(--champ); vertical-align: middle; }
-.proprietes input[type="range"] { width: 240px; accent-color: var(--accent); vertical-align: middle; }
-.cote { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.cote .valeur { min-width: 48px; font-variant-numeric: tabular-nums; }
-.entete { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; }
-.entete h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--texte); }
-.entete .actions { display: flex; gap: 6px; }
-.entete .actions button { min-width: 44px; padding: 0 10px; }
-.grille { display: grid; grid-template-columns: repeat(auto-fill, 44px); gap: 6px; margin-top: 8px; max-width: 480px; }
-.grille button { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
-.grille button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
-.grille .sf { width: 20px; height: 20px; }
-.exemple { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 36px; background: var(--tb-fond); color: #fff; border-radius: var(--radius); margin-right: 8px; vertical-align: middle; }
-.sous { margin: 6px 0 0; padding: 0; list-style: none; max-width: 480px; }
-.sous li { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--filet); }
+/* Corps : barre latérale + réglages */
+main { display: grid; grid-template-columns: 228px 1fr; min-height: 0; }
+.palette { background: var(--laterale); border-right: 1px solid var(--filet); padding: 10px 10px 16px; overflow: auto; }
+.palette h2 { padding: 10px 8px 4px; }
+.palette .liste { display: grid; gap: 1px; }
+.palette .liste button { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 0 8px; border: 0; background: transparent; text-align: left; justify-content: flex-start; border-radius: 6px; }
+.palette .liste button:hover:not(:disabled) { background: var(--survol); }
+.palette .liste button:active:not(:disabled) { background: var(--appui); }
+.tuile { flex: none; width: 22px; height: 22px; border-radius: 6px; background: var(--tuile); color: #fff; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; }
+.tuile .sf { width: 14px; height: 14px; }
+.palette button:disabled { opacity: 0.45; }
+.proprietes { padding: 18px var(--marge) 28px 24px; overflow: auto; background: var(--fenetre); }
+.entete { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 14px; }
+.entete h2 { font-size: 17px; font-weight: 600; color: var(--texte); letter-spacing: -0.01em; }
+.entete h2 .nom { font-weight: 400; color: var(--texte2); }
+.entete .actions { display: flex; gap: 8px; align-items: center; }
+.entete .sf { width: 13px; height: 13px; }
+.retour { margin: -8px 0 10px; }
+input.court { width: 120px; text-align: right; font-variant-numeric: tabular-nums; }
+input.moyen { width: 240px; }
+.ctrl textarea, .ctrl input.long { width: 360px; max-width: 100%; text-align: left; }
+
+/* Symboles */
+.exemple { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 28px; background: var(--tb-fond); color: #fff; border-radius: var(--r-champ); flex: none; }
+.symboles { display: flex; flex-direction: column; gap: 10px; }
+.symboles input[type="search"] { width: 100%; }
+.grille { display: grid; grid-template-columns: repeat(auto-fill, minmax(36px, 1fr)); gap: 2px; }
+.grille button { height: 36px; padding: 0; border: 0; background: transparent; display: flex; align-items: center; justify-content: center; border-radius: 6px; }
+.grille button:hover { background: var(--survol); }
+.grille button[aria-pressed="true"] { background: var(--accent-plein); color: #fff; }
+.grille .sf { width: 18px; height: 18px; }
+.explication { color: var(--texte2); font-size: 11px; line-height: 1.4; max-width: 46ch; }
+.explication .alerte, .alerte { color: var(--erreur); }
+.explication button.lien { min-height: 22px; font-size: 11px; }
+.ctrl .explication { text-align: right; }
+.message-symbole { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.message-symbole .sf { color: var(--erreur); width: 14px; height: 14px; }
+.message-symbole button.lien { min-height: 22px; font-size: 12px; }
+
+/* Contenu d'un groupe */
+.sous { margin: 0; padding: 0; list-style: none; }
+.sous li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; position: relative; }
+.sous:not(:empty) + .ligne::before { content: ""; position: absolute; top: 0; left: 12px; right: 12px; border-top: 1px solid var(--filet); }
+.sous li + li::before { content: ""; position: absolute; top: 0; left: 44px; right: 12px; border-top: 1px solid var(--filet); }
 .sous li .quoi { flex: 1; }
-.sous li button { min-height: 36px; padding: 0 10px; }
-.vide-props { color: var(--texte2); max-width: 46ch; margin-top: 40px; }
-.explication { color: var(--texte2); font-size: 12px; margin: 4px 0 0; max-width: 480px; }
-.explication .alerte { color: var(--erreur); }
-.explication button.lien { min-height: 32px; font-size: 12px; }
 
-/* Changements non enregistrés : un point à côté du titre, comme le bouton rouge de la fenêtre */
-.modifie { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font-size: 12px; font-weight: 500; color: var(--texte2); vertical-align: 3px; }
-.modifie::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
-.modifie[hidden] { display: none; }
+/* Rien de choisi */
+.vide-props { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 10px; color: var(--texte2); min-height: 260px; max-width: none; }
+.vide-props .sf { width: 36px; height: 36px; color: var(--texte3); }
+.vide-props p { max-width: 36ch; }
 
 /* Fichier illisible : l'erreur prend la place des réglages */
-.illisible { max-width: 620px; }
-.illisible h2 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--texte); margin: 4px 0 10px; }
-.illisible .etat p { margin: 0; }
-.illisible pre { margin: 8px 0 0; font: 12px/1.4 "SF Mono", Menlo, monospace; white-space: pre-wrap; word-break: break-all; color: var(--texte); }
-.illisible > p { color: var(--texte2); max-width: 62ch; margin: 12px 0 0; }
-.illisible .cote { margin-top: 16px; }
-.palette button:disabled, .case:has(input:disabled) { opacity: 0.45; }
+.illisible { max-width: 640px; }
+.illisible .titre { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.illisible .titre .sf { width: 22px; height: 22px; color: var(--erreur); }
+.illisible h2 { font-size: 17px; color: var(--texte); }
+.illisible .etat { margin: 0; display: block; }
+.illisible pre { margin: 6px 0 0; font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; white-space: pre-wrap; word-break: break-all; }
+.illisible > p { color: var(--texte2); max-width: 62ch; margin-top: 12px; }
+.illisible .cote { justify-content: flex-start; margin-top: 18px; }
 
-/* Confirmation dans la page : <dialog> modal, Échap = Annuler */
-dialog { border: 0; border-radius: 10px; padding: 20px 20px 16px; width: min(440px, calc(100vw - 32px)); background: var(--panneau); color: var(--texte);
-  box-shadow: 0 12px 40px rgb(0 0 0 / 0.28); }
-dialog::backdrop { background: rgb(0 0 0 / 0.25); }
-dialog h2 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--texte); margin: 0 0 6px; }
-dialog p { margin: 0; color: var(--texte2); }
-dialog .choix { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+/* Confirmation : <dialog> modal façon alerte macOS, Échap = Annuler */
+dialog { border: 1px solid var(--encart-bord); border-radius: 12px; padding: 20px; width: min(420px, calc(100vw - 32px)); background: var(--eleve); color: var(--texte);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 0.3); }
+dialog::backdrop { background: rgb(0 0 0 / 0.22); }
+dialog h2 { font-size: 13px; font-weight: 600; color: var(--texte); margin: 0 0 6px; }
+dialog p { color: var(--texte2); }
+dialog .choix { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 dialog .choix .gauche { margin-right: auto; }
+dialog .choix button { min-width: 80px; }
+
 @media (prefers-reduced-motion: no-preference) {
-  .face, button { transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1); }
+  .face, button, select, input.interrupteur, input.interrupteur::after, .segmente button { transition: background-color var(--vite), transform var(--vite), box-shadow var(--vite); }
 }
 </style>
 </head>
@@ -162,24 +246,24 @@ dialog .choix .gauche { margin-right: auto; }
     <p class="aide" data-i18n="sousTitre"></p>
   </div>
   <div class="outils">
-    <div class="langues" role="group" aria-label="Langue / Language">
+    <div class="segmente" role="group" aria-label="Langue / Language">
       <button type="button" data-langue="fr" aria-pressed="true">FR</button>
       <button type="button" data-langue="en" aria-pressed="false">EN</button>
     </div>
-    <button type="button" id="revenir" class="secondaire" data-i18n="revenir" disabled></button>
+    <button type="button" id="revenir" data-i18n="revenir" disabled></button>
     <button type="button" id="enregistrer" class="primaire" data-i18n="enregistrer"></button>
   </div>
 </header>
 
 <section class="apercu">
-  <div class="scene">
-    <div class="touchbar" id="barre" role="listbox" aria-label="Touch Bar"></div>
-    <div class="strip" aria-hidden="true" data-i18n="controlStrip"></div>
+  <div class="encart">
+    <div class="scene">
+      <div class="touchbar" id="barre" role="listbox" aria-label="Touch Bar"></div>
+      <div class="strip" aria-hidden="true" data-i18n="controlStrip"></div>
+    </div>
+    <div class="ligne bascule-strip"><label class="nom" for="masquer" data-i18n="masquerCS"></label><div class="ctrl"><input type="checkbox" class="interrupteur" role="switch" id="masquer"></div></div>
   </div>
-  <div class="bas">
-    <p class="etat" id="etat" role="status" aria-live="polite"></p>
-    <label class="case"><input type="checkbox" id="masquer"> <span data-i18n="masquerCS"></span></label>
-  </div>
+  <p class="etat" id="etat" role="status" aria-live="polite"></p>
 </section>
 
 <main>
@@ -225,7 +309,7 @@ const T = {
     actLecturePause: 'Lecture / pause', actSuivant: 'Morceau suivant', actPrecedent: 'Morceau précédent', actVeille: 'Mettre en veille',
     actEchap: 'Touche esc', actBarreApple: 'Afficher la barre d’Apple',
     choisir: 'Choisir…', application: 'Application', adresse: 'Adresse', niveau: 'Niveau', raccourci: 'Raccourci', raccourciAide: 'cmd, shift, ctrl, alt, fn, puis une touche : cmd+shift+4, f5, esc.',
-    enregistre: 'Enregistré. Ta Touch Bar est à jour.', pasEnregistre: 'Pas enregistré : ', modifie: 'Modifications non enregistrées.', charge: 'Barre chargée, pas encore enregistrée.',
+    enregistre: 'Enregistré. Ta Touch Bar est à jour.', pasEnregistre: 'Pas enregistré. ', modifie: 'Modifications non enregistrées.', charge: 'Barre chargée, pas encore enregistrée.',
     titreFenetre: 'Personnaliser ma barre', modifieBadge: 'Modifié',
     illisibleTitre: 'Ton fichier de barre contient une erreur',
     illisibleTexte: 'Tactile n’arrive pas à le lire. Ton fichier n’a pas été modifié, et Enregistrer reste désactivé pour ne pas l’écraser.',
@@ -239,6 +323,8 @@ const T = {
     confRevenir: 'Revenir à la version précédente ?', confRevenirTexte: 'Ta Touch Bar change tout de suite. La version actuelle reste dans l’historique.',
     revenu: 'Version précédente rétablie. Ta Touch Bar est à jour.',
     enregistreManuel: 'Enregistré. Ta Touch Bar est à jour. Ton fichier d’origine, avec ses commentaires, est gardé sous le nom {f}.',
+    symboleUtiliser: 'Utiliser {s}', parDefaut: 'par défaut : {v}', largeurAide: 'La barre fait 1004 points de large.',
+    soupleAide: 'Prend toute la place libre. Deux espaces souples centrent ce qui se trouve entre eux.',
     appIntrouvable: 'Aucune application « {a} » sur ce Mac.', appProche: 'La plus proche :', appUtiliser: 'Utiliser « {s} »', appConseil: 'Avec Choisir…, le nom est toujours juste.',
   },
   en: {
@@ -264,7 +350,7 @@ const T = {
     actLecturePause: 'Play / pause', actSuivant: 'Next track', actPrecedent: 'Previous track', actVeille: 'Sleep',
     actEchap: 'Esc key', actBarreApple: 'Show Apple’s bar',
     choisir: 'Choose…', application: 'App', adresse: 'Address', niveau: 'Level', raccourci: 'Shortcut', raccourciAide: 'cmd, shift, ctrl, alt, fn, then a key: cmd+shift+4, f5, esc.',
-    enregistre: 'Saved. Your Touch Bar is up to date.', pasEnregistre: 'Not saved: ', modifie: 'Unsaved changes.', charge: 'Bar loaded, not saved yet.',
+    enregistre: 'Saved. Your Touch Bar is up to date.', pasEnregistre: 'Not saved. ', modifie: 'Unsaved changes.', charge: 'Bar loaded, not saved yet.',
     titreFenetre: 'Customize my bar', modifieBadge: 'Edited',
     illisibleTitre: 'Your bar file has an error',
     illisibleTexte: 'Tactile can’t read it. Your file hasn’t been changed, and Save stays off so it can’t be overwritten.',
@@ -278,6 +364,8 @@ const T = {
     confRevenir: 'Go back to the previous version?', confRevenirTexte: 'Your Touch Bar changes right away. The current version stays in the history.',
     revenu: 'Previous version restored. Your Touch Bar is up to date.',
     enregistreManuel: 'Saved. Your Touch Bar is up to date. Your original file, with its comments, is kept as {f}.',
+    symboleUtiliser: 'Use {s}', parDefaut: 'default: {v}', largeurAide: 'The bar is 1004 points wide.',
+    soupleAide: 'Takes all the free space. Two flexible spaces center whatever sits between them.',
     appIntrouvable: 'No app called “{a}” on this Mac.', appProche: 'Closest match:', appUtiliser: 'Use “{s}”', appConseil: 'Choose… always gets the name right.',
   },
 };
@@ -307,6 +395,10 @@ const ACTIONS_SIMPLES = ['luminosite_plus', 'luminosite_moins', 'volume_plus', '
 const CLE_ACTION = { luminosite_plus: 'actLuminositePlus', luminosite_moins: 'actLuminositeMoins', volume_plus: 'actVolumePlus', volume_moins: 'actVolumeMoins',
   basculer_muet: 'actBasculerMuet', lecture_pause: 'actLecturePause', suivant: 'actSuivant', precedent: 'actPrecedent', veille: 'actVeille', echap: 'actEchap', barre_apple: 'actBarreApple' };
 const ICONES = { bouton: '▢', slider: '⇆', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
+/* Les mêmes en symboles SF (rendus par Rust) ; les caractères ci-dessus servent tant qu'ils ne sont pas arrivés. */
+const ICONES_SF = { bouton: 'hand.tap.fill', slider: 'slider.horizontal.3', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
+  simple: 'star.fill', musique: 'music.note.list', developpeur: 'chevron.left.forwardslash.chevron.right' };
+const DECOR = new Set([...Object.values(ICONES_SF), 'chevron.left', 'chevron.right', 'exclamationmark.triangle.fill', 'checkmark.circle.fill', 'hand.point.up.left']);
 
 /* ---------- État ---------- */
 let barre = { masquer_control_strip: true, element: [] };
@@ -350,14 +442,23 @@ window.tactile = {
     marquer(false); etat('');
     tout();
   },
-  glyphes(map) { Object.assign(glyphes, map); dessinerBarre(); dessinerProprietes(false); },
+  glyphes(map) {
+    Object.assign(glyphes, map); dessinerBarre();
+    const decor = Object.keys(map).some(n => DECOR.has(n));
+    if (decor) { dessinerPalette(); etat(...dernierEtat); }
+    dessinerProprietes(decor);
+  },
   enregistre(manuel, precedent) {
     marquer(false); aPrecedent = !!precedent;
     etat(manuel ? t('enregistreManuel').replace('{f}', manuel) : t('enregistre'), 'ok'); boutons();
   },
   revenu() { etat(t('revenu'), 'ok'); },
   abimeGarde(nom) { etat(t('abimeGarde').replace('{f}', nom)); },
-  erreur(message) { prereglageAttendu = false; etat(t('pasEnregistre') + message, 'erreur'); },
+  erreur(message) {
+    prereglageAttendu = false;
+    const m = String(message);
+    etat(t('pasEnregistre') + m.charAt(0).toUpperCase() + m.slice(1) + (/[.!?]$/.test(m) ? '' : '.'), 'erreur');
+  },
   async demanderFermeture() {
     const r = await confirmer(t('confFermer'), t('confFermerTexte'), [['sans', t('fermerSans'), 'secondaire gauche'], ['annuler', t('annuler')], ['oui', t('enregistrer'), 'primaire']]);
     if (r === 'oui') enregistrer(true);
@@ -447,7 +548,8 @@ function selectionner(s) { sel = s; dessinerBarre(); dessinerProprietes(true); }
 function sf(nom) {
   if (!nom) return '';
   const g = glyphes[nom];
-  if (g === null) return `<span class="sf inconnu" title="${t('symboleInconnu')}">${esc(nom)}</span>`;
+  const alerte = glyphes['exclamationmark.triangle.fill'];
+  if (g === null) return `<span class="sf alerte${alerte ? '' : ' texte'}" style="--m:url(${alerte || ''})" role="img" aria-label="${esc(t('symboleInconnu'))}" title="${esc(nom)} : ${esc(t('symboleInconnu'))}">${alerte ? '' : '?'}</span>`;
   return `<span class="sf" style="--m:url(${g || ''})" role="img" aria-label="${esc(nom)}"></span>`;
 }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -500,7 +602,15 @@ function boutons() {
   $('masquer').disabled = !!illisible;
   document.querySelectorAll('#ajouts button').forEach(b => { b.disabled = !!illisible; });
 }
-function etat(texte, classe) { const e = $('etat'); e.textContent = texte || ''; e.className = 'etat' + (classe ? ' ' + classe : ''); }
+/* Icône SF décorative, ou son remplaçant tant que le glyphe n'est pas là (ou s'il n'existe pas sur ce Mac). */
+function ico(nom, repli) { return glyphes[nom] ? `<span class="sf" style="--m:url(${glyphes[nom]})" aria-hidden="true"></span>` : repli; }
+let dernierEtat = ['', ''];
+function etat(texte, classe) {
+  dernierEtat = [texte, classe];
+  const e = $('etat'), icone = { ok: 'checkmark.circle.fill', erreur: 'exclamationmark.triangle.fill' }[classe];
+  e.innerHTML = texte ? (icone ? ico(icone, '') : '') + `<span>${esc(texte)}</span>` : '';
+  e.className = 'etat' + (classe ? ' ' + classe : '');
+}
 
 /* Souris : clic et glisser-déposer natif */
 let glisse = null;
@@ -547,8 +657,8 @@ $('barre').addEventListener('keydown', ev => {
 
 /* ---------- Palette ---------- */
 function dessinerPalette() {
-  $('ajouts').innerHTML = Object.keys(ICONES).map(ty => `<button type="button" data-ajout="${ty}"><span class="ico" aria-hidden="true">${ICONES[ty]}</span>${esc(t(ty))}</button>`).join('');
-  $('preregles').innerHTML = ['simple', 'musique', 'developpeur'].map(n => `<button type="button" data-prereglage="${n}"><span class="ico" aria-hidden="true">★</span>${esc(t(n))}</button>`).join('');
+  $('ajouts').innerHTML = Object.keys(ICONES).map(ty => `<button type="button" data-ajout="${ty}"><span class="tuile" aria-hidden="true">${ico(ICONES_SF[ty], ICONES[ty])}</span>${esc(t(ty))}</button>`).join('');
+  $('preregles').innerHTML = ['simple', 'musique', 'developpeur'].map(n => `<button type="button" data-prereglage="${n}"><span class="tuile" aria-hidden="true">${ico(ICONES_SF[n], '★')}</span>${esc(t(n))}</button>`).join('');
 }
 $('ajouts').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) ajouter(b.dataset.ajout, false); });
 $('preregles').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) prereglage(b.dataset.prereglage); });
@@ -585,19 +695,25 @@ function actionModele(mode, valeur) {
     default: return mode;
   }
 }
+const encart = html => `<div class="encart">${html}</div>`;
+/* Une ligne d'encart : libellé (et sa légende) à gauche, contrôle à droite. */
+function ligne(label, html, id, { aide, haute } = {}) {
+  const ouvre = id ? `<label class="nom" for="${id}">` : '<span class="nom">', ferme = id ? '</label>' : '</span>';
+  return `<div class="ligne${haute ? ' haute' : ''}">${ouvre}${label}${aide ? `<span class="legende">${esc(aide)}</span>` : ''}${ferme}<div class="ctrl">${html}</div></div>`;
+}
 function champAction(cle, label) {
   const e = elem(), ui = actionUI(e[cle]);
   const options = [['aucune', t('actAucune')], ['app', t('actApp')], ['url', t('actUrl')], ['touche', t('actTouche')], ['shell', t('actShell')], ['applescript', t('actApplescript')],
     ...ACTIONS_SIMPLES.map(a => [a, t(CLE_ACTION[a])]), ['luminosite_fixe', t('actLuminositeFixe')], ['volume_fixe', t('actVolumeFixe')], ...(ui.mode === 'autre' ? [['autre', t('actAutre')]] : [])];
   let detail = '';
-  if (ui.mode === 'app') detail = `<div class="cote"><input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" aria-describedby="app-${cle}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div><p class="explication" id="app-${cle}" aria-live="polite"></p>`;
-  else if (ui.mode === 'url') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || 'https://')}" aria-label="${t('adresse')}" placeholder="https://">`;
-  else if (ui.mode === 'shell') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('actShell')}" placeholder="open -a Safari" spellcheck="false">`;
-  else if (ui.mode === 'touche') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('raccourci')}" placeholder="cmd+shift+4" spellcheck="false" style="max-width:260px"><p class="explication">${esc(t('raccourciAide'))}</p>`;
+  if (ui.mode === 'app') detail = `<div class="cote"><input type="text" class="moyen" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" aria-describedby="app-${cle}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div><p class="explication" id="app-${cle}" aria-live="polite"></p>`;
+  else if (ui.mode === 'url') detail = `<input type="text" class="long" data-action-valeur="${cle}" value="${esc(ui.valeur || 'https://')}" aria-label="${t('adresse')}" placeholder="https://">`;
+  else if (ui.mode === 'shell') detail = `<input type="text" class="long" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('actShell')}" placeholder="open -a Safari" spellcheck="false">`;
+  else if (ui.mode === 'touche') detail = `<input type="text" class="moyen" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('raccourci')}" placeholder="cmd+shift+4" spellcheck="false"><p class="explication">${esc(t('raccourciAide'))}</p>`;
   else if (ui.mode === 'applescript') detail = `<textarea data-action-valeur="${cle}" rows="2" aria-label="${t('actApplescript')}" placeholder='tell application "Music" to playpause' spellcheck="false">${esc(ui.valeur || '')}</textarea>`;
   else if (ui.mode === 'autre') detail = `<p class="explication">${esc(JSON.stringify(ui.valeur))}</p>`;
   else if (ui.mode === 'luminosite_fixe' || ui.mode === 'volume_fixe') detail = `<div class="cote"><input type="range" min="0" max="100" step="5" data-action-valeur="${cle}" value="${Math.round((ui.valeur ?? 0.5) * 100)}" aria-label="${t('niveau')}"><span class="valeur">${Math.round((ui.valeur ?? 0.5) * 100)} %</span></div>`;
-  return `<div class="ligne${detail ? ' haute' : ''}"><label class="nom" for="act-${cle}">${label}</label><div><select id="act-${cle}" data-action-mode="${cle}">${options.map(([v, l]) => `<option value="${v}"${v === ui.mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${detail ? `<div style="margin-top:8px">${detail}</div>` : ''}</div></div>`;
+  return ligne(label, `<select id="act-${cle}" data-action-mode="${cle}">${options.map(([v, l]) => `<option value="${v}"${v === ui.mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${detail}`, `act-${cle}`, { haute: !!detail });
 }
 /* Nom d'app tapé à la main : Rust dit s'il existe et propose le plus proche (« Photoshop » → « Adobe Photoshop 2025 »). */
 let minuteurApp = null;
@@ -615,10 +731,24 @@ function verifierApp(cle) {
     + esc(t('appConseil'));
 }
 function panneauIllisible() {
-  return `<div class="illisible"><h2>${esc(t('illisibleTitre'))}</h2>
+  return `<div class="illisible"><div class="titre">${ico('exclamationmark.triangle.fill', '')}<h2>${esc(t('illisibleTitre'))}</h2></div>
     <div class="etat erreur" role="alert"><p>${esc(illisible.message)}</p>${illisible.extrait ? `<pre>${esc(illisible.extrait)}</pre>` : ''}</div>
     <p>${esc(t('illisibleTexte'))}</p><p>${esc(t('illisibleIssue'))}</p>
     <div class="cote"><button type="button" id="i-ouvrir" class="primaire">${esc(t('ouvrirFichier'))}</button><button type="button" id="i-relire">${esc(t('relire'))}</button><button type="button" id="i-repartir">${esc(t('repartir'))}</button></div></div>`;
+}
+/* Faute de frappe dans un nom de symbole : le plus proche de la liste, à 3 fautes au plus. */
+function distance(a, b) {
+  const l = [...Array(b.length + 1).keys()];
+  for (let i = 0; i < a.length; i++) {
+    let diag = l[0]; l[0] = i + 1;
+    for (let j = 0; j < b.length; j++) { const haut = l[j + 1]; l[j + 1] = Math.min(diag + (a[i] !== b[j]), haut + 1, l[j] + 1); diag = haut; }
+  }
+  return l[b.length];
+}
+function symboleProche(nom) {
+  let meilleur = null, d = 4;
+  for (const s of SYMBOLES) { const k = distance(nom.toLowerCase(), s); if (k < d) { d = k; meilleur = s; } }
+  return meilleur;
 }
 let rechercheSymbole = '';
 function champSymbole(e) {
@@ -626,62 +756,65 @@ function champSymbole(e) {
   const q = rechercheSymbole.trim().toLowerCase();
   const liste = (q ? SYMBOLES.filter(s => s.includes(q)) : SYMBOLES).slice(0, 48);
   if (nom && !(nom in glyphes)) demanderGlyphes([nom]);
-  return `<div class="ligne haute"><span class="nom" id="lbl-symbole">${t('symbole')}</span><div>
-    <div class="cote"><span class="exemple" aria-hidden="true">${nom ? sf(nom) : '<span style="color:#777">—</span>'}</span>
-      <input type="text" id="symbole-nom" value="${esc(nom)}" aria-label="${t('nomSymbole')}" placeholder="play.fill" spellcheck="false" style="max-width:260px">
-      <button type="button" id="symbole-aucun" class="secondaire">${t('aucunSymbole')}</button></div>
-    ${nom && glyphes[nom] === null ? `<p class="explication" style="color:var(--erreur)">${t('symboleInconnu')}</p>` : ''}
-    <input type="search" id="symbole-recherche" value="${esc(rechercheSymbole)}" placeholder="${esc(t('chercherSymbole'))}" aria-label="${esc(t('chercherSymbole'))}" style="margin-top:10px">
-    <div class="grille" role="listbox" aria-labelledby="lbl-symbole">${liste.map(s => `<button type="button" role="option" data-symbole="${s}" title="${s}" aria-label="${s}" aria-pressed="${s === nom}">${sf(s)}</button>`).join('')}</div>
+  const proche = nom && glyphes[nom] === null ? symboleProche(nom) : null;
+  const message = nom && glyphes[nom] === null
+    ? `<p class="message-symbole" role="alert">${ico('exclamationmark.triangle.fill', '')}<span>${esc(t('symboleInconnu'))}</span>${proche ? `<button type="button" class="lien" data-symbole="${proche}">${esc(t('symboleUtiliser').replace('{s}', proche))}</button>` : ''}</p>` : '';
+  return ligne(t('symbole'), `<div class="cote"><span class="exemple" aria-hidden="true">${nom ? sf(nom) : '<span style="color:#8e8e93">—</span>'}</span>
+      <input type="text" class="moyen" id="symbole-nom" value="${esc(nom)}" aria-label="${t('nomSymbole')}" placeholder="play.fill" spellcheck="false">
+      <button type="button" id="symbole-aucun">${t('aucunSymbole')}</button></div>`, 'symbole-nom')
+    + `<div class="ligne pleine"><div class="ctrl symboles">${message}
+    <input type="search" id="symbole-recherche" value="${esc(rechercheSymbole)}" placeholder="${esc(t('chercherSymbole'))}" aria-label="${esc(t('chercherSymbole'))}">
+    <div class="grille" role="listbox" aria-label="${t('symbole')}">${liste.map(s => `<button type="button" role="option" data-symbole="${s}" title="${s}" aria-label="${s}" aria-pressed="${s === nom}">${sf(s)}</button>`).join('')}</div>
   </div></div>`;
 }
-function ligne(label, html, id) { return `<div class="ligne"><label class="nom" for="${id}">${label}</label><div>${html}</div></div>`; }
 function texteChamp(id, cle, valeur, placeholder, aide) {
-  return ligne(t(cle), `<input type="text" id="${id}" data-champ="${cle}" value="${esc(valeur ?? '')}" placeholder="${esc(placeholder || '')}">${aide ? `<p class="explication">${esc(aide)}</p>` : ''}`, id);
+  return ligne(t(cle), `<input type="text" class="moyen" id="${id}" data-champ="${cle}" value="${esc(valeur ?? '')}" placeholder="${esc(placeholder || '')}">`, id, { aide });
 }
 function couleurChamp(cle, valeur, defaut, libelleAuto) {
-  return ligne(t(cle), `<div class="cote"><input type="color" id="f-${cle}" data-couleur="${cle}" value="${esc(valeur || defaut)}" aria-label="${t(cle)}"><label class="case"><input type="checkbox" id="f-${cle}-auto" data-couleur-auto="${cle}" ${valeur ? '' : 'checked'}> ${libelleAuto}</label></div>`, 'f-' + cle);
+  return ligne(t(cle), `<div class="cote"><label class="bascule">${libelleAuto}<input type="checkbox" class="interrupteur" role="switch" id="f-${cle}-auto" data-couleur-auto="${cle}" ${valeur ? '' : 'checked'}></label><input type="color" id="f-${cle}" data-couleur="${cle}" value="${esc(valeur || defaut)}" aria-label="${t(cle)}"></div>`, 'f-' + cle);
 }
 function nombreChamp(cle, valeur, min, step, aide, optionnel) {
-  return ligne(t(cle), `<div class="cote"><input type="number" id="n-${cle}" data-champ="${cle}" data-nombre="${optionnel ? 'opt' : 'req'}" value="${valeur ?? ''}" min="${min}" step="${step}" placeholder="${optionnel ? esc(t('auto')) : ''}" style="max-width:140px">${aide ? `<span class="explication">${esc(aide)}</span>` : ''}</div>`, 'n-' + cle);
+  return ligne(t(cle), `<input type="number" class="court" id="n-${cle}" data-champ="${cle}" data-nombre="${optionnel ? 'opt' : 'req'}" value="${valeur ?? ''}" min="${min}" step="${step}" placeholder="${optionnel ? esc(t('auto')) : ''}">`, 'n-' + cle, { aide });
 }
 function dessinerProprietes(reconstruire) {
   const p = $('proprietes');
   const e = elem();
   if (illisible) { if (reconstruire) p.innerHTML = panneauIllisible(); return; }
-  if (!e) { p.innerHTML = `<p class="vide-props">${esc(t('rien'))}</p>`; return; }
+  if (!e) { p.innerHTML = `<div class="vide-props">${ico('hand.point.up.left', '')}<p>${esc(t('rien'))}</p></div>`; return; }
   if (!reconstruire && !p.querySelector('.grille')) return; // seule la grille de symboles dépend des glyphes
   const focus = document.activeElement?.id;
   const l = liste(), k = index();
   let html = `<div class="entete"><h2>${esc(t(e.type))}${sel.j != null ? ` <span class="nom">· ${esc(t('groupe'))}</span>` : ''}</h2>
-    <div class="actions"><button type="button" id="p-gauche" aria-label="${t('gauche')}" title="${t('gauche')}" ${k === 0 ? 'disabled' : ''}>◀</button><button type="button" id="p-droite" aria-label="${t('droite')}" title="${t('droite')}" ${k >= l.length - 1 ? 'disabled' : ''}>▶</button><button type="button" id="p-supprimer">${t('supprimer')}</button></div></div>`;
-  if (sel.j != null) html += `<button type="button" class="lien" id="p-retour">${t('retourGroupe')}</button>`;
+    <div class="actions"><button type="button" class="icone" id="p-gauche" aria-label="${t('gauche')}" title="${t('gauche')}" ${k === 0 ? 'disabled' : ''}>${ico('chevron.left', '◀')}</button><button type="button" class="icone" id="p-droite" aria-label="${t('droite')}" title="${t('droite')}" ${k >= l.length - 1 ? 'disabled' : ''}>${ico('chevron.right', '▶')}</button><button type="button" id="p-supprimer">${t('supprimer')}</button></div></div>`;
+  if (sel.j != null) html += `<p class="retour"><button type="button" class="lien" id="p-retour">‹ ${t('retourGroupe')}</button></p>`;
+  const parDefaut = v => t('parDefaut').replace('{v}', v);
   switch (e.type) {
     case 'bouton':
-      html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
-        + (e.image ? ligne(t('image'), `<p class="explication" style="margin:0">${esc(e.image)}</p>`, '') : '')
-        + couleurChamp('couleur', e.couleur, '#363636', t('couleurAuto')) + couleurChamp('couleur_texte', e.couleur_texte, '#ffffff', t('couleurTexteAuto'))
-        + nombreChamp('taille', e.taille, 8, 1, '', true)
-        + ligne(t('affichage'), `<select id="f-affichage" data-champ="affichage">${[['', t('auto')], ['icone', t('affIcone')], ['texte', t('affTexte')], ['les_deux', t('affLesDeux')]].map(([v, l]) => `<option value="${v}"${(e.affichage || '') === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`, 'f-affichage')
-        + nombreChamp('largeur', e.largeur, 20, 4, langue === 'fr' ? 'la barre fait 1004 points' : 'the bar is 1004 points wide', true)
-        + champAction('action', t('action')) + champAction('appui_long', t('appuiLong'));
+      html += encart(texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
+          + (e.image ? ligne(t('image'), `<p class="explication">${esc(e.image)}</p>`, '') : ''))
+        + encart(couleurChamp('couleur', e.couleur, '#363636', t('couleurAuto')) + couleurChamp('couleur_texte', e.couleur_texte, '#ffffff', t('couleurTexteAuto'))
+          + nombreChamp('taille', e.taille, 8, 1, '', true)
+          + ligne(t('affichage'), `<select id="f-affichage" data-champ="affichage">${[['', t('auto')], ['icone', t('affIcone')], ['texte', t('affTexte')], ['les_deux', t('affLesDeux')]].map(([v, l]) => `<option value="${v}"${(e.affichage || '') === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`, 'f-affichage')
+          + nombreChamp('largeur', e.largeur, 20, 4, t('largeurAide'), true))
+        + encart(champAction('action', t('action')) + champAction('appui_long', t('appuiLong')));
       break;
     case 'slider':
-      html += ligne(t('reglage'), `<select id="f-reglage" data-champ="reglage"><option value="luminosite"${e.reglage === 'luminosite' ? ' selected' : ''}>${t('luminosite')}</option><option value="volume"${e.reglage === 'volume' ? ' selected' : ''}>${t('volume')}</option></select>`, 'f-reglage') + champSymbole(e);
+      html += encart(ligne(t('reglage'), `<select id="f-reglage" data-champ="reglage"><option value="luminosite"${e.reglage === 'luminosite' ? ' selected' : ''}>${t('luminosite')}</option><option value="volume"${e.reglage === 'volume' ? ' selected' : ''}>${t('volume')}</option></select>`, 'f-reglage') + champSymbole(e));
       break;
-    case 'heure': html += texteChamp('f-format', 'format', e.format, 'HH:mm', t('formatAide')); break;
-    case 'en_cours': html += nombreChamp('largeur', e.largeur, 60, 10, '', true); break;
+    case 'heure': html += encart(texteChamp('f-format', 'format', e.format, 'HH:mm', t('formatAide'))); break;
+    case 'en_cours': html += encart(nombreChamp('largeur', e.largeur, 60, 10, '', true)); break;
     case 'script':
-      html += ligne(t('commande'), `<textarea id="f-commande" data-champ="commande" rows="2" spellcheck="false">${esc(e.commande)}</textarea><p class="explication">${esc(t('commandeAide'))}</p>`, 'f-commande')
-        + nombreChamp('intervalle', e.intervalle, 0.1, 1, '', false) + nombreChamp('delai', e.delai, 0.1, 1, '5', true) + nombreChamp('largeur', e.largeur, 20, 4, '120', true) + champAction('action', t('action'));
+      html += encart(ligne(t('commande'), `<textarea id="f-commande" data-champ="commande" rows="2" spellcheck="false">${esc(e.commande)}</textarea>`, 'f-commande', { aide: t('commandeAide'), haute: true })
+          + nombreChamp('intervalle', e.intervalle, 0.1, 1, '', false) + nombreChamp('delai', e.delai, 0.1, 1, parDefaut('5'), true) + nombreChamp('largeur', e.largeur, 20, 4, parDefaut('120'), true))
+        + encart(champAction('action', t('action')));
       break;
-    case 'espace': html += nombreChamp('largeur', e.largeur, 4, 4, '', false); break;
-    case 'batterie': html += ligne('', `<label class="case"><input type="checkbox" id="f-pile" ${e.symbole === false ? '' : 'checked'}> ${t('symbolePile')}</label>`, 'f-pile') + nombreChamp('largeur', e.largeur, 40, 4, '', true); break;
-    case 'souple': html += `<p class="explication">${langue === 'fr' ? 'Prend toute la place libre : deux espaces souples centrent ce qui est entre eux.' : 'Takes all the free space: two flexible spaces center what is between them.'}</p>`; break;
+    case 'espace': html += encart(nombreChamp('largeur', e.largeur, 4, 4, '', false)); break;
+    case 'batterie': html += encart(ligne(t('symbolePile'), `<input type="checkbox" class="interrupteur" role="switch" id="f-pile" ${e.symbole === false ? '' : 'checked'}>`, 'f-pile') + nombreChamp('largeur', e.largeur, 40, 4, '', true)); break;
+    case 'souple': html += encart(`<div class="ligne"><span class="nom">${esc(t('soupleAide'))}</span></div>`); break;
     case 'groupe':
-      html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e) + nombreChamp('largeur', e.largeur, 40, 4, '', true)
-        + `<div class="ligne haute"><span class="nom">${t('contenu')}</span><div><ul class="sous">${e.element.map((s, j) => `<li><span class="ico" aria-hidden="true">${ICONES[s.type]}</span><span class="quoi">${esc(t(s.type))}${s.texte ? ' · ' + esc(s.texte) : s.symbole ? ' · ' + esc(s.symbole) : ''}</span><button type="button" data-sous="${j}">${t('regler')}</button></li>`).join('')}</ul>
-          <select id="f-ajout-groupe" aria-label="${t('ajouterDans')}" style="margin-top:8px"><option value="">${t('ajouterDans')}</option>${['bouton', 'slider', 'heure', 'en_cours', 'script', 'batterie', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select></div></div>`;
+      html += encart(texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e) + nombreChamp('largeur', e.largeur, 40, 4, '', true))
+        + `<h3>${t('contenu')}</h3>` + encart(`<ul class="sous">${e.element.map((s, j) => `<li><span class="tuile" aria-hidden="true">${ico(ICONES_SF[s.type], ICONES[s.type])}</span><span class="quoi">${esc(t(s.type))}${s.texte ? ' · ' + esc(s.texte) : s.symbole ? ' · ' + esc(s.symbole) : ''}</span><button type="button" data-sous="${j}">${t('regler')}</button></li>`).join('')}</ul>`
+          + ligne(t('ajouterDans'), `<select id="f-ajout-groupe"><option value="">${t('choisir')}</option>${['bouton', 'slider', 'heure', 'en_cours', 'script', 'batterie', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select>`, 'f-ajout-groupe'));
       break;
   }
   p.innerHTML = html;
@@ -755,7 +888,7 @@ setInterval(() => {
 }, 1000);
 
 traduire();
-demanderGlyphes(SYMBOLES);
+demanderGlyphes([...SYMBOLES, ...DECOR]);
 envoyer({ type: 'pret' });
 </script>
 </body>

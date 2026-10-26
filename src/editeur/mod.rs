@@ -3,7 +3,7 @@
 //!
 //! JS → Rust, un objet JSON `{ "type": … }` : `pret`, `enregistrer { barre, fermer? }`, `revenir`,
 //! `prereglage { nom }`, `symboles { noms }`, `choisirApp`, `verifierApp { nom }`, `modifie { valeur }`,
-//! `fermer`, `ouvrirFichier`, `relire`, `titre { texte }`.
+//! `fermer`, `ouvrirFichier`, `relire`, `titre { texte }`, `journal { texte }`, `capture { chemin }`.
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
 //! `tactile.glyphes({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
 //! `tactile.abimeGarde(nom)`, `tactile.erreur(texte)`, `tactile.appChoisie(nom)`,
@@ -92,10 +92,8 @@ fn recevoir(message: Value) {
             }
         }
         "capture" => {
-            if let Some(chemin) = message["chemin"].as_str()
-                && let Err(e) = capturer(Path::new(chemin))
-            {
-                eprintln!("tactile : capture, {e}");
+            if let Some(chemin) = message["chemin"].as_str() {
+                capturer(Path::new(chemin));
             }
         }
         "enregistrer" => {
@@ -430,29 +428,69 @@ fn glyphe(nom: &str) -> Option<String> {
     }
 }
 
-/// Image PNG de la fenêtre, prise par l'app elle-même : `screencapture` demande l'autorisation
-/// « Enregistrement de l'écran », pas la capture de ses propres fenêtres.
-fn capturer(chemin: &Path) -> Result<(), String> {
-    #[repr(C)]
-    struct CGRect([f64; 4]);
-    unsafe extern "C" {
-        fn CGWindowListCreateImage(rect: CGRect, option: u32, fenetre: u32, image_option: u32) -> Id;
-        fn CGImageRelease(image: Id);
+/// Image PNG de la page, rendue par WebKit lui-même (`takeSnapshotWithConfiguration:`) : elle marche écran
+/// verrouillé, là où `CGWindowListCreateImage` rend du blanc, et sans l'autorisation « Enregistrement de l'écran ».
+/// Asynchrone : le PNG est écrit quand WebKit rend la main, une fraction de seconde plus tard.
+fn capturer(chemin: &Path) {
+    let chemin = chemin.to_path_buf();
+    let fin = block2::RcBlock::new(move |image: Id, _erreur: Id| {
+        if let Err(e) = ecrire_png(image, &chemin) {
+            eprintln!("tactile : capture, {e}");
+        }
+    });
+    unsafe {
+        let _: () = msg_send![VUE.get(), takeSnapshotWithConfiguration: std::ptr::null_mut::<AnyObject>(), completionHandler: &*fin];
+    }
+}
+
+fn ecrire_png(image: Id, chemin: &Path) -> Result<(), String> {
+    if image.is_null() {
+        return Err("WebKit n'a rendu aucune image".into());
     }
     unsafe {
-        let numero: isize = msg_send![FENETRE.get(), windowNumber];
-        // Rect nul = la fenêtre entière ; 8 = seulement cette fenêtre ; 1 = sans l'ombre.
-        let image = CGWindowListCreateImage(CGRect([f64::INFINITY, f64::INFINITY, 0.0, 0.0]), 8, numero as u32, 1);
-        if image.is_null() {
-            return Err("CGWindowListCreateImage a renvoyé nul".into());
-        }
-        let bitmap: Id = msg_send![class!(NSBitmapImageRep), alloc];
-        let bitmap: Id = msg_send![bitmap, initWithCGImage: image];
-        CGImageRelease(image);
+        let image = avec_cadre(image);
+        let tiff: Id = msg_send![image, TIFFRepresentation];
+        let bitmap: Id = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
         let proprietes: Id = msg_send![class!(NSDictionary), dictionary];
         let png: Id = msg_send![bitmap, representationUsingType: 4usize, properties: proprietes];
         let ok: Bool = msg_send![png, writeToFile: &*texte(&chemin.to_string_lossy()), atomically: Bool::YES];
         if ok.as_bool() { Ok(()) } else { Err(format!("impossible d'écrire {}", chemin.display())) }
+    }
+}
+
+/// La page posée dans le cadre de la fenêtre (barre de titre, boutons rouge-orange-vert), dessiné par AppKit hors écran.
+unsafe fn avec_cadre(page: Id) -> Id {
+    unsafe {
+        let fenetre = FENETRE.get();
+        let vue: Id = msg_send![fenetre, contentView];
+        let cadre: Id = msg_send![vue, superview];
+        let tout: NSRect = msg_send![cadre, bounds];
+        let contenu: NSRect = msg_send![vue, frame];
+        let rep: Id = msg_send![cadre, bitmapImageRepForCachingDisplayInRect: tout];
+        let _: () = msg_send![cadre, cacheDisplayInRect: tout, toBitmapImageRep: rep];
+        let image: Id = msg_send![class!(NSImage), alloc];
+        let image: Id = msg_send![image, initWithSize: tout.size];
+        let _: () = msg_send![image, lockFocus];
+        // Les coins arrondis d'une fenêtre macOS (10 pt).
+        let coins: Id = msg_send![class!(NSBezierPath), bezierPathWithRoundedRect: tout, xRadius: 10.0f64, yRadius: 10.0f64];
+        let _: () = msg_send![coins, addClip];
+        let _: Bool = msg_send![rep, drawInRect: tout];
+        let _: () = msg_send![page, drawInRect: contenu];
+        let _: () = msg_send![image, unlockFocus];
+        image
+    }
+}
+
+/// `TACTILE_APPARENCE=clair|sombre` force le thème de l'app (et donc `prefers-color-scheme` dans la page), pour les captures.
+fn forcer_apparence(app: Id) {
+    let nom = match std::env::var("TACTILE_APPARENCE").as_deref() {
+        Ok("clair") => "NSAppearanceNameAqua",
+        Ok("sombre") => "NSAppearanceNameDarkAqua",
+        _ => return,
+    };
+    unsafe {
+        let apparence: Id = msg_send![class!(NSAppearance), appearanceNamed: &*texte(nom)];
+        let _: () = msg_send![app, setAppearance: apparence];
     }
 }
 
@@ -482,12 +520,13 @@ fn choisir_app() -> Option<String> {
 pub fn ouvrir() {
     unsafe {
         let app: Id = msg_send![class!(NSApplication), sharedApplication];
+        forcer_apparence(app);
         if FENETRE.get().is_null() {
             let pont = Retained::into_raw(msg_send![Pont::class(), new]) as Id;
             let configuration: Id = msg_send![class!(WKWebViewConfiguration), new];
             let controleur: Id = msg_send![configuration, userContentController];
             let _: () = msg_send![controleur, addScriptMessageHandler: pont, name: &*texte("tactile")];
-            let cadre = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1160.0, 720.0));
+            let cadre = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1180.0, 760.0));
             let vue: Id = msg_send![class!(WKWebView), alloc];
             let vue: Id = msg_send![vue, initWithFrame: cadre, configuration: configuration];
             // Une origine `file:` plutôt qu'opaque : localStorage (langue choisie) y est permis.
@@ -499,6 +538,9 @@ pub fn ouvrir() {
             let fenetre: Id = msg_send![fenetre, initWithContentRect: cadre, styleMask: 15usize, backing: 2usize, defer: Bool::NO];
             let _: () = msg_send![fenetre, setReleasedWhenClosed: Bool::NO];
             let _: () = msg_send![fenetre, setTitle: &*texte("Personnaliser ma barre")];
+            // Comme Réglages Système : pas de titre répété au-dessus de celui de la page, une seule bande du haut.
+            let _: () = msg_send![fenetre, setTitleVisibility: 1isize];
+            let _: () = msg_send![fenetre, setTitlebarAppearsTransparent: Bool::YES];
             let _: () = msg_send![fenetre, setContentMinSize: NSSize::new(1060.0, 600.0)];
             let _: () = msg_send![fenetre, setContentView: vue];
             let _: () = msg_send![fenetre, setDelegate: pont];
