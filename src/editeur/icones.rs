@@ -310,6 +310,29 @@ mod tests {
     }
 
     /// Plus de 10 Mo : refusé avant d'être décodé, avec un message clair (le JS fait la même vérification).
+    /// Un dépôt de la page : base64 illisible refusé, nom avec `..` ou dossiers réduit à son nom de fichier, format
+    /// inconnu refusé avant toute lecture ; rien n'est écrit hors du dossier temporaire ni dans `icones/` en cas d'échec.
+    #[test]
+    fn depots_hostiles() {
+        assert_eq!(decoder_depot("pas du base64 !").unwrap_err(), "fichier déposé illisible");
+        assert_eq!(decoder_depot("aGVsbG8=").unwrap(), b"hello");
+        assert_eq!(decoder_depot("").unwrap(), b"");
+        let d = dossier_essai("depots");
+        let icones = d.join("icones");
+        let refus = importer(Path::new("/tmp/script.sh"), &icones).unwrap_err();
+        assert!(refus.starts_with("format non pris en charge"), "{refus}");
+        let png = base64(&crate::barre::png_annonce(1, 1));
+        for nom in ["../../tactile-evade.png", "/etc/tactile-evade.png", "a/b/../tactile-evade.png"] {
+            // Le PNG sans pixels est illisible pour NSImage : l'import échoue, après l'écriture temporaire sous le seul nom de fichier.
+            assert!(importer_depot(nom, &png, &icones).is_err(), "{nom}");
+            assert!(!std::env::temp_dir().join("tactile-evade.png").exists() && !Path::new("/etc/tactile-evade.png").exists(), "{nom}");
+        }
+        assert!(importer_depot("sans-extension", &png, &icones).unwrap_err().starts_with("format non pris en charge"));
+        assert!(!icones.exists(), "rien d'écrit dans icones/");
+        assert_eq!(nettoyer("Île Ôté Ùn Çà ïï"), "ile-ote-un-ca-ii");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
     #[test]
     fn depot_de_plus_de_10_mo_refuse() {
         let lourd = "A".repeat((DEPOT_MAX + 3) / 3 * 4 + 4);

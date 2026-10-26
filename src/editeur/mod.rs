@@ -893,6 +893,68 @@ mod tests {
         assert_eq!(icone_app("  "), None);
     }
 
+    #[test]
+    fn revenir_sans_historique_ou_sur_une_version_abimee() {
+        let dossier = dossier_essai("revenir");
+        std::fs::create_dir_all(&dossier).unwrap();
+        let chemin = dossier.join("barre.toml");
+        assert_eq!(revenir(&chemin).unwrap_err(), "pas de version précédente");
+        // Une version précédente abîmée : refusée, le fichier reste tel quel.
+        std::fs::write(&chemin, "[[element]]\ntype = \"souple\"\n").unwrap();
+        std::fs::write(version(&chemin, 1), "[[element]]\ntype = \"truc\"\n").unwrap();
+        assert!(revenir(&chemin).unwrap_err().starts_with("la version précédente est illisible, ligne 2"));
+        assert_eq!(std::fs::read_to_string(&chemin).unwrap(), "[[element]]\ntype = \"souple\"\n");
+        // Le fichier a disparu : la version précédente le remplace.
+        std::fs::remove_file(&chemin).unwrap();
+        std::fs::write(version(&chemin, 1), "[[element]]\ntype = \"heure\"\n").unwrap();
+        revenir(&chemin).unwrap();
+        assert_eq!(std::fs::read_to_string(&chemin).unwrap(), "[[element]]\ntype = \"heure\"\n");
+        assert!(enregistrer(&chemin, json!({ "element": "pas une liste" })).unwrap_err().starts_with("barre illisible"));
+        assert!(enregistrer(&chemin, json!([1, 2])).unwrap_err().starts_with("barre illisible"));
+        std::fs::remove_dir_all(&dossier).unwrap();
+    }
+
+    /// Par propriétés : pour 150 barres générées, `enregistrer` écrit exactement la barre (relue à l'identique) et
+    /// garde l'ancien fichier dans `.precedent`, ou refuse et ne touche à rien. Sans symbole SF : pas de rendu AppKit en CI.
+    #[test]
+    fn enregistrer_des_barres_generees() {
+        let dossier = dossier_essai("generees");
+        let chemin = dossier.join("barre.toml");
+        enregistrer(&chemin, json!({ "element": [{ "type": "souple" }] })).unwrap();
+        let (mut ecrites, mut refusees) = (0, 0);
+        for graine in 0..150 {
+            let mut barre = crate::essais::Hasard::new(graine).barre();
+            fn sans_symbole(elements: &mut [Element]) {
+                for e in elements {
+                    match e {
+                        Element::Bouton { symbole, .. } | Element::Slider { symbole, .. } => *symbole = None,
+                        Element::Groupe { symbole, elements, .. } => {
+                            *symbole = None;
+                            sans_symbole(elements);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            sans_symbole(&mut barre.elements);
+            barre.applications.iter_mut().for_each(|a| sans_symbole(&mut a.elements));
+            let avant = std::fs::read(&chemin).unwrap();
+            match enregistrer(&chemin, serde_json::to_value(&barre).unwrap()) {
+                Ok(_) => {
+                    ecrites += 1;
+                    assert_eq!(config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap(), barre, "graine {graine}");
+                    assert_eq!(std::fs::read(version(&chemin, 1)).unwrap(), avant, "graine {graine}");
+                }
+                Err(e) => {
+                    refusees += 1;
+                    assert_eq!(std::fs::read(&chemin).unwrap(), avant, "graine {graine} refusée ({e}) mais le fichier a changé");
+                }
+            }
+        }
+        assert!(ecrites > 20 && refusees > 20, "{ecrites} écrites, {refusees} refusées");
+        std::fs::remove_dir_all(&dossier).unwrap();
+    }
+
     /// Un nombre du fichier passe par la page (JSON) et revient au bit près : serde_json, par défaut, se trompe parfois d'un cran.
     #[test]
     fn un_nombre_traverse_le_json_au_bit_pres() {

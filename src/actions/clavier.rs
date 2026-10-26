@@ -286,6 +286,27 @@ mod tests {
         assert_eq!(raccourci_systeme(&Action::MissionControl), None);
     }
 
+    /// Par propriétés, sans toucher au clavier : un raccourci généré se réécrit et se relit à l'identique, et un texte
+    /// quelconque est lu ou refusé sans panique ; ce qui est lu se réécrit dans une forme qui se relit pareil.
+    #[test]
+    fn raccourcis_generes_et_textes_quelconques() {
+        let mut h = crate::essais::Hasard::new(9);
+        for _ in 0..500 {
+            let t = h.touche();
+            assert_eq!(lire(&String::from(t.clone())), Ok(t.clone()), "{t:?}");
+        }
+        let morceaux = ["cmd", "+", "shift", " ", "", "é", "keycode:", "99999", "65535", "f5", "++", "a", "MAJ", "fn", "-", "\u{1F600}", "İ"];
+        for k in 0..2000 {
+            let texte: String = (0..h.jusqua(6)).map(|_| *h.parmi(&morceaux)).collect();
+            match crate::essais::sans_panique(|| lire(&texte)).unwrap_or_else(|p| panic!("cas {k} : « {texte} » : {p}")) {
+                Ok(t) => assert_eq!(lire(&String::from(t.clone())), Ok(t), "cas {k} : « {texte} »"),
+                Err(e) => assert!(e.starts_with("touche inconnue") || e.starts_with("modificateur inconnu"), "cas {k} : « {texte} » : {e}"),
+            }
+        }
+        assert_eq!(lire("cmd+keycode:65535").unwrap().code(), Ok((65535, CMD)));
+        assert!(lire("keycode:65536").is_err());
+    }
+
     #[test]
     fn caractere_resolu_sur_la_disposition_courante() {
         let _tis = TIS.lock().unwrap();
