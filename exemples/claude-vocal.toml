@@ -4,7 +4,7 @@
 # État de Claude vocal (🎙 écoute, ⋯ réflexion, 🔊 réponse), relu toutes les 0,3 s. Le toucher annule : rien n'est envoyé.
 [[element]]
 type = "script"
-commande = "cat /tmp/claude-voix/etat 2>/dev/null"
+commande = "cat /tmp/claude-voix/etat 2>/dev/null || true"
 intervalle = 0.3
 largeur = 130
 action = { shell = "~/.local/bin/claude-voix --annuler" }

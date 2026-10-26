@@ -6,14 +6,14 @@ Quatre personas (rapports dans ce dossier) : Nadia (débutante), Marc (avancé, 
 
 | # | Bug | Source | Gravité | Preuve de correction |
 |---|---|---|---|---|
-| A1 | Symbole SF inexistant → panique au rechargement, Touch Bar noire, replante au relancement | Marc | bloquant | test : symbole inconnu → élément remplacé par son nom en texte + erreur journalisée ; la barre reste |
+| A1 | Symbole SF inexistant → panique au rechargement, Touch Bar noire, replante au relancement | Marc | bloquant | fait : tests `symbole_inconnu_ne_donne_pas_d_image`, `symbole_inconnu_donne_un_bouton_texte` ; journal « symbole SF inconnu « x » (élément n) » |
 | A2 | Gatekeeper Sequoia : « clic droit → Ouvrir » ne marche plus pour une app ad hoc | Nadia | bloquant | README : chemin Réglages → Confidentialité et sécurité → « Ouvrir quand même », et commande `xattr -d com.apple.quarantine` en alternative ; icône d'app |
-| A3 | Erreur de config invisible (journal caché), barre « qui ne marche plus » | Nadia, Marc | majeur | notification macOS à l'erreur + entrée de menu « Voir le journal » + `tactile --verifier fichier.toml` |
-| A4 | Éléments qui débordent disparaissent sans message ; texte long avale la barre | Marc | majeur | largeur maximale par défaut pour `bouton` texte ; avertissement journalisé quand la somme des largeurs dépasse la barre |
-| A5 | Scripts : stderr et code retour jetés ; script sans fin → orphelins à chaque rechargement | Marc | majeur | délai maximal (`delai`, 5 s par défaut) qui tue le processus ; stderr dans le journal ; test |
-| A6 | `masquer_control_strip` : doc dit `true` par défaut, code dit `false` ; sans effet à chaud | Nadia, Marc | majeur | défaut `true` + représentation à chaud ; test |
-| A7 | `cargo doc` : lien intra-doc cassé `[[element]]` config.rs:83 | Sam | mineur | `cargo doc` sans avertissement |
-| A8 | `main.rs` ignore argv : `tactile --help` lance l'app | Sam | mineur | `--help`, `--version`, `--verifier` |
+| A3 | Erreur de config invisible (journal caché), barre « qui ne marche plus » | Nadia, Marc | majeur | fait : élément rouge « ⚠ config ligne N » dans la barre (les notifications macOS exigent un bundle), autotest étapes 20-21 + écran « erreur » de verifier.sh ; menu « Voir le journal » ; `tactile --verifier` (test `verifier_dit_la_ligne_ou_l_absence_du_fichier`) |
+| A4 | Éléments qui débordent disparaissent sans message ; texte long avale la barre | Marc | majeur | fait : 200 pt max pour bouton texte / heure / en_cours sans `largeur` (capture) ; journal « la barre déborde … n élément(s) seront cachés », test `debordement_compte_les_elements_caches` (estimation à un élément près) |
+| A5 | Scripts : stderr et code retour jetés ; script sans fin → orphelins à chaque rechargement | Marc | majeur | fait : tests `un_script_trop_long_est_tue_avec_son_groupe` (`sleep 30`), `stderr_et_code_de_retour_remontent`, `une_barre_remplacee_tue_ses_scripts` ; vérifié sur la barre (jamais plus d'un `sleep 1000` vivant). Reste : quitter Tactile pendant un script le laisse finir seul |
+| A6 | `masquer_control_strip` : doc dit `true` par défaut, code dit `false` ; sans effet à chaud | Nadia, Marc | majeur | fait : test `control_strip_masque_par_defaut` ; à chaud, la barre est minimisée puis représentée avec le nouveau placement (retour vers `true` vu en capture). Preuve visuelle du placement Control Strip reportée : sans toucher humain la Touch Bar reste noire en placement 0, pas d'étape d'autotest possible ; à vérifier au doigt |
+| A7 | `cargo doc` : lien intra-doc cassé `[[element]]` config.rs:83 | Sam | mineur | fait : `cargo doc --no-deps` sans avertissement |
+| A8 | `main.rs` ignore argv : `tactile --help` lance l'app | Sam | mineur | fait : `--help` (10 lignes), `--version`, `--verifier`, autre argument → code 2 ; tests `chaque_argument`, `aide_en_dix_lignes` |
 
 ## B. Ergonomie
 

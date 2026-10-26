@@ -35,6 +35,7 @@ L'icône de la barre des menus donne accès à tout :
 | Afficher ma barre | Remet ta barre (si elle a disparu, c'est ici). |
 | Barre d'Apple | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la tienne. |
 | Ouvrir la configuration | Ouvre ton fichier de barre (il est créé s'il n'existe pas). |
+| Voir le journal | Ouvre `~/Library/Logs/Tactile.log` : erreurs de config, scripts en échec. |
 | Lancer au démarrage | Tactile s'ouvre avec ta session. |
 | Quitter Tactile | Rend la barre d'Apple et ferme l'app. |
 
@@ -54,7 +55,7 @@ action = "veille"
 appui_long = { shell = "open -a 'Activity Monitor'" }
 ```
 
-Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symbols/)) : `moon.fill`, `play.fill`, `bolt.fill`… Si le fichier contient une erreur, ta barre actuelle reste en place et l'erreur, avec son numéro de ligne, s'écrit dans `~/Library/Logs/Tactile.log`.
+Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symbols/)) : `moon.fill`, `play.fill`, `bolt.fill`… Un symbole mal orthographié s'affiche en texte. Si le fichier contient une erreur, ta barre actuelle reste en place, un élément rouge « ⚠ config ligne N » apparaît en tête de barre jusqu'à la correction, et l'erreur s'écrit dans le journal (menu → Voir le journal). Pour vérifier un fichier sans toucher la barre : `tactile --verifier` (ou `tactile --verifier autre.toml`).
 
 ### Les éléments
 
@@ -64,12 +65,12 @@ Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symb
 | `slider` | `reglage` (`"luminosite"` ou `"volume"`), `symbole` | Un bouton qui ouvre une sous-barre avec un curseur ; ✕ la referme. |
 | `heure` | `format` (format de date Apple, `"HH:mm"` par défaut) | L'heure, mise à jour en continu. |
 | `en_cours` | `largeur` | Le titre et l'artiste en cours de lecture (44 caractères au plus, rafraîchi toutes les 2 s) ; un appui met en pause ou relance. Demande `media-control`. |
-| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle. Un texte plus large que l’élément est coupé. |
+| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `delai` (secondes, 5 par défaut), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle et tuée au-delà de `delai`. Un texte plus large que l’élément est coupé. Code de retour non nul ou texte sur stderr : une ligne dans le journal. |
 | `espace` | `largeur` (obligatoire) | Un vide de largeur fixe. |
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
 | `groupe` | `texte`, `symbole`, puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
 
-En tête de fichier, `masquer_control_strip = true` (par défaut) donne toute la largeur à ta barre ; `false` garde le Control Strip d'Apple à droite (pas encore vérifié sur une vraie machine).
+En tête de fichier, `masquer_control_strip = true` (par défaut) donne toute la largeur à ta barre (1004 points) ; `false` garde le Control Strip d'Apple à droite (il reste 685 points, et une ✕ système à gauche). Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 points (le texte est coupé avec …). Ce qui ne tient pas dans la barre n'est pas affiché : le journal le dit (« la barre déborde … n élément(s) seront cachés »).
 
 ### Les actions
 
@@ -98,7 +99,9 @@ Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La trans
 |---|---|
 | macOS refuse d'ouvrir Tactile | Clic droit sur l'app → Ouvrir, une fois. |
 | Ma barre a disparu, je vois celle d'Apple | Touche l'icône ✳ dans la barre d'Apple, ou menu → Afficher ma barre. |
-| Ma modification n'apparaît pas | Il y a une erreur dans le fichier : regarde `~/Library/Logs/Tactile.log`. |
+| Ma modification n'apparaît pas | Il y a une erreur dans le fichier : un élément rouge « ⚠ config ligne N » le dit dans la barre, et menu → Voir le journal donne le détail. `tactile --verifier` vérifie le fichier depuis un terminal. |
+| Un élément de la fin a disparu | La barre déborde : le journal dit combien d'éléments sont cachés. Réduis des `largeur` ou retire un élément. |
+| Un `script` reste vide | Son erreur est dans le journal (code de retour, stderr, « tué après 5 s »). Lancé depuis le Finder, le PATH ne contient pas `/opt/homebrew/bin` : écris le chemin complet des outils. |
 | La musique en cours reste vide | Installe `media-control` (`brew install media-control`) ; il faut aussi que quelque chose joue. |
 | La touche esc ne fait rien | Autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité. |
 
@@ -123,7 +126,7 @@ Le code est fait pour être repris :
 Compiler depuis les sources (Rust stable ; le dépôt fournit un `mise.toml`) :
 
 ```
-cargo build --release      # target/release/tactile, pour essayer
+cargo build --release      # target/release/tactile, pour essayer (--help, --version, --verifier)
 cargo test                 # attention : règle puis restaure vraiment luminosité et volume
 scripts/empaqueter.sh      # target/Tactile.app universelle et target/Tactile.zip
 scripts/verifier.sh        # actionne chaque contrôle sur la vraie Touch Bar et vérifie l'effet (écran allumé)
@@ -134,7 +137,6 @@ scripts/verifier.sh        # actionne chaque contrôle sur la vraie Touch Bar et
 - Tactile utilise des API privées d'Apple (barre système, Control Strip, luminosité). Une mise à jour de macOS peut les casser ; elles sont listées dans [ARCHITECTURE.md](docs/ARCHITECTURE.md#api-privées-utilisées).
 - Pas encore d'éditeur visuel : la barre se règle dans le fichier TOML.
 - Le curseur de luminosité règle l'écran intégré seulement.
-- `masquer_control_strip = false` n'a pas encore été vérifié sur une vraie machine.
 - Gestes sur la Touch Bar, raccourcis clavier et gestes trackpad viendront ensuite (voir [SPEC.md](SPEC.md)).
 
 ## Remerciements
