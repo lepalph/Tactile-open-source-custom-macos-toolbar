@@ -46,9 +46,9 @@ Dans le menu, choisis **Personnaliser ma barre…**. La fenêtre montre ta Touch
 
 ![La fenêtre Personnaliser ma barre, avec la barre Musique](docs/editeur-musique.png)
 
-- À gauche, **Ajouter** : un clic ajoute un bouton, un curseur, l'heure, la musique en cours, le résultat d'une commande, un espace ou un groupe. Les trois **barres toutes faites** (Simple, Musique, Développeur) remplacent ta barre par un modèle que tu peux ensuite retoucher.
+- À gauche, **Ajouter** : un clic ajoute un bouton, un curseur, l'heure, la musique en cours, le résultat d'une commande, la batterie, un espace ou un groupe. Les trois **barres toutes faites** (Simple, Musique, Développeur) remplacent ta barre par un modèle que tu peux ensuite retoucher.
 - Dans l'aperçu, clique un élément pour le régler, glisse-le pour le déplacer. Au clavier : flèches pour passer d'un élément à l'autre, ⌥ + flèches pour le déplacer, suppr pour le retirer.
-- À droite, les réglages de l'élément choisi : texte, symbole (cherche dans la liste, ou tape le nom exact d'un symbole SF), couleur, largeur, et ce qui se passe au toucher : lancer une application (le bouton **Choisir…** ouvre ton dossier Applications), ouvrir une adresse web, une commande, ou une action système (luminosité, volume, lecture…). Un appui long peut faire autre chose.
+- À droite, les réglages de l'élément choisi : texte, symbole (cherche dans la liste, ou tape le nom exact d'un symbole SF), couleurs du fond et du texte, taille du texte, symbole seul ou texte seul, largeur, et ce qui se passe au toucher : lancer une application (le bouton **Choisir…** ouvre ton dossier Applications), ouvrir une adresse web, envoyer un raccourci clavier (`cmd+shift+4`), une commande shell ou AppleScript, ou une action système (luminosité, volume, lecture…). Un appui long peut faire autre chose. Ce que la fenêtre ne sait pas régler (une `image`, un `keycode`) est gardé tel quel à l'enregistrement.
 - **Enregistrer** écrit le fichier et ta Touch Bar change dans la seconde. Si quelque chose cloche (un symbole qui n'existe pas, une couleur mal écrite), rien n'est écrit et la fenêtre te dit quoi corriger. **Revenir à la version précédente** restaure la barre d'avant le dernier enregistrement.
 - FR / EN en haut à droite ; la langue du Mac est prise par défaut.
 

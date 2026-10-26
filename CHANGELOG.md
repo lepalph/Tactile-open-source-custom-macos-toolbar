@@ -4,6 +4,27 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- "Customize my bar" window (menu item, or `tactile --personnaliser`): live preview at real size, drag to reorder, symbol picker, three ready-made bars (Simple, Music, Developer), FR / EN; saves the same `barre.toml`, keeps a `.precedent` copy and can go back to it. Unknown settings (an `image`, a `keycode`) survive a round trip.
+- Keyboard shortcuts as actions: `{ touche = "cmd+shift+4" }`, resolved on the current keyboard layout, and `{ keycode = n }`.
+- `{ app = "Figma" }`, `{ url = "https://…" }` and `{ applescript = "…" }` actions.
+- Button appearance: `image` (with `gabarit`), `couleur_texte`, `taille`, `affichage = "icone" | "texte" | "les_deux"`; `largeur` on groups.
+- Rich script output: a JSON line `{"texte", "symbole", "image", "couleur", "couleur_texte"}` styles the widget.
+- `batterie` element (`pmset`, every 30 s), with or without the battery symbol.
+- English aliases for every key, type, setting and action (`exemples/barre.en.toml`, glossary in the README).
+- Command line: `--help`, `--version`, `--verifier [file]` (checks a bar file and reports the line of an error); unknown argument exits with code 2. `TACTILE_CONFIG` overrides the configuration path.
+- Config errors shown in the bar itself ("⚠ config ligne N") and a "View the log" menu item.
+- App icon drawn in code (`scripts/icone.sh`), embedded in `Tactile.app`; issue and PR templates; clippy and `cargo doc` in CI; release notes with SHA-256.
+
+### Fixed
+
+- An unknown SF symbol no longer crashes the bar: its name is shown as text.
+- Text without `largeur` is capped at 200 pt; the log says how many items overflow the bar.
+- Scripts: 5 s timeout (`delai`), stderr and exit code logged, no orphan processes when the bar is reloaded.
+- `masquer_control_strip` defaults to `true` as documented, and changing it reloads the bar placement.
+- `cargo doc` without warnings.
+
 ## [0.1.0] - 2026-10-25
 
 ### Added

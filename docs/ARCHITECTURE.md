@@ -56,6 +56,7 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 2. La fonction qui fait le travail, dans un fichier de `src/actions/`, avec un test qui change l'état, le relit, puis le restaure. Une action qui lance un programme dont l'échec doit se voir passe par `journaliser` (stderr au journal, sans bloquer).
 3. La branche correspondante dans `executer`.
 4. Le test `chaque_forme_d_action` de `src/config.rs`, le tableau des actions et le glossaire du README (le test `glossaire_du_readme` exige que chaque ligne du glossaire soit exercée par `TOUT_FR` / `TOUT_EN`).
+5. L'éditeur (`src/editeur/editeur.html`) : une action sans valeur va dans `ACTIONS_SIMPLES` et `CLE_ACTION` ; une action avec valeur dans `actionUI`, `actionModele` et le détail de `champAction`, avec ses textes FR et EN. Une action que l'éditeur ne connaît pas s'affiche « Autre » et traverse l'enregistrement intacte (test `le_json_ne_perd_aucun_champ`). Ajoute-la à `BARRE_COMPLETE` (`src/config.rs`), qui sert aux deux tests d'aller-retour.
 
 ### Ajouter un type d'élément
 
@@ -63,6 +64,7 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 2. `src/barre/elements.rs` : la branche dans `construire` qui crée l'item, et sa ligne dans `largeur_estimee`.
 3. S'il se met à jour seul : une variante dans `Rafraichi` (`src/barre/rafraichi.rs`) et sa branche dans `rafraichir`. Ne bloque jamais le fil principal : lance le travail dans un fil et renvoie le texte par `etat.envoi` (modèle : `Batterie`, qui envoie la sortie brute de `pmset` et l'analyse au retour). Pour changer aussi l'icône ou les couleurs, construis un `Riche` et passe par `appliquer`.
 4. Le tableau des éléments et le glossaire du README, et une étape dans `autotest.rs` si l'effet est visible (la barre `BARRE_RICHE` des étapes 22-26 sert à ça).
+5. L'éditeur : `ICONES`, `neuf`, `face` (aperçu) et le `switch` de `dessinerProprietes` dans `editeur.html`, plus la liste `f-ajout-groupe` s'il peut vivre dans un groupe ; l'élément dans `BARRE_COMPLETE`.
 
 ### Ajouter une entrée au menu
 

@@ -176,22 +176,24 @@ const T = {
     enregistrer: 'Enregistrer', revenir: 'Revenir à la version précédente', ajouter: 'Ajouter', preregles: 'Barres toutes faites',
     simple: 'Simple', musique: 'Musique', developpeur: 'Développeur', controlStrip: 'Bande de boutons d’Apple',
     masquerCS: 'Cacher la bande de boutons d’Apple, à droite',
-    bouton: 'Bouton', slider: 'Curseur', heure: 'Heure', en_cours: 'Musique en cours', script: 'Résultat d’une commande', espace: 'Espace fixe', souple: 'Espace souple', groupe: 'Groupe',
+    bouton: 'Bouton', slider: 'Curseur', heure: 'Heure', en_cours: 'Musique en cours', script: 'Résultat d’une commande', espace: 'Espace fixe', souple: 'Espace souple', groupe: 'Groupe', batterie: 'Batterie',
     vide: 'Ta barre est vide. Ajoute un élément à gauche, ou pars d’une barre toute faite.',
     rien: 'Choisis un élément dans la barre pour le régler, ou ajoutes-en un à gauche.',
     texte: 'Texte', symbole: 'Symbole', couleur: 'Couleur', couleurAuto: 'gris de la barre', largeur: 'Largeur (points)', auto: 'automatique',
+    couleur_texte: 'Couleur du texte', couleurTexteAuto: 'blanc', taille: 'Taille du texte (points)', affichage: 'Afficher', affIcone: 'le symbole seul', affTexte: 'le texte seul', affLesDeux: 'les deux',
+    symbolePile: 'Symbole de pile à côté du pourcentage', delai: 'Tuée après (secondes)', image: 'Image (réglée dans le fichier)',
     action: 'Au toucher', appuiLong: 'Appui long (0,5 s)', reglage: 'Réglage', luminosite: 'Luminosité', volume: 'Volume',
     format: 'Format', formatAide: 'HH = heures, mm = minutes, ss = secondes. Par exemple HH:mm ou HH\'h\'mm.',
     commande: 'Commande', commandeAide: 'Lancée avec zsh ; la première ligne de sa sortie s’affiche.', intervalle: 'Relancée toutes les (secondes)',
     contenu: 'Contenu du groupe', ajouterDans: 'Ajouter dans le groupe…', retourGroupe: 'Retour au groupe', regler: 'Régler',
     supprimer: 'Supprimer', gauche: 'Vers la gauche', droite: 'Vers la droite',
     chercherSymbole: 'Chercher un symbole (en anglais : play, moon, sun…)', nomSymbole: 'Nom exact', symboleInconnu: 'Ce symbole n’existe pas.', aucunSymbole: 'Aucun symbole',
-    actAucune: 'Rien', actApp: 'Lancer une application…', actUrl: 'Ouvrir une adresse web', actShell: 'Commande shell',
+    actAucune: 'Rien', actApp: 'Lancer une application…', actUrl: 'Ouvrir une adresse web', actShell: 'Commande shell', actTouche: 'Raccourci clavier', actApplescript: 'AppleScript', actAutre: 'Autre (réglé dans le fichier)',
     actLuminositePlus: 'Luminosité +', actLuminositeMoins: 'Luminosité −', actLuminositeFixe: 'Luminosité fixée à…',
     actVolumePlus: 'Volume +', actVolumeMoins: 'Volume −', actVolumeFixe: 'Volume fixé à…', actBasculerMuet: 'Couper / rétablir le son',
     actLecturePause: 'Lecture / pause', actSuivant: 'Morceau suivant', actPrecedent: 'Morceau précédent', actVeille: 'Mettre en veille',
     actEchap: 'Touche esc', actBarreApple: 'Afficher la barre d’Apple',
-    choisir: 'Choisir…', application: 'Application', adresse: 'Adresse', niveau: 'Niveau',
+    choisir: 'Choisir…', application: 'Application', adresse: 'Adresse', niveau: 'Niveau', raccourci: 'Raccourci', raccourciAide: 'cmd, shift, ctrl, alt, fn, puis une touche : cmd+shift+4, f5, esc.',
     enregistre: 'Enregistré. Ta Touch Bar est à jour.', pasEnregistre: 'Pas enregistré : ', modifie: 'Modifications non enregistrées.', charge: 'Barre chargée, pas encore enregistrée.',
     titreFenetre: 'Personnaliser ma barre',
   },
@@ -200,22 +202,24 @@ const T = {
     enregistrer: 'Save', revenir: 'Go back to the previous version', ajouter: 'Add', preregles: 'Ready-made bars',
     simple: 'Simple', musique: 'Music', developpeur: 'Developer', controlStrip: 'Apple’s Control Strip',
     masquerCS: 'Hide Apple’s Control Strip on the right',
-    bouton: 'Button', slider: 'Slider', heure: 'Clock', en_cours: 'Now playing', script: 'Command output', espace: 'Fixed space', souple: 'Flexible space', groupe: 'Group',
+    bouton: 'Button', slider: 'Slider', heure: 'Clock', en_cours: 'Now playing', script: 'Command output', espace: 'Fixed space', souple: 'Flexible space', groupe: 'Group', batterie: 'Battery',
     vide: 'Your bar is empty. Add an item on the left, or start from a ready-made bar.',
     rien: 'Pick an item in the bar to edit it, or add one on the left.',
     texte: 'Text', symbole: 'Symbol', couleur: 'Color', couleurAuto: 'bar gray', largeur: 'Width (points)', auto: 'automatic',
+    couleur_texte: 'Text color', couleurTexteAuto: 'white', taille: 'Text size (points)', affichage: 'Show', affIcone: 'symbol only', affTexte: 'text only', affLesDeux: 'both',
+    symbolePile: 'Battery symbol next to the percentage', delai: 'Killed after (seconds)', image: 'Image (set in the file)',
     action: 'On tap', appuiLong: 'Long press (0.5 s)', reglage: 'Setting', luminosite: 'Brightness', volume: 'Volume',
     format: 'Format', formatAide: 'HH = hours, mm = minutes, ss = seconds. For example HH:mm or h:mm a.',
     commande: 'Command', commandeAide: 'Run with zsh; the first line of its output is shown.', intervalle: 'Run every (seconds)',
     contenu: 'Group contents', ajouterDans: 'Add to the group…', retourGroupe: 'Back to the group', regler: 'Edit',
     supprimer: 'Delete', gauche: 'Move left', droite: 'Move right',
     chercherSymbole: 'Search symbols (play, moon, sun…)', nomSymbole: 'Exact name', symboleInconnu: 'This symbol does not exist.', aucunSymbole: 'No symbol',
-    actAucune: 'Nothing', actApp: 'Open an app…', actUrl: 'Open a web address', actShell: 'Shell command',
+    actAucune: 'Nothing', actApp: 'Open an app…', actUrl: 'Open a web address', actShell: 'Shell command', actTouche: 'Keyboard shortcut', actApplescript: 'AppleScript', actAutre: 'Other (set in the file)',
     actLuminositePlus: 'Brightness +', actLuminositeMoins: 'Brightness −', actLuminositeFixe: 'Set brightness to…',
     actVolumePlus: 'Volume +', actVolumeMoins: 'Volume −', actVolumeFixe: 'Set volume to…', actBasculerMuet: 'Mute / unmute',
     actLecturePause: 'Play / pause', actSuivant: 'Next track', actPrecedent: 'Previous track', actVeille: 'Sleep',
     actEchap: 'Esc key', actBarreApple: 'Show Apple’s bar',
-    choisir: 'Choose…', application: 'App', adresse: 'Address', niveau: 'Level',
+    choisir: 'Choose…', application: 'App', adresse: 'Address', niveau: 'Level', raccourci: 'Shortcut', raccourciAide: 'cmd, shift, ctrl, alt, fn, then a key: cmd+shift+4, f5, esc.',
     enregistre: 'Saved. Your Touch Bar is up to date.', pasEnregistre: 'Not saved: ', modifie: 'Unsaved changes.', charge: 'Bar loaded, not saved yet.',
     titreFenetre: 'Customize my bar',
   },
@@ -245,7 +249,7 @@ square.grid.2x2.fill rectangle.grid.1x2.fill circle.fill square.fill triangle.fi
 const ACTIONS_SIMPLES = ['luminosite_plus', 'luminosite_moins', 'volume_plus', 'volume_moins', 'basculer_muet', 'lecture_pause', 'suivant', 'precedent', 'veille', 'echap', 'barre_apple'];
 const CLE_ACTION = { luminosite_plus: 'actLuminositePlus', luminosite_moins: 'actLuminositeMoins', volume_plus: 'actVolumePlus', volume_moins: 'actVolumeMoins',
   basculer_muet: 'actBasculerMuet', lecture_pause: 'actLecturePause', suivant: 'actSuivant', precedent: 'actPrecedent', veille: 'actVeille', echap: 'actEchap', barre_apple: 'actBarreApple' };
-const ICONES = { bouton: '▢', slider: '⇆', heure: '◴', en_cours: '♪', script: '›_', espace: '⎵', souple: '⟷', groupe: '▣' };
+const ICONES = { bouton: '▢', slider: '⇆', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
 
 /* ---------- État ---------- */
 let barre = { masquer_control_strip: true, element: [] };
@@ -265,7 +269,7 @@ function demanderGlyphes(noms) {
   envoyer({ type: 'symboles', noms: nouveaux });
 }
 function symbolesDe(elements) {
-  return elements.flatMap(e => [e.symbole, ...(e.element ? symbolesDe(e.element) : [])]).filter(Boolean);
+  return elements.flatMap(e => [e.symbole, ...(e.element ? symbolesDe(e.element) : [])]).filter(n => typeof n === 'string');
 }
 
 /* ---------- Appels venant de Rust ---------- */
@@ -285,7 +289,7 @@ window.tactile = {
   appChoisie(nom) {
     const e = elem(); if (!e) return;
     const cible = champActionEnCours || 'action';
-    e[cible] = { shell: `open -a '${nom.replace(/'/g, "'\\''")}'` };
+    e[cible] = { app: nom };
     changer(); dessinerProprietes(true);
   },
 };
@@ -309,6 +313,7 @@ function neuf(type) {
     case 'script': return { type, commande: 'date +%d/%m', intervalle: 60, largeur: 120 };
     case 'espace': return { type, largeur: 32 };
     case 'souple': return { type };
+    case 'batterie': return { type };
     case 'groupe': return { type, symbole: 'square.grid.2x2.fill', element: [] };
   }
 }
@@ -364,12 +369,18 @@ function heure(format) {
 function face(e) {
   const style = e.largeur ? ` style="width:${e.largeur}px;min-width:0"` : '';
   switch (e.type) {
-    case 'bouton': return `<span class="face"${e.couleur || e.largeur ? ` style="${e.couleur ? `background:${esc(e.couleur)};` : ''}${e.largeur ? `width:${e.largeur}px;min-width:0` : ''}"` : ''}>${sf(e.symbole)}${e.texte ? `<span>${esc(e.texte)}</span>` : ''}${!e.symbole && !e.texte ? '&nbsp;' : ''}</span>`;
+    case 'bouton': {
+      const css = [e.couleur && `background:${esc(e.couleur)}`, e.couleur_texte && `color:${esc(e.couleur_texte)}`, e.taille && `font-size:${+e.taille}px`, e.largeur && `width:${+e.largeur}px;min-width:0`].filter(Boolean).join(';');
+      const icone = e.affichage !== 'texte' && (e.symbole ? sf(e.symbole) : e.image ? '<span class="sf inconnu" style="color:#9a9a9a">▦</span>' : '');
+      const texte = e.affichage !== 'icone' && e.texte ? `<span>${esc(e.texte)}</span>` : '';
+      return `<span class="face"${css ? ` style="${css}"` : ''}>${icone || ''}${texte}${!icone && !texte ? '&nbsp;' : ''}</span>`;
+    }
     case 'slider': return `<span class="face" style="width:72px;min-width:0">${sf(e.symbole || (e.reglage === 'luminosite' ? 'sun.max.fill' : 'speaker.wave.2.fill'))}<span class="chevron">›</span></span>`;
-    case 'groupe': return `<span class="face" style="width:72px;min-width:0">${sf(e.symbole)}${e.texte ? `<span>${esc(e.texte)}</span>` : ''}<span class="chevron">›</span></span>`;
+    case 'groupe': return `<span class="face" style="width:${e.largeur || 72}px;min-width:0">${sf(e.symbole)}${e.texte ? `<span>${esc(e.texte)}</span>` : ''}<span class="chevron">›</span></span>`;
     case 'heure': return `<span class="face plat" style="font-variant-numeric:tabular-nums">${esc(heure(e.format || 'HH:mm'))}</span>`;
     case 'en_cours': return `<span class="face plat"${style}>▶&nbsp;&nbsp;${langue === 'fr' ? 'Titre' : 'Title'}&nbsp;&nbsp;·&nbsp;&nbsp;${langue === 'fr' ? 'Artiste' : 'Artist'}</span>`;
     case 'script': return `<span class="face plat mono" style="width:${e.largeur || 120}px;min-width:0">${langue === 'fr' ? 'sortie…' : 'output…'}</span>`;
+    case 'batterie': return `<span class="face plat"${style}>${e.symbole === false ? '' : sf('battery.50')}<span>50 %</span></span>`;
     case 'espace': return `<span class="face"${style}></span>`;
     case 'souple': return `<span class="face"></span>`;
   }
@@ -444,23 +455,20 @@ $('preregles').addEventListener('click', ev => {
 function actionUI(a) {
   if (!a) return { mode: 'aucune' };
   if (typeof a === 'string') return { mode: a };
-  if ('shell' in a) {
-    const m = /^open -a '((?:[^']|'\\'')*)'$/.exec(a.shell) || /^open -a (\S+)$/.exec(a.shell);
-    if (m) return { mode: 'app', valeur: m[1].replace(/'\\''/g, "'") };
-    const u = /^open '(https?:\/\/[^']+)'$/.exec(a.shell);
-    if (u) return { mode: 'url', valeur: u[1] };
-    return { mode: 'shell', valeur: a.shell };
-  }
+  for (const mode of ['app', 'url', 'shell', 'touche', 'applescript']) if (mode in a) return { mode, valeur: a[mode] };
   if ('luminosite' in a) return { mode: 'luminosite_fixe', valeur: a.luminosite };
   if ('volume' in a) return { mode: 'volume_fixe', valeur: a.volume };
-  return { mode: 'shell', valeur: '' };
+  return { mode: 'autre', valeur: a }; // keycode… : gardé tel quel
 }
 function actionModele(mode, valeur) {
   switch (mode) {
     case 'aucune': return undefined;
-    case 'app': return valeur ? { shell: `open -a '${valeur.replace(/'/g, "'\\''")}'` } : { shell: 'open -a' };
-    case 'url': return { shell: `open '${(valeur || 'https://').replace(/'/g, '')}'` };
+    case 'app': return { app: valeur || '' };
+    case 'url': return { url: valeur || 'https://' };
     case 'shell': return { shell: valeur || '' };
+    case 'touche': return { touche: valeur || '' };
+    case 'applescript': return { applescript: valeur || '' };
+    case 'autre': return valeur;
     case 'luminosite_fixe': return { luminosite: valeur ?? 0.5 };
     case 'volume_fixe': return { volume: valeur ?? 0.5 };
     default: return mode;
@@ -468,12 +476,15 @@ function actionModele(mode, valeur) {
 }
 function champAction(cle, label) {
   const e = elem(), ui = actionUI(e[cle]);
-  const options = [['aucune', t('actAucune')], ['app', t('actApp')], ['url', t('actUrl')], ['shell', t('actShell')],
-    ...ACTIONS_SIMPLES.map(a => [a, t(CLE_ACTION[a])]), ['luminosite_fixe', t('actLuminositeFixe')], ['volume_fixe', t('actVolumeFixe')]];
+  const options = [['aucune', t('actAucune')], ['app', t('actApp')], ['url', t('actUrl')], ['touche', t('actTouche')], ['shell', t('actShell')], ['applescript', t('actApplescript')],
+    ...ACTIONS_SIMPLES.map(a => [a, t(CLE_ACTION[a])]), ['luminosite_fixe', t('actLuminositeFixe')], ['volume_fixe', t('actVolumeFixe')], ...(ui.mode === 'autre' ? [['autre', t('actAutre')]] : [])];
   let detail = '';
   if (ui.mode === 'app') detail = `<div class="cote"><input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div>`;
   else if (ui.mode === 'url') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || 'https://')}" aria-label="${t('adresse')}" placeholder="https://">`;
   else if (ui.mode === 'shell') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('actShell')}" placeholder="open -a Safari" spellcheck="false">`;
+  else if (ui.mode === 'touche') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('raccourci')}" placeholder="cmd+shift+4" spellcheck="false" style="max-width:260px"><p class="explication">${esc(t('raccourciAide'))}</p>`;
+  else if (ui.mode === 'applescript') detail = `<textarea data-action-valeur="${cle}" rows="2" aria-label="${t('actApplescript')}" placeholder='tell application "Music" to playpause' spellcheck="false">${esc(ui.valeur || '')}</textarea>`;
+  else if (ui.mode === 'autre') detail = `<p class="explication">${esc(JSON.stringify(ui.valeur))}</p>`;
   else if (ui.mode === 'luminosite_fixe' || ui.mode === 'volume_fixe') detail = `<div class="cote"><input type="range" min="0" max="100" step="5" data-action-valeur="${cle}" value="${Math.round((ui.valeur ?? 0.5) * 100)}" aria-label="${t('niveau')}"><span class="valeur">${Math.round((ui.valeur ?? 0.5) * 100)} %</span></div>`;
   return `<div class="ligne${detail ? ' haute' : ''}"><label class="nom" for="act-${cle}">${label}</label><div><select id="act-${cle}" data-action-mode="${cle}">${options.map(([v, l]) => `<option value="${v}"${v === ui.mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${detail ? `<div style="margin-top:8px">${detail}</div>` : ''}</div></div>`;
 }
@@ -496,6 +507,9 @@ function ligne(label, html, id) { return `<div class="ligne"><label class="nom" 
 function texteChamp(id, cle, valeur, placeholder, aide) {
   return ligne(t(cle), `<input type="text" id="${id}" data-champ="${cle}" value="${esc(valeur ?? '')}" placeholder="${esc(placeholder || '')}">${aide ? `<p class="explication">${esc(aide)}</p>` : ''}`, id);
 }
+function couleurChamp(cle, valeur, defaut, libelleAuto) {
+  return ligne(t(cle), `<div class="cote"><input type="color" id="f-${cle}" data-couleur="${cle}" value="${esc(valeur || defaut)}" aria-label="${t(cle)}"><label class="case"><input type="checkbox" id="f-${cle}-auto" data-couleur-auto="${cle}" ${valeur ? '' : 'checked'}> ${libelleAuto}</label></div>`, 'f-' + cle);
+}
 function nombreChamp(cle, valeur, min, step, aide, optionnel) {
   return ligne(t(cle), `<div class="cote"><input type="number" id="n-${cle}" data-champ="${cle}" data-nombre="${optionnel ? 'opt' : 'req'}" value="${valeur ?? ''}" min="${min}" step="${step}" placeholder="${optionnel ? esc(t('auto')) : ''}" style="max-width:140px">${aide ? `<span class="explication">${esc(aide)}</span>` : ''}</div>`, 'n-' + cle);
 }
@@ -512,7 +526,10 @@ function dessinerProprietes(reconstruire) {
   switch (e.type) {
     case 'bouton':
       html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
-        + ligne(t('couleur'), `<div class="cote"><input type="color" id="f-couleur" value="${esc(e.couleur || '#363636')}" aria-label="${t('couleur')}"><label class="case"><input type="checkbox" id="f-couleur-auto" ${e.couleur ? '' : 'checked'}> ${t('couleurAuto')}</label></div>`, 'f-couleur')
+        + (e.image ? ligne(t('image'), `<p class="explication" style="margin:0">${esc(e.image)}</p>`, '') : '')
+        + couleurChamp('couleur', e.couleur, '#363636', t('couleurAuto')) + couleurChamp('couleur_texte', e.couleur_texte, '#ffffff', t('couleurTexteAuto'))
+        + nombreChamp('taille', e.taille, 8, 1, '', true)
+        + ligne(t('affichage'), `<select id="f-affichage" data-champ="affichage">${[['', t('auto')], ['icone', t('affIcone')], ['texte', t('affTexte')], ['les_deux', t('affLesDeux')]].map(([v, l]) => `<option value="${v}"${(e.affichage || '') === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`, 'f-affichage')
         + nombreChamp('largeur', e.largeur, 20, 4, langue === 'fr' ? 'la barre fait 1004 points' : 'the bar is 1004 points wide', true)
         + champAction('action', t('action')) + champAction('appui_long', t('appuiLong'));
       break;
@@ -523,14 +540,15 @@ function dessinerProprietes(reconstruire) {
     case 'en_cours': html += nombreChamp('largeur', e.largeur, 60, 10, '', true); break;
     case 'script':
       html += ligne(t('commande'), `<textarea id="f-commande" data-champ="commande" rows="2" spellcheck="false">${esc(e.commande)}</textarea><p class="explication">${esc(t('commandeAide'))}</p>`, 'f-commande')
-        + nombreChamp('intervalle', e.intervalle, 0.1, 1, '', false) + nombreChamp('largeur', e.largeur, 20, 4, '120', true) + champAction('action', t('action'));
+        + nombreChamp('intervalle', e.intervalle, 0.1, 1, '', false) + nombreChamp('delai', e.delai, 0.1, 1, '5', true) + nombreChamp('largeur', e.largeur, 20, 4, '120', true) + champAction('action', t('action'));
       break;
     case 'espace': html += nombreChamp('largeur', e.largeur, 4, 4, '', false); break;
+    case 'batterie': html += ligne('', `<label class="case"><input type="checkbox" id="f-pile" ${e.symbole === false ? '' : 'checked'}> ${t('symbolePile')}</label>`, 'f-pile') + nombreChamp('largeur', e.largeur, 40, 4, '', true); break;
     case 'souple': html += `<p class="explication">${langue === 'fr' ? 'Prend toute la place libre : deux espaces souples centrent ce qui est entre eux.' : 'Takes all the free space: two flexible spaces center what is between them.'}</p>`; break;
     case 'groupe':
-      html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
+      html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e) + nombreChamp('largeur', e.largeur, 40, 4, '', true)
         + `<div class="ligne haute"><span class="nom">${t('contenu')}</span><div><ul class="sous">${e.element.map((s, j) => `<li><span class="ico" aria-hidden="true">${ICONES[s.type]}</span><span class="quoi">${esc(t(s.type))}${s.texte ? ' · ' + esc(s.texte) : s.symbole ? ' · ' + esc(s.symbole) : ''}</span><button type="button" data-sous="${j}">${t('regler')}</button></li>`).join('')}</ul>
-          <select id="f-ajout-groupe" aria-label="${t('ajouterDans')}" style="margin-top:8px"><option value="">${t('ajouterDans')}</option>${['bouton', 'slider', 'heure', 'en_cours', 'script', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select></div></div>`;
+          <select id="f-ajout-groupe" aria-label="${t('ajouterDans')}" style="margin-top:8px"><option value="">${t('ajouterDans')}</option>${['bouton', 'slider', 'heure', 'en_cours', 'script', 'batterie', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select></div></div>`;
       break;
   }
   p.innerHTML = html;
@@ -545,8 +563,9 @@ $('proprietes').addEventListener('input', ev => {
     else e[c.dataset.champ] = c.value;
     changer(); return;
   }
-  if (c.id === 'f-couleur') { e.couleur = c.value; $('f-couleur-auto').checked = false; changer(); return; }
-  if (c.id === 'f-couleur-auto') { if (c.checked) delete e.couleur; else e.couleur = $('f-couleur').value; changer(); return; }
+  if (c.dataset.couleur) { e[c.dataset.couleur] = c.value; $(`f-${c.dataset.couleur}-auto`).checked = false; changer(); return; }
+  if (c.dataset.couleurAuto) { const k = c.dataset.couleurAuto; if (c.checked) delete e[k]; else e[k] = $(`f-${k}`).value; changer(); return; }
+  if (c.id === 'f-pile') { if (c.checked) delete e.symbole; else e.symbole = false; changer(); return; }
   if (c.id === 'symbole-nom') { if (c.value.trim()) e.symbole = c.value.trim(); else delete e.symbole; demanderGlyphes([e.symbole]); changer(); dessinerProprietes(true); return; }
   if (c.id === 'symbole-recherche') { rechercheSymbole = c.value; dessinerProprietes(true); return; }
   if (c.dataset.actionMode) { e[c.dataset.actionMode] = actionModele(c.value, undefined); if (e[c.dataset.actionMode] === undefined) delete e[c.dataset.actionMode]; changer(); dessinerProprietes(true); return; }
