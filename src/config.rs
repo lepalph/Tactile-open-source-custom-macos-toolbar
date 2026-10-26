@@ -1,7 +1,10 @@
 //! Description de la barre, lue depuis ~/.config/tactile/barre.toml (ou `TACTILE_CONFIG`).
 
 use crate::actions::Action;
+use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use toml::de::{DeTable, DeValue, ValueDeserializer};
+use toml::Spanned;
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
@@ -191,38 +194,99 @@ pub fn ecrire(barre: &Barre) -> Result<String, String> {
 }
 
 pub fn lire(texte: &str) -> Result<Barre, String> {
-    let situer = |debut: Option<usize>, message: String| match debut.and_then(|d| texte.get(..d)) {
-        Some(avant) => format!("ligne {} : {message}", avant.matches('\n').count() + 1),
+    let situer = |debut: Option<usize>, message: String| match debut {
+        Some(d) => format!("ligne {} : {message}", ligne(texte, d)),
         None => message,
     };
-    let barre: Barre = toml::from_str(texte).map_err(|e| situer(e.span().map(|s| s.start).max(element_fautif(texte)), traduire(e.message())))?;
+    let document = document(texte).map_err(|e| situer(e.span().map(|s| s.start), traduire(e.message())))?;
+    let racine = Spanned::new(0..texte.len(), DeValue::Table(document.clone()));
+    let barre = Barre::deserialize(ValueDeserializer::from(racine.clone())).map_err(|e| match premiere_erreur::<Barre>(&racine) {
+        Some((debut, message)) => situer(Some(debut), traduire(&message)),
+        None => situer(e.span().map(|s| s.start), traduire(e.message())),
+    })?;
     if let Some(k) = barre.applications.iter().position(|a| a.elements.is_empty()) {
-        let debut = brut(texte).and_then(|b| b.application.get(k).map(|a| a.span().start));
+        let debut = position(&document, &[("application", k)]);
         return Err(situer(debut, format!("[[application]] « {} » sans élément : ajoute au moins un [[application.element]]", barre.applications[k].app)));
     }
     Ok(barre)
 }
 
-/// Les tables du fichier avec leur position, pour situer une erreur que serde ne situe pas.
-#[derive(Deserialize)]
-struct Brut {
-    #[serde(alias = "item", default)]
-    element: Vec<toml::Spanned<toml::Table>>,
-    #[serde(default)]
-    application: Vec<toml::Spanned<toml::Table>>,
+/// Numéro de ligne (à partir de 1) d'une position dans le texte.
+fn ligne(texte: &str, debut: usize) -> usize {
+    texte.get(..debut).unwrap_or(texte).matches('\n').count() + 1
 }
 
-fn brut(texte: &str) -> Option<Brut> {
-    toml::from_str(texte).ok()
+/// Le fichier en arbre TOML dont chaque valeur garde sa position, `[[item]]` fondus dans `[[element]]`.
+fn document(texte: &str) -> Result<DeTable<'_>, toml::de::Error> {
+    let mut document = DeTable::parse(texte)?.into_inner();
+    fusionner(&mut document);
+    Ok(document)
 }
 
-/// Début du premier `[[element]]` ou `[[application]]` invalide : serde ne situe pas les erreurs internes
-/// d'un élément (action, champ manquant…) et toml pointe alors le premier élément.
-fn element_fautif(texte: &str) -> Option<usize> {
-    let brut = brut(texte)?;
-    let invalide = |e: &toml::Spanned<toml::Table>| toml::Value::Table(e.get_ref().clone()).try_into::<Element>().is_err();
-    let appli_invalide = |e: &toml::Spanned<toml::Table>| toml::Value::Table(e.get_ref().clone()).try_into::<Application>().is_err();
-    brut.element.iter().find(|e| invalide(e)).or(brut.application.iter().find(|e| appli_invalide(e))).map(|e| e.span().start)
+/// `[[element]]` et `[[item]]` (ou leurs formes `application.` et les enfants d'un groupe) dans une même table :
+/// une seule liste `element`, dans l'ordre du fichier. Sans ça, serde voit deux fois le même champ.
+fn fusionner(table: &mut DeTable) {
+    let est_liste = |t: &DeTable, cle: &str| matches!(t.get(cle).map(Spanned::get_ref), Some(DeValue::Array(_)));
+    if est_liste(table, "element") && est_liste(table, "item") {
+        let (cle, element) = table.remove_entry("element").expect("présent");
+        let span = element.span();
+        if let (DeValue::Array(mut tous), Some(DeValue::Array(items))) = (element.into_inner(), table.remove("item").map(Spanned::into_inner)) {
+            for item in items {
+                tous.push(item);
+            }
+            tous.sort_by_key(|v| v.span().start);
+            table.insert(cle, Spanned::new(span, DeValue::Array(tous)));
+        }
+    }
+    for cle in ["element", "item", "application"] {
+        if let Some(DeValue::Array(liste)) = table.get_mut(cle).map(Spanned::get_mut) {
+            for valeur in liste.iter_mut() {
+                if let DeValue::Table(t) = valeur.get_mut() {
+                    fusionner(t);
+                }
+            }
+        }
+    }
+}
+
+/// Les valeurs d'une liste `[[cle]]` (vide si absente). Après `fusionner`, `item` n'existe plus à côté d'`element`.
+fn tables<'a, 'i>(table: &'a DeTable<'i>, cle: &str) -> &'a [Spanned<DeValue<'i>>] {
+    let cles: &[&str] = if cle == "element" { &["element", "item"] } else { &[cle] };
+    match cles.iter().find_map(|c| table.get(*c)).map(Spanned::get_ref) {
+        Some(DeValue::Array(liste)) => liste,
+        _ => &[],
+    }
+}
+
+/// Début de la table au bout de `chemin` : `[("application", 1), ("element", 0)]` = premier élément de la deuxième app.
+fn position(table: &DeTable, chemin: &[(&str, usize)]) -> Option<usize> {
+    let ((cle, k), reste) = chemin.split_first()?;
+    let valeur = tables(table, cle).get(*k)?;
+    match valeur.get_ref() {
+        _ if reste.is_empty() => Some(valeur.span().start),
+        DeValue::Table(t) => position(t, reste),
+        _ => None,
+    }
+}
+
+/// Première erreur dans l'ordre du fichier, avec sa position. serde s'arrête à la première dans l'ordre
+/// alphabétique des clés (`application` avant `element`) et ne situe pas celles d'une table imbriquée :
+/// chaque table est donc relue seule, ses enfants (`element`, `application`) à part.
+fn premiere_erreur<T: DeserializeOwned>(valeur: &Spanned<DeValue>) -> Option<(usize, String)> {
+    let erreur = T::deserialize(ValueDeserializer::from(valeur.clone())).err()?;
+    let debut = valeur.span().start;
+    let situee = |e: toml::de::Error| (e.span().map_or(debut, |s| s.start.max(debut)), e.message().to_string());
+    let DeValue::Table(table) = valeur.get_ref() else { return Some(situee(erreur)) };
+    let mut erreurs: Vec<(usize, String)> = tables(table, "element").iter().filter_map(premiere_erreur::<Element>).collect();
+    erreurs.extend(tables(table, "application").iter().filter_map(premiere_erreur::<Application>));
+    let mut seule = table.clone();
+    for cle in ["element", "item", "application"] {
+        seule.remove(cle);
+    }
+    if let Err(e) = T::deserialize(ValueDeserializer::from(Spanned::new(valeur.span(), DeValue::Table(seule)))) {
+        erreurs.push(situee(e));
+    }
+    Some(erreurs.into_iter().min_by_key(|e| e.0).unwrap_or_else(|| situee(erreur)))
 }
 
 pub fn charger() -> Result<Barre, String> {
@@ -241,6 +305,137 @@ pub fn verifier(chemin: &Path) -> Result<Barre, String> {
     std::fs::read_to_string(chemin)
         .map_err(|e| format!("impossible de lire {} : {e}", chemin.display()))
         .and_then(|texte| lire(&texte).map_err(|e| format!("{}, {e}", chemin.display())))
+}
+
+/// `#RRGGBB` (six chiffres hexadécimaux) : la seule forme de couleur, pour la barre, l'éditeur et `--verifier`.
+/// `#F00` est refusé : le sélecteur de couleur de l'éditeur ne sait pas l'afficher.
+pub fn rgb(hexa: &str) -> Option<u32> {
+    let h = hexa.strip_prefix('#').filter(|h| h.len() == 6 && h.chars().all(|c| c.is_ascii_hexdigit()))?;
+    u32::from_str_radix(h, 16).ok()
+}
+
+/// « 1 élément », « 2 éléments » (0 reste au singulier, comme en français).
+pub fn nombre(n: usize, mot: &str) -> String {
+    format!("{n} {mot}{}", if n > 1 { "s" } else { "" })
+}
+
+/// Un problème que `lire` laisse passer mais qui se verra à l'usage.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Avis {
+    /// `true` : la barre serait inutilisable (vide). `--verifier` sort en erreur, l'éditeur refuse d'enregistrer.
+    pub grave: bool,
+    /// Ligne du fichier, quand `controler` a eu le texte.
+    pub ligne: Option<usize>,
+    /// « élément 3 », « application « Safari », élément 2 » : le lieu quand la ligne n'est pas connue (éditeur).
+    pub lieu: String,
+    pub message: String,
+}
+
+impl std::fmt::Display for Avis {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match (self.ligne, self.lieu.as_str()) {
+            (Some(n), _) => write!(f, "ligne {n} : {}", self.message),
+            (None, "") => f.write_str(&self.message),
+            (None, lieu) => write!(f, "{lieu} : {}", self.message),
+        }
+    }
+}
+
+/// Le validateur partagé par `--verifier`, l'éditeur et la barre (au chargement, dans le journal) : ce que la syntaxe
+/// accepte mais qui casse à l'usage (couleur, symbole SF, image, app introuvable, débordement de chaque barre, app
+/// décrite deux fois, barre vide). Avec le texte du fichier, chaque avis a sa ligne et un `[[element]]` écrit
+/// après un `[[application]]` est signalé. Les avis sont dans l'ordre du fichier, ceux de toute la barre à la fin.
+pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
+    let mut c = Controle { document: texte.and_then(|t| document(t).ok().map(|d| (t, d))), avis: Vec::new() };
+    if barre.elements.is_empty() {
+        c.signaler(true, &[], "", "aucun élément : la barre principale serait vide, ajoute au moins un [[element]]".into());
+    }
+    let egares: Vec<usize> = match &c.document {
+        Some((_, d)) => match tables(d, "application").first() {
+            Some(app) => (0..tables(d, "element").len()).filter(|&i| tables(d, "element")[i].span().start > app.span().start).collect(),
+            None => vec![],
+        },
+        None => vec![],
+    };
+    for i in egares {
+        c.signaler(false, &[("element", i)], "", "cet [[element]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.element]] ?".into());
+    }
+    c.elements(&barre.elements, &mut Vec::new(), "");
+    let largeur = crate::barre::largeur_barre(barre.masquer_control_strip);
+    c.deborde(&barre.elements, largeur, &[], "la barre principale");
+    for (k, app) in barre.applications.iter().enumerate() {
+        let lieu = format!("application « {} »", app.app);
+        if let Some(j) = barre.applications[..k].iter().position(|a| a.app.to_lowercase() == app.app.to_lowercase()) {
+            let ou = c.ligne(&[("application", j)]).map_or(format!("l'application n° {}", j + 1), |n| format!("ligne {n}"));
+            c.signaler(false, &[("application", k)], &lieu, format!("« {} » a déjà sa barre ({ou}) : celle-ci ne sera jamais montrée", app.app));
+        }
+        if !crate::actions::app_existe(&app.app) {
+            c.signaler(false, &[("application", k)], &lieu, format!("app « {} » introuvable : ni un bundle id (com.apple.Safari) ni le nom d'une app installée", app.app));
+        }
+        c.elements(&app.elements, &mut vec![("application", k)], &format!("{lieu}, "));
+        c.deborde(&app.elements_avec(&barre.elements), largeur, &[("application", k)], &format!("la barre de « {} »", app.app));
+    }
+    c.avis.sort_by_key(|a| a.ligne.unwrap_or(usize::MAX));
+    c.avis
+}
+
+struct Controle<'a> {
+    document: Option<(&'a str, DeTable<'a>)>,
+    avis: Vec<Avis>,
+}
+
+impl Controle<'_> {
+    fn ligne(&self, chemin: &[(&str, usize)]) -> Option<usize> {
+        let (texte, document) = self.document.as_ref()?;
+        position(document, chemin).map(|p| ligne(texte, p))
+    }
+
+    /// `chemin` situe l'avis dans le fichier, `lieu` le nomme quand le fichier n'est pas connu.
+    fn signaler(&mut self, grave: bool, chemin: &[(&str, usize)], lieu: &str, message: String) {
+        let ligne = self.ligne(chemin);
+        self.avis.push(Avis { grave, ligne, lieu: lieu.to_string(), message });
+    }
+
+    fn deborde(&mut self, elements: &[Element], largeur: f64, chemin: &[(&str, usize)], barre: &str) {
+        if let Some((total, caches)) = crate::barre::debordement(elements, largeur) {
+            let verbe = if caches > 1 { "seront cachés" } else { "sera caché" };
+            let message = format!("{barre} déborde (environ {total:.0} pt pour {largeur:.0}) : {} sur {} {verbe} ; réduis des largeurs ou retire un élément", nombre(caches, "élément"), elements.len());
+            self.signaler(false, chemin, "", message);
+        }
+    }
+
+    fn elements(&mut self, elements: &[Element], chemin: &mut Vec<(&'static str, usize)>, lieu: &str) {
+        for (i, element) in elements.iter().enumerate() {
+            chemin.push(("element", i));
+            let ici = format!("{lieu}élément {}", i + 1);
+            let (symbole, couleurs, image, actions) = match element {
+                Element::Bouton { symbole, couleur, couleur_texte, image, action, appui_long, .. } => (symbole, vec![couleur, couleur_texte], image, vec![action, appui_long]),
+                Element::Slider { symbole, .. } | Element::Groupe { symbole, .. } => (symbole, vec![], &None, vec![]),
+                Element::Script { action, .. } => (&None, vec![], &None, vec![action]),
+                _ => (&None, vec![], &None, vec![]),
+            };
+            if let Some(s) = symbole.as_deref().filter(|s| !s.is_empty() && crate::barre::symbole(s).is_none()) {
+                self.signaler(false, chemin, &ici, format!("le symbole SF « {s} » n'existe pas : le bouton affichera son nom en texte"));
+            }
+            for c in couleurs.into_iter().flatten().filter(|c| rgb(c).is_none()) {
+                self.signaler(false, chemin, &ici, format!("la couleur « {c} » doit s'écrire #RRGGBB : elle sera ignorée"));
+            }
+            if let Some(i) = image.as_deref().filter(|i| crate::barre::image(i, false).is_none()) {
+                self.signaler(false, chemin, &ici, format!("image « {i} » introuvable ou illisible : le bouton affichera du texte"));
+            }
+            for action in actions.into_iter().flatten() {
+                if let Action::App(app) = action
+                    && !crate::actions::app_existe(app)
+                {
+                    self.signaler(false, chemin, &ici, format!("app « {app} » introuvable : écris le nom du dossier .app sans l'extension, ou son bundle id"));
+                }
+            }
+            if let Element::Groupe { elements, .. } = element {
+                self.elements(elements, chemin, &format!("{lieu}groupe {}, ", i + 1));
+            }
+            chemin.pop();
+        }
+    }
 }
 
 /// Relit la barre à chaque modification du fichier (vérifiée toutes les secondes).
@@ -269,22 +464,56 @@ fn date_modification(chemin: &Path) -> Option<SystemTime> {
     std::fs::metadata(chemin).and_then(|m| m.modified()).ok()
 }
 
-/// Met en français les messages de serde les plus courants ; le reste passe tel quel.
+/// Met en français les messages de toml et de serde ; ce qui est entre `…` (un nom, une valeur) ne change pas
+/// et passe entre « ». Un message absent de la table garde ses mots anglais.
 fn traduire(message: &str) -> String {
-    let mut texte = message.to_string();
-    for (anglais, francais) in [
+    // Ce que serde a trouvé (`invalid type: sequence`) puis ce qu'il attendait (`expected a string`).
+    const TROUVE: [(&str, &str); 6] = [("sequence", "une liste"), ("map", "une table"), ("string ", "le texte "), ("integer ", "l'entier "), ("floating point ", "le nombre "), ("boolean ", "le booléen ")];
+    const ATTENDU: [(&str, &str); 13] = [
+        ("one of", "parmi"),
+        ("a string", "un texte"),
+        ("a boolean", "true ou false"),
+        ("a sequence", "une liste de tables"),
+        ("string or map", "un texte ou une table"),
+        ("map with a single key", "une table à une seule clé, comme { volume = 0.5 }"),
+        ("f64", "un nombre"),
+        ("f32", "un nombre"),
+        ("u16", "un entier de 0 à 65535"),
+        ("variant identifier", "un nom de type"),
+        ("internally tagged enum Element", "une table avec un type"),
+        ("literal string", "un texte entre guillemets"),
+        ("newline", "un retour à la ligne"),
+    ];
+    const MESSAGES: [(&str, &str); 14] = [
         ("unknown variant", "valeur inconnue"),
         ("unknown field", "champ inconnu"),
         ("missing field", "champ manquant"),
-        ("invalid type", "type invalide"),
-        ("invalid value", "valeur invalide"),
-        ("expected one of", "attendu parmi"),
-        ("` or `", "` ou `"),
+        ("duplicate field", "champ en double"),
+        ("duplicate key", "clé en double"),
         ("there are no fields", "aucun champ n'est permis ici"),
-        ("expected", "attendu"),
-    ] {
+        ("invalid basic string", "texte entre guillemets mal fermé"),
+        ("invalid literal string", "texte entre apostrophes mal fermé"),
+        ("missing escaped value", "caractère inconnu après \\"),
+        ("unclosed array table", "en-tête [[…]] mal fermé"),
+        ("unclosed table", "en-tête […] mal fermé"),
+        ("string values must be quoted", "un texte doit être entre guillemets"),
+        ("unexpected key or value", "clé ou valeur en trop"),
+        ("` or `", "` ou `"),
+    ];
+    let mut texte = message.to_string();
+    for (prefixe, francais) in [("invalid type: ", "type invalide : "), ("invalid value: ", "valeur invalide : ")] {
+        for (anglais, mot) in TROUVE {
+            texte = texte.replace(&format!("{prefixe}{anglais}"), &format!("{francais}{mot}"));
+        }
+        texte = texte.replace(prefixe, francais);
+    }
+    for (anglais, francais) in ATTENDU {
+        texte = texte.replace(&format!("expected {anglais}"), &format!("attendu {francais}"));
+    }
+    for (anglais, francais) in MESSAGES {
         texte = texte.replace(anglais, francais);
     }
+    texte = texte.replace("expected", "attendu");
     let mut ouvert = false;
     texte
         .chars()
@@ -717,23 +946,28 @@ inherit = true
     /// Chaque ligne du glossaire FR → EN du README est exercée par `TOUT_FR` / `TOUT_EN`.
     #[test]
     fn glossaire_du_readme() {
-        let readme = include_str!("../README.fr.md");
-        let glossaire = readme.split("### Glossaire").nth(1).expect("section Glossaire").split("\n## ").next().unwrap();
         let mots = |texte: &str| texte.split(|c: char| !(c.is_alphanumeric() || c == '_')).map(String::from).collect::<std::collections::HashSet<_>>();
         let (fr, en) = (mots(TOUT_FR), mots(TOUT_EN));
-        let lignes: Vec<(&str, &str)> = glossaire
-            .lines()
-            .filter(|l| l.starts_with("| `"))
-            .map(|l| {
-                let mut cases = l.split('|').map(|c| c.trim().trim_matches('`'));
-                (cases.nth(1).unwrap(), cases.next().unwrap())
-            })
-            .collect();
-        assert!(lignes.len() >= 45, "{} lignes", lignes.len());
-        for (f, e) in lignes {
-            assert!(fr.contains(f), "« {f} » n'est pas dans TOUT_FR");
-            assert!(en.contains(e), "« {e} » n'est pas dans TOUT_EN");
+        let mut glossaires = Vec::new();
+        for (readme, section) in [(include_str!("../README.fr.md"), "### Glossaire"), (include_str!("../README.md"), "### English aliases")] {
+            let glossaire = readme.split(section).nth(1).expect(section).split("\n## ").next().unwrap();
+            let lignes: Vec<(&str, &str)> = glossaire
+                .lines()
+                .filter(|l| l.starts_with("| `"))
+                .map(|l| {
+                    let mut cases = l.split('|').map(|c| c.trim().trim_matches('`'));
+                    (cases.nth(1).unwrap(), cases.next().unwrap())
+                })
+                .collect();
+            assert!(lignes.len() >= 45, "{section} : {} lignes", lignes.len());
+            for &(f, e) in &lignes {
+                assert!(fr.contains(f), "{section} : « {f} » n'est pas dans TOUT_FR");
+                assert!(en.contains(e), "{section} : « {e} » n'est pas dans TOUT_EN");
+            }
+            glossaires.push(lignes);
         }
+        // README.md et README.fr.md donnent le même glossaire.
+        assert_eq!(glossaires[0], glossaires[1]);
     }
 
     #[test]
@@ -761,6 +995,100 @@ inherit = true
         assert!(erreur.contains("valeur inconnue «truc»"), "{erreur}");
         let erreur = lire("[[application]]\napp = \"Safari\"\nherites = true\n[[application.element]]\ntype = \"souple\"\n").unwrap_err();
         assert!(erreur.starts_with("ligne 3 : champ inconnu «herites»"), "{erreur}");
+    }
+
+    #[test]
+    fn element_et_item_se_melangent_dans_l_ordre_du_fichier() {
+        let texte = "[[element]]\ntype = \"heure\"\n\n[[item]]\ntype = \"flexible\"\n\n[[element]]\ntype = \"espace\"\nlargeur = 5\n\n[[item]]\ntype = \"group\"\n  [[item.element]]\n  type = \"souple\"\n  [[item.item]]\n  type = \"clock\"\n\n[[application]]\napp = \"Safari\"\n[[application.item]]\ntype = \"souple\"\n[[application.element]]\ntype = \"heure\"\n";
+        let barre = lire(texte).unwrap();
+        let heure = || Element::Heure { format: None };
+        let groupe = Element::Groupe { texte: None, symbole: None, largeur: None, elements: vec![Element::Souple, heure()] };
+        assert_eq!(barre.elements, [heure(), Element::Souple, Element::Espace { largeur: 5.0 }, groupe]);
+        assert_eq!(barre.applications[0].elements, [Element::Souple, heure()]);
+        // Une erreur dans le mélange garde sa ligne.
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[item]]\ntype = \"clock\"\n\n[[element]]\ntype = \"truc\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 8 : valeur inconnue «truc»"), "{erreur}");
+    }
+
+    #[test]
+    fn erreur_situee_dans_une_application_et_dans_l_ordre_du_fichier() {
+        // Troisième élément d'une app (Lise, sonde 25) : la ligne de cet élément, pas celle du premier.
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n[[application.element]]\ntype = \"souple\"\n[[application.element]]\ntype = \"bouton\"\naction = \"danser\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 10 : valeur inconnue «danser»"), "{erreur}");
+        // Deuxième app (sonde 27).
+        let erreur = lire("[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n\n[[application]]\napp = \"Notes\"\n[[application.element]]\ntype = \"souple\"\n[[application.element]]\ntype = \"bouton\"\ntexte = 3\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 10 : type invalide : l'entier «3», attendu un texte"), "{erreur}");
+        // Enfant d'un groupe dans une app.
+        let erreur = lire("[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"groupe\"\n  [[application.element.element]]\n  type = \"souple\"\n  [[application.element.element]]\n  type = \"truc\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 8 : valeur inconnue «truc»"), "{erreur}");
+        // Deux erreurs (sonde 26) : celle de la principale, plus haut, sort la première.
+        let erreur = lire("[[element]]\ntype = \"bouton\"\nactoin = \"suivant\"\n\n[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"truc\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 1 : champ inconnu «actoin»"), "{erreur}");
+    }
+
+    #[test]
+    fn messages_de_serde_en_francais() {
+        for (texte, attendu) in [
+            ("[[element]]\ntype = \"bouton\"\ntexte = \"a\n", "ligne 3 : texte entre guillemets mal fermé"),
+            ("[[element]]\ntype = \"bouton\"\ntexte = [\"a\"]\n", "ligne 1 : type invalide : une liste, attendu un texte"),
+            ("[[element]]\ntype = \"bouton\"\naction = { app = \"x\", url = \"y\" }\n", "ligne 1 : valeur invalide : une table, attendu une table à une seule clé"),
+            ("[[element]]\ntype = \"bouton\"\ntexte = \"a\"\ntexte = \"b\"\n", "ligne 4 : clé en double"),
+            ("[[element]]\ntype = \"bouton\"\nlargeur = \"grand\"\n", "ligne 1 : type invalide : le texte \"grand\", attendu un nombre"),
+            ("[[element]]\ntype = \"bouton\"\ngabarit = 1\n", "ligne 1 : type invalide : l'entier «1», attendu true ou false"),
+            ("[[element]]\ntype = \"bouton\"\naction = { keycode = -1 }\n", "ligne 1 : valeur invalide : l'entier «-1», attendu un entier de 0 à 65535"),
+            ("[[element]]\ntype = \"script\"\n", "ligne 1 : champ manquant «commande»"),
+            ("[[element]\ntype = \"souple\"\n", "ligne 1 : en-tête [[…]] mal fermé"),
+            ("element = [\"x\"]\n", "ligne 1 : type invalide : le texte \"x\", attendu une table avec un type"),
+        ] {
+            let erreur = lire(texte).unwrap_err();
+            assert!(erreur.starts_with(attendu), "{erreur}");
+            for anglais in ["expected", "invalid ", "string", "sequence", "map", "duplicate", "unclosed"] {
+                assert!(!erreur.contains(anglais), "« {anglais} » dans : {erreur}");
+            }
+        }
+        assert_eq!((nombre(0, "élément"), nombre(1, "élément"), nombre(2, "élément")), ("0 élément".into(), "1 élément".into(), "2 éléments".into()));
+    }
+
+    #[test]
+    fn controler_signale_ce_qui_casse_a_l_usage() {
+        let texte = "[[element]]\ntype = \"bouton\"\nsymbole = \"scisors\"\ncouleur = \"#F00\"\ncouleur_texte = \"red\"\nimage = \"~/nexiste-pas.png\"\naction = { app = \"AppQuiNexistePas\" }\n\n[[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n\n[[element]]\ntype = \"souple\"\n\n[[application]]\napp = \"safari\"\n[[application.element]]\ntype = \"groupe\"\n  [[application.element.element]]\n  type = \"bouton\"\n  symbole = \"nexiste.pas\"\n";
+        let barre = lire(texte).unwrap();
+        let avis: Vec<String> = controler(&barre, Some(texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(
+            avis,
+            [
+                "ligne 1 : le symbole SF « scisors » n'existe pas : le bouton affichera son nom en texte",
+                "ligne 1 : la couleur « #F00 » doit s'écrire #RRGGBB : elle sera ignorée",
+                "ligne 1 : la couleur « red » doit s'écrire #RRGGBB : elle sera ignorée",
+                "ligne 1 : image « ~/nexiste-pas.png » introuvable ou illisible : le bouton affichera du texte",
+                "ligne 1 : app « AppQuiNexistePas » introuvable : écris le nom du dossier .app sans l'extension, ou son bundle id",
+                "ligne 14 : cet [[element]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.element]] ?",
+                "ligne 17 : « safari » a déjà sa barre (ligne 9) : celle-ci ne sera jamais montrée",
+                "ligne 21 : le symbole SF « nexiste.pas » n'existe pas : le bouton affichera son nom en texte",
+            ]
+        );
+        assert!(controler(&barre, Some(texte)).iter().all(|a| !a.grave));
+        // Sans le texte (éditeur) : le lieu au lieu de la ligne.
+        let avis = controler(&barre, None);
+        assert_eq!(avis[0].to_string(), "élément 1 : le symbole SF « scisors » n'existe pas : le bouton affichera son nom en texte");
+        assert_eq!(avis.last().unwrap().to_string(), "application « safari », groupe 1, élément 1 : le symbole SF « nexiste.pas » n'existe pas : le bouton affichera son nom en texte");
+        // Une barre juste ne donne rien ; une barre vide est grave.
+        assert_eq!(controler(&lire(PAR_DEFAUT).unwrap(), Some(PAR_DEFAUT)), []);
+        let vide = controler(&lire("").unwrap(), Some(""));
+        assert_eq!((vide.len(), vide[0].grave), (1, true));
+        assert!(rgb("#2D0A4E") == Some(0x2D0A4E) && rgb("#F00").is_none() && rgb("2D0A4E").is_none() && rgb("#GG0000").is_none());
+    }
+
+    #[test]
+    fn controler_mesure_chaque_barre() {
+        let boutons = |n: usize| (0..n).map(|_| "[[element]]\ntype = \"bouton\"\ntexte = \"Bouton\"\nlargeur = 100\n\n").collect::<String>();
+        let texte = format!("{}[[element]]\ntype = \"souple\"\n\n[[application]]\napp = \"com.apple.Safari\"\nherite = true\n{}", boutons(5), boutons(8).replace("[[element]]", "[[application.element]]"));
+        let barre = lire(&texte).unwrap();
+        let avis: Vec<String> = controler(&barre, Some(&texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(avis, ["ligne 29 : la barre de « com.apple.Safari » déborde (environ 1420 pt pour 1004) : 5 éléments sur 15 seront cachés ; réduis des largeurs ou retire un élément"]);
+        let texte = boutons(10);
+        let avis = controler(&lire(&texte).unwrap(), Some(&texte));
+        assert_eq!(avis[0].to_string(), "la barre principale déborde (environ 1080 pt pour 1004) : 1 élément sur 10 sera caché ; réduis des largeurs ou retire un élément");
     }
 
     #[test]

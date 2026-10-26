@@ -1,7 +1,13 @@
 [package]
 name = "tactile"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2024"
+description = "A customizable Touch Bar for macOS, described in a TOML file (MTMR / BetterTouchTool alternative)"
+license = "MIT"
+repository = "https://github.com/lepalph/tactile-touch-bar"
+readme = "README.md"
+keywords = ["touchbar", "touch-bar", "macos", "mtmr", "appkit"]
+categories = ["os::macos-apis", "gui", "command-line-utilities"]
 
 [dependencies]
 objc2 = { version = "0.6", features = ["catch-all"] }

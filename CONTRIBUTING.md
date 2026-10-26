@@ -29,7 +29,7 @@ Write the test that describes the behavior first, watch it fail, then write the 
 CI=1 cargo test
 ```
 
-Without `CI=1`, the brightness and volume tests really change your screen brightness and output volume, then put them back. With `CI` set, those hardware tests return early. CI runs `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps` and `cargo test` on macOS; all four must pass, with no warnings.
+Without `CI=1`, the brightness and volume tests really change your screen brightness and output volume, then put them back. With `CI` set, `build.rs` turns on `cfg(ci)` and those hardware tests show as `ignored` (`#[cfg_attr(ci, ignore = "…")]`). CI runs `cargo build --release`, `cargo clippy --all-targets -- -D warnings`, `cargo doc --no-deps` and `cargo test` on macOS; all four must pass, with no warnings.
 
 ## Full check on a real Touch Bar
 
@@ -51,6 +51,21 @@ A few variables help capture what you can't touch:
 - `TACTILE_MASQUER=1 target/release/tactile` switches to Apple's bar 2 s after launch.
 - `TACTILE_RETOUR=1` (with the previous one) brings Tactile's bar back at 4 s, the same way a tap on ✳ does.
 
+## Adding an action
+
+An action is what goes after `action =` in the bar file. A new one touches eight places; the tests fail if you miss 4 to 8.
+
+1. `src/actions/mod.rs`: a variant in the `Action` enum. Its `snake_case` name is the word in the file (`BasculerMuet` → `"basculer_muet"`); a variant with a value is written `{ name = value }`. Add its English alias, `#[serde(alias = "toggle_mute")]`, and `#[serde(serialize_with = "court")]` on an `f32` value (otherwise `0.3` is saved as `0.30000001192092896`).
+2. The function that does the work, in a file of `src/actions/`, usable without any UI, with a test that changes the state, reads it back and restores it. A test that needs the hardware takes `#[cfg_attr(ci, ignore = "…")]`.
+3. Its branch in `executer` (`src/actions/mod.rs`). An action the bar handles itself, like `barre_apple`, goes in `declencher` (`src/barre/mod.rs`) instead.
+4. `src/config.rs`, test `chaque_forme_d_action`: one line with the French spelling and the expected `Action`.
+5. `src/config.rs`, `TOUT_FR` and `TOUT_EN`: the action in both, French and English spelling; `alias_anglais_donnent_la_meme_barre` checks they give the same bar.
+6. `src/config.rs`, `BARRE_COMPLETE`: the action once, for the round-trip tests (`aller_retour_toml`, and `le_json_ne_perd_aucun_champ` in the editor).
+7. The editor, `src/editeur/editeur.html`: an action without a value goes in `ACTIONS_SIMPLES` and `CLE_ACTION`, with its label in both the `fr:` and `en:` dictionaries (leave the French label to a maintainer if you don't speak French); an action with a value goes in `actionUI`, `actionModele` and `champAction`. An action the editor doesn't know shows as "Other" and survives a save.
+8. Both READMEs: the row of the actions table, and the glossary row in `README.md` (`### English aliases`) and `README.fr.md` (`### Glossaire`). `glossaire_du_readme` checks that both glossaries match and that every row appears in `TOUT_FR` / `TOUT_EN`.
+
+If the action points at something that may be missing (an app, a file), also teach `config::controler` to warn about it: `tactile --check`, the editor and the log all go through it.
+
 ## Code style
 
 - French names for functions, variables, types and user-facing messages.
@@ -65,7 +80,7 @@ A few variables help capture what you can't touch:
 ## Architecture overview
 
 1. `src/main.rs` reads the command line, then loads the bar (`config::charger`) and starts the app (`barre::lancer`).
-2. `src/config.rs` defines the bar file: types `Barre`, `Element`, `Reglage`, with serde aliases for the English keys. It also checks the file and watches it, re-reading it each second when its date changes.
+2. `src/config.rs` defines the bar file: types `Barre`, `Element`, `Reglage`, with serde aliases for the English keys. It also checks the file (`lire` for the syntax, `controler` for what breaks in use: colors, SF Symbols, images, apps, overflow) and watches it, re-reading it each second when its date changes.
 3. `src/actions/` holds the system actions (`Action` enum, `executer`): brightness, volume, media, keyboard. None of them needs a UI.
 4. `src/barre/` is the AppKit layer. `mod.rs` holds the state and `TactileCible`, which receives taps, slider moves and a 0.1 s timer.
 5. `elements.rs` turns each `Element` into a Touch Bar item; sliders and groups open system sub-bars.

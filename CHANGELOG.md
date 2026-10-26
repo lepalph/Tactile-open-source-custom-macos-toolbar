@@ -17,6 +17,9 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Command line: `--help`, `--version`, `--verifier [file]` (checks a bar file and reports the line of an error); unknown argument exits with code 2. `TACTILE_CONFIG` overrides the configuration path.
 - Config errors shown in the bar itself ("⚠ config ligne N") and a "View the log" menu item.
 - App icon drawn in code (`scripts/icone.sh`), embedded in `Tactile.app`; issue and PR templates; clippy and `cargo doc` in CI; release notes with SHA-256.
+- `--verifier` checks what breaks in use, with one validator shared by the editor and the bar's log: unknown SF Symbol, color not `#RRGGBB`, missing image or app, overflow of the main bar and of each app bar, the same app twice; warnings start with `attention :` (exit 0), an empty bar is an error (exit 1).
+- `--verifier` warns when an `[[element]]` comes after an `[[application]]` (it goes to the main bar), with its line.
+- `--help` follows the system language (English unless French); `--check` and `--customize` are English aliases of `--verifier` and `--personnaliser`.
 
 ### Fixed
 
@@ -25,6 +28,10 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Scripts: 5 s timeout (`delai`), stderr and exit code logged, no orphan processes when the bar is reloaded.
 - `masquer_control_strip` defaults to `true` as documented, and changing it reloads the bar placement.
 - `cargo doc` without warnings.
+- `[[element]]` and `[[item]]` (also as `application.` tables and group children) can be mixed in one file and keep the file order, instead of failing with "duplicate field".
+- An error inside an `[[application]]` (or a group in it) reports its own line, and errors come in file order.
+- TOML and serde error messages are fully translated into French; "1 élément", "2 éléments".
+- Version 0.2.0 with crate metadata; hardware tests show as `ignored` under `CI`; the glossary test reads both READMEs; CONTRIBUTING lists the eight places to touch when adding an action; `{ app = "com.example.App" }` opens a bundle id with `open -b`.
 
 ## [0.1.0] - 2026-10-25
 

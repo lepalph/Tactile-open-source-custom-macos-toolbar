@@ -5,6 +5,8 @@ pub mod luminosite;
 pub mod media;
 pub mod volume;
 
+use objc2::runtime::AnyObject;
+use objc2::{class, msg_send};
 use serde::{Deserialize, Serialize, Serializer};
 use std::process::Command;
 
@@ -77,10 +79,32 @@ pub fn executer(action: &Action) -> Resultat<()> {
         Action::Keycode(code) => clavier::touche(*code, 0),
         Action::BarreApple => Err("barre_apple est géré par la barre, pas par les actions".into()),
         Action::Shell(commande) => lancer("/bin/zsh", &["-c", commande]),
-        Action::App(app) => journaliser("/usr/bin/open", &["-a", app]),
+        // `open -a` ne connaît que les noms ; un bundle id passe par `open -b`.
+        Action::App(app) => journaliser("/usr/bin/open", &[if est_bundle(app) { "-b" } else { "-a" }, app]),
         Action::Url(url) => journaliser("/usr/bin/open", &[url]),
         Action::Applescript(script) => journaliser("/usr/bin/osascript", &["-e", script]),
     }
+}
+
+/// Le bundle id d'une app installée (`com.apple.Safari`), d'après LaunchServices.
+fn est_bundle(nom: &str) -> bool {
+    let nom = objc2_foundation::NSString::from_str(nom);
+    unsafe {
+        let espace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let url: *mut AnyObject = msg_send![espace, URLForApplicationWithBundleIdentifier: &*nom];
+        !url.is_null()
+    }
+}
+
+/// Une app installée, par bundle id ou par nom (celui qu'`open -a` trouve), sans lancer de processus.
+pub fn app_existe(nom: &str) -> bool {
+    let chemin = objc2_foundation::NSString::from_str(nom);
+    est_bundle(nom)
+        || unsafe {
+            let espace: *mut AnyObject = msg_send![class!(NSWorkspace), sharedWorkspace];
+            let chemin: *mut AnyObject = msg_send![espace, fullPathForApplication: &*chemin];
+            !chemin.is_null()
+        }
 }
 
 /// Lance la commande dans un fil et écrit son erreur au journal si elle échoue (app introuvable, AppleScript faux).
@@ -127,5 +151,12 @@ mod tests {
         assert!(erreur.starts_with("osascript « -e » « tell blabla » : ") && erreur.contains("rror"), "{erreur}");
         assert_eq!(attendre("/usr/bin/osascript", &["-e", "return 1 + 1"]), Ok(()));
         assert!(attendre("/nexiste/pas", &[]).unwrap_err().starts_with("/nexiste/pas : "));
+    }
+
+    #[test]
+    fn app_par_nom_ou_par_bundle_id() {
+        assert!(app_existe("Safari") && app_existe("com.apple.Safari") && app_existe("TextEdit"));
+        assert!(!app_existe("AppQuiNexistePas") && !app_existe("com.exemple.nexiste.pas"));
+        assert!(est_bundle("com.apple.Safari") && !est_bundle("Safari"));
     }
 }

@@ -23,6 +23,9 @@ use std::cell::RefCell;
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::time::Instant;
 use vues::{barre_touch, texte};
+/// Pour le validateur de `config::controler` : il juge comme la barre.
+pub(crate) use elements::{debordement, largeur_barre};
+pub(crate) use vues::{image, symbole};
 
 type Id = *mut AnyObject;
 

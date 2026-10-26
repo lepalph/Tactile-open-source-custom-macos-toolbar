@@ -87,11 +87,11 @@ Choose **Personnaliser ma barre…** in the menu. The window shows your Touch Ba
 - **On the right**, the selected item's settings: text, symbol (search the list or type an exact SF Symbol name), background and text colors, text size, symbol only or text only, width, and what a tap does: open an app (**Choose…** opens your Applications folder), open a web address, send a keyboard shortcut (`cmd+shift+4`), run a shell command or an AppleScript, or a system action (brightness, volume, playback…). A long press can do something else. Settings the window can't edit yet (an `image`, a `keycode`) are kept as they are when you save.
 - **Save** writes the file and the Touch Bar changes within a second. If something is wrong (a symbol that doesn't exist, a malformed color), nothing is written and the window tells you what to fix. **Go back to the previous version** restores the bar from before your last save.
 
-To open the window on its own, without taking over the Touch Bar: `tactile --personnaliser`.
+To open the window on its own, without taking over the Touch Bar: `tactile --customize` (or `--personnaliser`).
 
 ### Edit the file by hand
 
-The window writes `~/.config/tactile/barre.toml`, with a short header. You can switch between the window and the file whenever you like. Choose **Ouvrir la configuration** in the menu to open it. Each `[[element]]` block (or `[[item]]`, in English) is one item on the bar, left to right. Save, and the bar changes within a second.
+The window writes `~/.config/tactile/barre.toml`, with a short header. You can switch between the window and the file whenever you like. Choose **Ouvrir la configuration** in the menu to open it. Each `[[element]]` block (or `[[item]]`, in English) is one item on the bar, left to right; both can be mixed in one file and keep the order of the file. Save, and the bar changes within a second.
 
 For example, a button that puts the Mac to sleep, and opens Activity Monitor if you hold it:
 
@@ -107,7 +107,7 @@ long_press = { shell = "open -a 'Activity Monitor'" }
 
 Symbols are Apple's [SF Symbols](https://developer.apple.com/sf-symbols/): `moon.fill`, `play.fill`, `bolt.fill`… A misspelled symbol shows its name as text.
 
-If the file has an error, your current bar stays, a red "⚠ config ligne N" item (*config line N*) appears at the start of the bar until you fix it, and the error goes to the log (menu → Voir le journal). To check a file without touching the bar: `tactile --verifier` (or `tactile --verifier other.toml`).
+If the file has an error, your current bar stays, a red "⚠ config ligne N" item (*config line N*) appears at the start of the bar until you fix it, and the error goes to the log (menu → Voir le journal). To check a file without touching the bar: `tactile --check` (or `tactile --check other.toml`). Beyond the syntax, it warns about what would break in use: an unknown SF Symbol, a color that isn't `#RRGGBB`, a missing image or app, a bar that overflows.
 
 ## Configuration reference
 
@@ -157,11 +157,11 @@ An action is either a word (`action = "next"`) or a table (`action = { volume = 
 
 #### Finding an app's name
 
-`app` takes the name of the `.app` folder in Applications, without the extension, in English when the app has an English name: `"TextEdit"`, `"Activity Monitor"`, `"DaVinci Resolve"`. To read it, right-click the app in Finder → Get Info; the name at the top is the one to use. If two apps share a name, the bundle identifier is safer: `osascript -e 'id of app "Figma"'` prints it (`com.figma.Desktop`). An app that can't be found is reported in the log.
+`app` takes the name of the `.app` folder in Applications, without the extension, in English when the app has an English name: `"TextEdit"`, `"Activity Monitor"`, `"DaVinci Resolve"`. To read it, right-click the app in Finder → Get Info; the name at the top is the one to use. If two apps share a name, the bundle identifier is safer: `osascript -e 'id of app "Figma"'` prints it (`com.figma.Desktop`). An app that can't be found is reported by `tactile --check` and in the log. A bundle id works too: it is opened with `open -b`.
 
 ### English aliases
 
-French is the reference form, but you can write the whole file in English, which helps when you share a bar with someone who doesn't read French. Both forms can be mixed in one file. Error messages stay in French for now (see [Troubleshooting](#troubleshooting)).
+French is the reference form, but you can write the whole file in English, which helps when you share a bar with someone who doesn't read French. Both forms can be mixed in one file, `[[element]]` and `[[item]]` included: the items keep the order in which they are written. Error messages stay in French for now (see [Troubleshooting](#troubleshooting)).
 
 | French | English |
 |---|---|
@@ -294,7 +294,7 @@ action = { key = "cmd+t" }
 
 - `app`: the app's bundle id or its display name, case-insensitive. The bundle id is the safer choice; to find it, run `osascript -e 'id of app "Safari"'` (prints `com.apple.Safari`).
 - `inherit = false` (default): the app's items replace the whole bar. `inherit = true`: they only replace the area between the first and the last `flexible` space of the main bar, so what sits before and after (brightness, clock…) stays. If the main bar has no `flexible` space, they are appended to it.
-- Each `[[application.item]]` is written like an `[[item]]`; a group takes its children as `[[application.item.item]]`. An `[[application]]` without `app` or without items is rejected, with its line number.
+- Each `[[application.item]]` is written like an `[[item]]`; a group takes its children as `[[application.item.item]]`. An `[[application]]` without `app` or without items is rejected, with its line number. An `[[item]]` written after an `[[application]]` still goes to the main bar: `tactile --check` warns about it, since you probably meant `[[application.item]]`. It also warns when two `[[application]]` tables name the same app (only the first one is used) and when an app's bar overflows.
 - An open sub-bar (slider, group) stays put when you switch apps; its ✕ brings back the bar of the frontmost app. The ✳ icon also brings back the current app's bar.
 
 Full example: [exemples/par-application.toml](exemples/par-application.toml). The "Customize my bar" window only edits the main bar, but it keeps your `[[application]]` tables when it saves.
@@ -310,10 +310,19 @@ The binary inside the app is `/Applications/Tactile.app/Contents/MacOS/tactile`.
 | Command | What it does |
 |---|---|
 | `tactile` | Starts the bar (menu bar icon). |
-| `tactile --personnaliser` | Opens the "Customize my bar" window on its own, without taking over the Touch Bar. |
-| `tactile --verifier [file]` | Checks a bar file without touching the Touch Bar. Prints `OK : n éléments` (*n items*) or the error with its line, and exits with code 1 on error. Without a file, checks your `barre.toml`. |
+| `tactile --customize` | Opens the "Customize my bar" window on its own, without taking over the Touch Bar. Same as `--personnaliser`. |
+| `tactile --check [file]` | Checks a bar file without touching the Touch Bar. Same as `--verifier`. Without a file, checks your `barre.toml`. See below. |
 | `tactile --version` | Prints the version. |
-| `tactile --help` | Prints the help (in French). |
+| `tactile --help` | Prints the help, in English, or in French when the system language is French (`LC_ALL`, `LANG`, then the macOS language). |
+
+`tactile --check` reads the file like the bar does, then looks for what would break in use. A syntax error prints the file, its line and the reason, and exits with code 1. A problem the bar would survive prints a line starting with `attention :` (*warning:*) and exits with code 0: an unknown SF Symbol, a color that isn't `#RRGGBB`, a missing image, an app that isn't installed, a bar (main or per app) that overflows, two `[[application]]` tables for the same app, an `[[item]]` after an `[[application]]`. An empty bar is an error. When all is well, it prints `OK : n éléments` (*n items*), plus the number of app bars. The bar runs the same checks when it loads the file and writes the warnings to the log.
+
+```
+$ tactile --check barre.toml
+attention : ligne 4 : la couleur « #F00 » doit s'écrire #RRGGBB : elle sera ignorée
+attention : ligne 11 : cet [[element]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.element]] ?
+OK : 2 éléments, 1 barre d'application
+```
 
 An unknown argument prints the help and exits with code 2. `TACTILE_CONFIG=/path/to/file.toml` replaces `~/.config/tactile/barre.toml` everywhere (bar, file watching, editor), which is handy to try things without touching your real bar. The other `TACTILE_*` variables are for development; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
@@ -330,14 +339,21 @@ Errors are written to `~/Library/Logs/Tactile.log` (menu → **Voir le journal**
 | `type invalide` / `valeur invalide` | invalid type / invalid value |
 | `symbole SF inconnu` / `image introuvable` | unknown SF Symbol / image not found (the item shows its name as text) |
 | `la barre déborde … n élément(s) seront cachés` | the bar overflows, n items will be hidden |
+| `attention : …` | warning: the bar runs, but something will not show or work as written |
+| `le symbole SF « x » n'existe pas` / `la couleur « x » doit s'écrire #RRGGBB` | unknown SF Symbol / the color must be written `#RRGGBB` (`#F00` and `red` are not accepted) |
+| `app « x » introuvable` | app not found: neither a bundle id nor the name of an installed app |
+| `cet [[element]] est écrit après un [[application]]` | this item comes after an `[[application]]` and goes to the main bar; did you mean `[[application.item]]`? |
+| `« x » a déjà sa barre` | this app already has an `[[application]]` above; only the first one is used |
+| `clé en double` / `texte entre guillemets mal fermé` | duplicate key / unclosed quoted string |
 | `tué après 5 s` | (script) killed after 5 s |
 
 | Problem | Fix |
 |---|---|
 | macOS won't open Tactile | See step 3 of [Install](#install): on macOS 15, **System Settings → Privacy & Security → Open Anyway**; or `xattr -d com.apple.quarantine /Applications/Tactile.app`. |
 | My bar is gone and I see Apple's | Tap the ✳ icon in Apple's bar, or menu → Afficher ma barre. |
-| My change doesn't show up | The file has an error. A red "⚠ config ligne N" item in the bar says so, and the log has the details. Open **Personnaliser ma barre…** and save: the error shows in the window. `tactile --verifier` checks the file from a terminal. |
-| An item at the end disappeared | The bar overflows; the log says how many items are hidden. Reduce some `largeur` / `width` values or remove an item. |
+| My change doesn't show up | The file has an error. A red "⚠ config ligne N" item in the bar says so, and the log has the details. Open **Personnaliser ma barre…** and save: the error shows in the window. `tactile --check` checks the file from a terminal. |
+| An item at the end disappeared | The bar overflows; `tactile --check` and the log say which bar and how many items are hidden. Reduce some `largeur` / `width` values or remove an item. |
+| An item went to the main bar instead of an app's bar | It is written `[[item]]` after an `[[application]]`; write `[[application.item]]`. `tactile --check` points to its line. |
 | A `script` stays empty | Its error is in the log (exit code, stderr, "tué après 5 s": *killed after 5 s*). When Tactile is started from Finder, `PATH` doesn't include `/opt/homebrew/bin`: write full paths to your tools. |
 | Now playing stays empty | Install `media-control` (`brew install media-control`); something also has to be playing. |
 | Esc or a shortcut does nothing | Allow Tactile in **System Settings → Privacy & Security → Accessibility**. |
@@ -359,7 +375,7 @@ Since macOS 15.4, Apple stops apps from reading what's playing (the MediaRemote 
 
 - Tactile uses private Apple APIs (system-wide bar, Control Strip, brightness). A macOS update can break them; they are listed in [ARCHITECTURE.md](docs/ARCHITECTURE.md#api-privées-utilisées).
 - The brightness slider only controls the built-in display.
-- The menu, error messages and `--help` are in French. The editor window speaks both.
+- The menu and error messages are in French. `--help` and the editor window speak both.
 - Not notarized (see [Install](#install)).
 - Touch Bar gestures and trackpad gestures will come later (see [SPEC.md](SPEC.md), in French).
 
@@ -370,7 +386,7 @@ Contributions are welcome, in English or French. Identifiers and comments in the
 Build from source (stable Rust; the repo ships a `mise.toml`):
 
 ```
-cargo build --release      # target/release/tactile, to try it (--help, --version, --verifier)
+cargo build --release      # target/release/tactile, to try it (--help, --version, --check)
 CI=1 cargo test            # without CI=1, tests really change brightness and volume, then restore them
 scripts/empaqueter.sh      # universal target/Tactile.app and target/Tactile.zip
 scripts/verifier.sh        # drives every control on a real Touch Bar and checks the effect (screen on)
