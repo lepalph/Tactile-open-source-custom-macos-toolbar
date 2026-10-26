@@ -103,11 +103,17 @@ pub fn charger() -> Result<Barre, String> {
 }
 
 fn charger_chemin(chemin: &Path) -> Result<Barre, String> {
-    match std::fs::read_to_string(chemin) {
-        Ok(texte) => lire(&texte).map_err(|e| format!("{}, {e}", chemin.display())),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => lire(PAR_DEFAUT),
-        Err(e) => Err(format!("impossible de lire {} : {e}", chemin.display())),
+    if matches!(std::fs::metadata(chemin), Err(e) if e.kind() == std::io::ErrorKind::NotFound) {
+        return lire(PAR_DEFAUT);
     }
+    verifier(chemin)
+}
+
+/// Lit un fichier de barre sans repli sur la barre par défaut : `tactile --verifier`.
+pub fn verifier(chemin: &Path) -> Result<Barre, String> {
+    std::fs::read_to_string(chemin)
+        .map_err(|e| format!("impossible de lire {} : {e}", chemin.display()))
+        .and_then(|texte| lire(&texte).map_err(|e| format!("{}, {e}", chemin.display())))
 }
 
 /// Relit la barre à chaque modification du fichier (vérifiée toutes les secondes).
@@ -352,6 +358,16 @@ symbole = "speaker.wave.2.fill"
             charger_chemin(Path::new("/nexiste/pas/barre.toml")),
             lire(PAR_DEFAUT)
         );
+    }
+
+    #[test]
+    fn verifier_dit_la_ligne_ou_l_absence_du_fichier() {
+        let fichier = std::env::temp_dir().join(format!("tactile-verifier-{}.toml", std::process::id()));
+        std::fs::write(&fichier, "[[element]]\ntype = \"heure\"\n\n[[element]]\ntype = \"truc\"\n").unwrap();
+        let erreur = verifier(&fichier).unwrap_err();
+        std::fs::remove_file(&fichier).unwrap();
+        assert!(erreur.starts_with(&format!("{}, ligne 5 : valeur inconnue «truc»", fichier.display())), "{erreur}");
+        assert!(verifier(&fichier).unwrap_err().starts_with("impossible de lire"));
     }
 
     #[test]
