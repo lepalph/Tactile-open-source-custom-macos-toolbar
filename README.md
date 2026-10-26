@@ -93,6 +93,8 @@ Choose **Personnaliser ma barre…** in the menu. The window shows your Touch Ba
 - **Save** writes the file and the Touch Bar changes within a second. If something is wrong (a symbol that doesn't exist, a malformed color, an empty bar), nothing is written and the window tells you what to fix. Until you save, "Edited" shows next to the title, and the window asks before closing, loading a ready-made bar or going back.
 - **Go back to the previous version** steps back one save per click. The last 5 versions are kept next to your bar (`barre.toml.precedent`, then `.precedent-2` to `.precedent-5`); the version you leave moves to the end, so nothing is lost.
 - If you wrote your file by hand with comments, the first save from the window keeps an untouched copy, `barre.toml.manuel`, which the window never overwrites.
+- **Export…** saves your bar to share it or move it to another Mac: a `.toml` file, or a `.zip` holding `barre.toml` and the logos it uses when it has any. If you pick `.toml` for a bar with logos, the window offers the `.zip` instead.
+- **Import…** (or drop a `.toml` or `.zip` anywhere in the window) shows the incoming bar at real size and lists everything it can run on your Mac: shell commands, AppleScript, keyboard shortcuts, script commands, apps it opens, addresses that aren't web pages. Nothing changes until you click **Replace my bar**; your current bar then goes into the history, so **Go back to the previous version** brings it back. Logos are redrawn as PNG into `icones/`. Archives with `..` paths, absolute paths or symbolic links are refused, as are archives over 10 MB, images over 2 MB and more than 200 files; anything other than `barre.toml` and `icones/` images is ignored.
 - If your file has an error, the window doesn't show an empty bar: it shows the faulty line and turns Save off. You can **open the file** to fix it, then **reload** it, or **start from a ready-made bar**; your file is then first copied to `barre.toml.abime-YYYYMMDD-HHMMSS`.
 
 To open the window on its own, without taking over the Touch Bar: `tactile --customize` (or `--personnaliser`).
@@ -320,6 +322,8 @@ The binary inside the app is `/Applications/Tactile.app/Contents/MacOS/tactile`.
 | `tactile` | Starts the bar (menu bar icon). |
 | `tactile --customize` | Opens the "Customize my bar" window on its own, without taking over the Touch Bar. Same as `--personnaliser`. |
 | `tactile --check [file]` | Checks a bar file without touching the Touch Bar. Same as `--verifier`. Without a file, checks your `barre.toml`. See below. |
+| `tactile --export <file>` | Exports your bar: a `.toml`, or a `.zip` with its logos (`barre.toml` + `icones/`). Without an extension, picks the right one. Asking for a `.toml` when the bar has logos writes it with a warning: the logos stay as paths on this Mac. Same as `--exporter`. |
+| `tactile --import <file> [--yes]` | Reads a `.toml` or `.zip`, checks it like `--check`, prints a summary and everything the bar can run, then asks before replacing your bar (the current one goes into the history). Without a terminal, it refuses unless you add `--yes`. Same as `--importer` and `--oui`. |
 | `tactile --version` | Prints the version. |
 | `tactile --help` | Prints the help, in English, or in French when the system language is French (`LC_ALL`, `LANG`, then the macOS language). |
 
