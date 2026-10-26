@@ -25,6 +25,9 @@ use vues::{barre_touch, texte};
 
 type Id = *mut AnyObject;
 
+/// Préfixe des identifiants d'items ; la suite (`3`, `3.1`) numérote les éléments de la config.
+const PREFIXE: &str = "fr.palph.tactile";
+
 #[derive(Clone)]
 enum Commande {
     Systeme(Action),
@@ -200,12 +203,21 @@ fn installer(config: &Barre) {
         envoi,
         reception,
     };
-    let items = construire(&config.elements, "fr.palph.tactile", &mut etat);
-    etat.barres[0] = barre_touch("fr.palph.tactile", items);
+    let items = construire(&config.elements, PREFIXE, &mut etat);
+    etat.barres[0] = barre_touch(PREFIXE, items);
     let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());
     let principale = etat.barres[0];
     ETAT.with_borrow_mut(|place| *place = Some(etat));
     presenter(a_presenter.unwrap_or(principale));
+}
+
+/// Crée la cible des contrôles (une fois) ; les tests construisent des boutons sans lancer l'app.
+fn preparer_cible() {
+    CIBLE.with_borrow_mut(|place| {
+        if place.is_none() {
+            *place = Some(unsafe { msg_send![Cible::class(), new] });
+        }
+    });
 }
 
 pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
@@ -213,8 +225,7 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
         let app: Id = msg_send![class!(NSApplication), sharedApplication];
         let _: Bool = msg_send![app, setActivationPolicy: 1isize];
 
-        let c: Retained<Cible> = msg_send![Cible::class(), new];
-        CIBLE.with_borrow_mut(|place| *place = Some(c));
+        preparer_cible();
         RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
         installer_plateau();
         crate::menu::installer();

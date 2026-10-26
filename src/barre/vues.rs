@@ -11,8 +11,10 @@ pub(super) fn texte(s: &str) -> Retained<NSString> {
     NSString::from_str(s)
 }
 
-pub(super) fn symbole(nom: &str) -> Id {
-    unsafe { msg_send![class!(NSImage), imageWithSystemSymbolName: &*texte(nom), accessibilityDescription: std::ptr::null_mut::<AnyObject>()] }
+/// `None` si le symbole SF n'existe pas : un `buttonWithImage: nil` fait paniquer AppKit.
+pub(super) fn symbole(nom: &str) -> Option<Id> {
+    let image: Id = unsafe { msg_send![class!(NSImage), imageWithSystemSymbolName: &*texte(nom), accessibilityDescription: std::ptr::null_mut::<AnyObject>()] };
+    (!image.is_null()).then_some(image)
 }
 
 pub(super) fn couleur(hexa: &str) -> Option<Id> {
@@ -66,5 +68,16 @@ pub(super) fn titre(bouton: Id, valeur: &str) {
         if (*(actuel as *const NSString)).to_string() != valeur {
             let _: () = msg_send![bouton, setTitle: &*texte(valeur)];
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn symbole_inconnu_ne_donne_pas_d_image() {
+        assert!(symbole("xmark").is_some());
+        assert!(symbole("symbole.qui.nexiste.pas").is_none());
     }
 }
