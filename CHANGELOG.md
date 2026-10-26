@@ -4,6 +4,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-26
+
 ### Added
 
 - "Customize my bar" window (menu item, or `tactile --personnaliser`): live preview at real size, drag to reorder, symbol picker, three ready-made bars (Simple, Music, Developer), FR / EN; saves the same `barre.toml`, keeps a `.precedent` copy and can go back to it. Unknown settings (an `image`, a `keycode`) survive a round trip.
@@ -55,5 +57,6 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - `Tactile.app` universal bundle (Apple Silicon and Intel), ad hoc signed, built by `scripts/empaqueter.sh`; `scripts/verifier.sh` drives every control and checks the result.
 - README, MIT license, contribution guide and CI.
 
-[Unreleased]: https://github.com/lepalph/tactile-touch-bar/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/lepalph/tactile-touch-bar/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lepalph/tactile-touch-bar/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lepalph/tactile-touch-bar/releases/tag/v0.1.0
