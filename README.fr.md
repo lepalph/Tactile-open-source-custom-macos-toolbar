@@ -19,12 +19,48 @@
 
 Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : boutons, curseurs de luminosité et de volume, musique en cours, heure, commandes à toi. Tu passes de ta barre à celle d'Apple d'un toucher.
 
-![La barre par défaut de Tactile](docs/barre.png)
+![Tactile sur la Touch Bar, au-dessus de la fenêtre « Personnaliser ma barre » qui la règle](docs/hero.png)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/editeur-sombre.png">
-  <img src="docs/editeur-clair.png" alt="La fenêtre Personnaliser ma barre, avec la barre Musique et le curseur de volume sélectionné">
-</picture>
+## En bref
+
+- Ta barre tient dans `~/.config/tactile/barre.toml`, un bloc `[[element]]` par élément. Tu enregistres, la barre change dans la seconde. Une erreur laisse ta barre actuelle en place et donne la ligne à corriger.
+- La fenêtre de l'éditeur (`tactile --personnaliser`) montre la Touch Bar à sa vraie taille. Tu y déplaces les éléments, tu choisis symboles et couleurs, et elle écrit ce même fichier.
+- Un élément `type = "script"` lance n'importe quelle commande toutes les `intervalle` secondes et affiche ce qu'elle écrit. Si la commande sort du JSON, elle choisit aussi son symbole et ses couleurs.
+- Une table `[[application]]` donne sa propre barre à une app tant qu'elle est au premier plan. Avec `herite = true`, les bords de ta barre principale (curseurs, heure) ne bougent pas.
+- Un bouton envoie un raccourci (`action = { touche = "cmd+shift+4" }`, lu sur ta disposition de clavier, AZERTY compris), ouvre une app ou une adresse, lance un AppleScript ou une commande. `appui_long` lui donne une seconde action.
+
+## Une barre en dix lignes
+
+```toml
+[[element]]
+type = "script"
+commande = "date +%A"
+intervalle = 60
+
+[[element]]
+type = "bouton"
+symbole = "camera.viewfinder"
+action = { touche = "cmd+shift+4" }
+appui_long = { app = "Screenshot" }
+```
+
+La référence complète est [plus bas](#référence-de-la-configuration).
+
+## Feuille de route
+
+Tactile est d'abord fait pour l'usage de son auteur : l'ordre ci-dessous suit ses besoins. Le cap est décrit dans [docs/VISION.md](docs/VISION.md).
+
+| Quoi | État |
+|---|---|
+| Sources de données pour les éléments vivants : HTTP, serveurs MCP, commandes | En cours |
+| Styles de curseur | En cours |
+| Une barre par site web | En cours |
+| Importer et exporter une barre (`.toml`, ou `.zip` avec ses logos) | En cours |
+| Lanceur d'apps et raccourcis système | En cours |
+| Modules : un widget est un programme, dans n'importe quel langage, qui parle JSON avec Tactile | Prévu |
+| Une galerie communautaire de barres et de modules, vérifiés en CI par `tactile --verifier` | Prévu, après les briques |
+
+Pour aider, commence par les [good first issues](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) : elles sont petites et indiquent les fichiers à lire. Avant de te lancer sur un point de la feuille de route, ouvre une issue : ceux marqués « en cours » s'écrivent en ce moment.
 
 ## Pourquoi Tactile
 

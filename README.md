@@ -19,12 +19,48 @@
 
 Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, brightness and volume sliders, the track that's playing, a clock, your own commands. One tap switches between your bar and Apple's.
 
-![Tactile's default bar](docs/barre.png)
+![Tactile on the Touch Bar, above the "Customize my bar" window that edits it](docs/hero.png)
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/editeur-sombre.png">
-  <img src="docs/editeur-clair.png" alt="The &quot;Customize my bar&quot; window, with the Music bar loaded and the volume slider selected">
-</picture>
+## Highlights
+
+- Your bar lives in `~/.config/tactile/barre.toml`, one `[[item]]` per item. Save the file and the bar updates within a second. A mistake leaves your current bar in place, and the error names the line.
+- The editor window (`tactile --customize`) shows the Touch Bar at real size. You drag items around, pick symbols and colors, and it writes that same file.
+- A `type = "script"` item runs any shell command every `interval` seconds and shows what it prints. If the command prints JSON, it also picks its own symbol and colors.
+- An `[[application]]` table gives an app its own bar while it is in front. With `inherit = true`, the edges of your main bar (sliders, clock) stay put.
+- A button can send a shortcut (`action = { key = "cmd+shift+4" }`, resolved on your keyboard layout, AZERTY included), open an app or a URL, or run AppleScript or a shell command. `long_press` gives it a second action.
+
+## A bar in ten lines
+
+```toml
+[[item]]
+type = "script"
+command = "date +%A"
+interval = 60
+
+[[item]]
+type = "button"
+symbol = "camera.viewfinder"
+action = { key = "cmd+shift+4" }
+long_press = { app = "Screenshot" }
+```
+
+The full reference is [further down](#configuration-reference).
+
+## Roadmap
+
+Tactile is built for its author's own use first, so the order below follows what he needs. Where it's heading is described in [docs/VISION.md](docs/VISION.md) (in French).
+
+| What | Status |
+|---|---|
+| Data sources for live items: HTTP, MCP servers, commands | In progress |
+| Slider styles | In progress |
+| A bar per website | In progress |
+| Import and export a bar (`.toml`, or `.zip` with its logos) | In progress |
+| App launcher and system shortcuts | In progress |
+| Modules: a widget is a program in any language that talks JSON with Tactile | Planned |
+| A community gallery of bars and modules, checked in CI by `tactile --check` | Planned, after the building blocks |
+
+If you want to help, the [good first issues](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) are small and come with the files to look at. Before you start on a roadmap item, open an issue, since the ones marked in progress are being written now.
 
 ## Why Tactile
 
