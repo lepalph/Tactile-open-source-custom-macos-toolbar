@@ -16,7 +16,24 @@ jobs:
         with:
           targets: aarch64-apple-darwin,x86_64-apple-darwin
       - run: scripts/empaqueter.sh
+      - id: sha
+        run: echo "sha256=$(shasum -a 256 target/Tactile.zip | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
       - uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           files: target/Tactile.zip
           fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            ## Install
+
+            1. Download `Tactile.zip` below and unzip it.
+            2. Drag `Tactile.app` into **Applications**.
+            3. First launch: the app is not notarized by Apple, so macOS refuses a plain double-click.
+               Open **System Settings → Privacy & Security**, scroll to the bottom and click **Open Anyway**,
+               or run `xattr -d com.apple.quarantine /Applications/Tactile.app` in Terminal.
+
+            Requires a MacBook Pro with a Touch Bar (Intel or Apple Silicon) and macOS 13 or later.
+
+            SHA-256 of `Tactile.zip`: `${{ steps.sha.outputs.sha256 }}`
+
+            ## Changes

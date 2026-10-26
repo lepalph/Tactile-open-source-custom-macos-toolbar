@@ -4,11 +4,19 @@ on:
   push:
   pull_request:
 
+env:
+  CI: 1
+  RUSTDOCFLAGS: -D warnings
+
 jobs:
   tests:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
       - run: cargo build --release
+      - run: cargo clippy --all-targets -- -D warnings
+      - run: cargo doc --no-deps
       - run: cargo test

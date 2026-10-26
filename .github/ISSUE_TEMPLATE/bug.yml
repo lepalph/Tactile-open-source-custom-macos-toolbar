@@ -1,0 +1,45 @@
+name: Bug report
+description: Something in Tactile does not work as expected.
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "e.g. 15.1"
+    validations:
+      required: true
+  - type: input
+    id: mac
+    attributes:
+      label: Mac model
+      placeholder: "e.g. MacBook Pro 13\" M1 2020, or 15\" Intel 2018"
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tactile version
+      description: From the release you downloaded, or `Tactile.app/Contents/MacOS/tactile --version`.
+      placeholder: "e.g. 0.1.0"
+    validations:
+      required: true
+  - type: textarea
+    id: config
+    attributes:
+      label: Config excerpt
+      description: The relevant part of `~/.config/tactile/barre.toml` (menu → Ouvrir la configuration).
+      render: toml
+  - type: textarea
+    id: log
+    attributes:
+      label: Log excerpt
+      description: The last lines of `~/Library/Logs/Tactile.log` (menu → Voir le journal).
+      render: text
