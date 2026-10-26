@@ -4,6 +4,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-26
+
 ### Added
 
 - Data sources: a `[[source]]` reads JSON or text over HTTPS (`http`, via `/usr/bin/curl`, 10 s and 1 MB at most), from a command, or from an MCP tool (`mcp`, stdio server kept alive or Streamable HTTP URL; both the 2026-07-28 and the older `initialize` protocol eras), every `toutes_les` seconds (60 by default, 5 at least). A new `texte` element (or a button with `source`) shows it through a template (`"{current.temperature_2m} °C"`), with `symbole_selon` and `couleur_selon`. Headers can use `trousseau:service` to read a secret from the macOS keychain; secrets never reach the log. `--verifier` reports unknown or duplicate sources, non-https URLs, intervals under 5 s, templates without a source and plain-text keys. Examples: `exemples/meteo.toml` (Open-Meteo), `exemples/mcp.toml` with a tiny demo server.
@@ -107,6 +109,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - `Tactile.app` universal bundle (Apple Silicon and Intel), ad hoc signed, built by `scripts/empaqueter.sh`; `scripts/verifier.sh` drives every control and checks the result.
 - README, MIT license, contribution guide and CI.
 
-[Unreleased]: https://github.com/lepalph/tactile-touch-bar/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lepalph/tactile-touch-bar/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/lepalph/tactile-touch-bar/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lepalph/tactile-touch-bar/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lepalph/tactile-touch-bar/releases/tag/v0.1.0
