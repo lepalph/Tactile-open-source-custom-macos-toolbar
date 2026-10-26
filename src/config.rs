@@ -13,64 +13,94 @@ const PAR_DEFAUT: &str = include_str!("../exemples/barre.toml");
 #[serde(deny_unknown_fields)]
 pub struct Barre {
     /// `true` par défaut : toute la largeur pour la barre, sans le Control Strip d'Apple.
-    #[serde(default = "vrai")]
+    #[serde(default = "vrai", alias = "hide_control_strip")]
     pub masquer_control_strip: bool,
-    #[serde(rename = "element", default)]
+    #[serde(rename = "element", alias = "item", default)]
     pub elements: Vec<Element>,
 }
 
+/// Les clés françaises sont la forme canonique ; chaque clé, type, réglage et action accepte
+/// un alias anglais (glossaire dans le README, vérifié par le test `glossaire_du_readme`).
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", deny_unknown_fields)]
 pub enum Element {
+    #[serde(alias = "button")]
     Bouton {
+        #[serde(alias = "text")]
         texte: Option<String>,
+        #[serde(alias = "symbol")]
         symbole: Option<String>,
         /// Chemin d'une image (PNG, PDF, icns…), redimensionnée à 20 pt de haut ; `~` est accepté.
         image: Option<String>,
         /// `true` : l'image est un gabarit, teinté comme un symbole SF.
-        #[serde(default)]
+        #[serde(default, alias = "template")]
         gabarit: bool,
+        #[serde(alias = "color")]
         couleur: Option<String>,
+        #[serde(alias = "text_color")]
         couleur_texte: Option<String>,
         /// Taille de la police en points.
+        #[serde(alias = "size")]
         taille: Option<f64>,
+        #[serde(alias = "display")]
         affichage: Option<Affichage>,
+        #[serde(alias = "width")]
         largeur: Option<f64>,
         action: Option<Action>,
+        #[serde(alias = "long_press")]
         appui_long: Option<Action>,
     },
     Slider {
+        #[serde(alias = "setting")]
         reglage: Reglage,
+        #[serde(alias = "symbol")]
         symbole: Option<String>,
     },
+    #[serde(alias = "clock")]
     Heure {
         format: Option<String>,
     },
+    #[serde(alias = "now_playing")]
     EnCours {
+        #[serde(alias = "width")]
         largeur: Option<f64>,
     },
     Script {
+        #[serde(alias = "command")]
         commande: String,
+        #[serde(alias = "interval")]
         intervalle: f64,
         /// Secondes au bout desquelles la commande est tuée (5 par défaut).
+        #[serde(alias = "timeout")]
         delai: Option<f64>,
+        #[serde(alias = "width")]
         largeur: Option<f64>,
         action: Option<Action>,
     },
+    #[serde(alias = "space")]
     Espace {
+        #[serde(alias = "width")]
         largeur: f64,
     },
+    #[serde(alias = "flexible")]
     Souple,
+    #[serde(alias = "group")]
     Groupe {
+        #[serde(alias = "text")]
         texte: Option<String>,
+        #[serde(alias = "symbol")]
         symbole: Option<String>,
+        #[serde(alias = "width")]
         largeur: Option<f64>,
-        #[serde(rename = "element", default)]
+        #[serde(rename = "element", alias = "item", default)]
         elements: Vec<Element>,
     },
+    #[serde(alias = "battery")]
     Batterie {
         /// `true` par défaut : un symbole de pile à côté du pourcentage ; `false` : texte seul, ⚡ en charge.
+        #[serde(alias = "symbol")]
         symbole: Option<bool>,
+        #[serde(alias = "width")]
         largeur: Option<f64>,
     },
 }
@@ -79,14 +109,18 @@ pub enum Element {
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Affichage {
+    #[serde(alias = "icon")]
     Icone,
+    #[serde(alias = "text")]
     Texte,
+    #[serde(alias = "both")]
     LesDeux,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Reglage {
+    #[serde(alias = "brightness")]
     Luminosite,
     Volume,
 }
@@ -116,6 +150,7 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
 fn element_fautif(texte: &str) -> Option<usize> {
     #[derive(Deserialize)]
     struct Brut {
+        #[serde(alias = "item", default)]
         element: Vec<toml::Spanned<toml::Table>>,
     }
     let brut: Brut = toml::from_str(texte).ok()?;
@@ -299,6 +334,251 @@ mod tests {
         }
     }
 
+    /// Tout le vocabulaire, une fois en français et une fois en anglais : les deux doivent donner la même barre.
+    const TOUT_FR: &str = r##"
+masquer_control_strip = false
+
+[[element]]
+type = "bouton"
+texte = "Pr"
+symbole = "scissors"
+image = "~/pr.png"
+gabarit = true
+couleur = "#2D0A4E"
+couleur_texte = "#FFFFFF"
+taille = 13
+affichage = "les_deux"
+largeur = 90
+action = { touche = "cmd+k" }
+appui_long = { keycode = 53 }
+
+[[element]]
+type = "bouton"
+affichage = "icone"
+action = "luminosite_plus"
+appui_long = "luminosite_moins"
+
+[[element]]
+type = "bouton"
+affichage = "texte"
+action = { luminosite = 0.5 }
+appui_long = "volume_plus"
+
+[[element]]
+type = "bouton"
+action = "volume_moins"
+appui_long = { volume = 0.3 }
+
+[[element]]
+type = "bouton"
+action = "basculer_muet"
+appui_long = "lecture_pause"
+
+[[element]]
+type = "bouton"
+action = "suivant"
+appui_long = "precedent"
+
+[[element]]
+type = "bouton"
+action = "veille"
+appui_long = "echap"
+
+[[element]]
+type = "bouton"
+action = "barre_apple"
+appui_long = { shell = "uptime" }
+
+[[element]]
+type = "bouton"
+action = { app = "Figma" }
+appui_long = { url = "https://example.org" }
+
+[[element]]
+type = "bouton"
+action = { applescript = "beep" }
+
+[[element]]
+type = "slider"
+reglage = "luminosite"
+symbole = "sun.max.fill"
+
+[[element]]
+type = "slider"
+reglage = "volume"
+
+[[element]]
+type = "heure"
+format = "HH:mm"
+
+[[element]]
+type = "en_cours"
+largeur = 300
+
+[[element]]
+type = "script"
+commande = "uptime"
+intervalle = 2
+delai = 1
+largeur = 80
+action = "suivant"
+
+[[element]]
+type = "espace"
+largeur = 10
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "groupe"
+texte = "Son"
+symbole = "speaker.wave.2.fill"
+largeur = 100
+  [[element.element]]
+  type = "batterie"
+  symbole = false
+  largeur = 80
+"##;
+
+    const TOUT_EN: &str = r##"
+hide_control_strip = false
+
+[[item]]
+type = "button"
+text = "Pr"
+symbol = "scissors"
+image = "~/pr.png"
+template = true
+color = "#2D0A4E"
+text_color = "#FFFFFF"
+size = 13
+display = "both"
+width = 90
+action = { key = "cmd+k" }
+long_press = { keycode = 53 }
+
+[[item]]
+type = "button"
+display = "icon"
+action = "brightness_up"
+long_press = "brightness_down"
+
+[[item]]
+type = "button"
+display = "text"
+action = { brightness = 0.5 }
+long_press = "volume_up"
+
+[[item]]
+type = "button"
+action = "volume_down"
+long_press = { volume = 0.3 }
+
+[[item]]
+type = "button"
+action = "toggle_mute"
+long_press = "play_pause"
+
+[[item]]
+type = "button"
+action = "next"
+long_press = "previous"
+
+[[item]]
+type = "button"
+action = "sleep"
+long_press = "esc"
+
+[[item]]
+type = "button"
+action = "apple_bar"
+long_press = { shell = "uptime" }
+
+[[item]]
+type = "button"
+action = { app = "Figma" }
+long_press = { url = "https://example.org" }
+
+[[item]]
+type = "button"
+action = { applescript = "beep" }
+
+[[item]]
+type = "slider"
+setting = "brightness"
+symbol = "sun.max.fill"
+
+[[item]]
+type = "slider"
+setting = "volume"
+
+[[item]]
+type = "clock"
+format = "HH:mm"
+
+[[item]]
+type = "now_playing"
+width = 300
+
+[[item]]
+type = "script"
+command = "uptime"
+interval = 2
+timeout = 1
+width = 80
+action = "next"
+
+[[item]]
+type = "space"
+width = 10
+
+[[item]]
+type = "flexible"
+
+[[item]]
+type = "group"
+text = "Son"
+symbol = "speaker.wave.2.fill"
+width = 100
+  [[item.item]]
+  type = "battery"
+  symbol = false
+  width = 80
+"##;
+
+    #[test]
+    fn alias_anglais_donnent_la_meme_barre() {
+        let fr = lire(TOUT_FR).unwrap();
+        assert_eq!(lire(TOUT_EN), Ok(fr.clone()));
+        assert_eq!(fr.elements.len(), 18);
+        assert_eq!(lire(include_str!("../exemples/barre.en.toml")), lire(PAR_DEFAUT));
+        // Une erreur dans un [[item]] garde sa ligne.
+        assert!(lire("[[item]]\ntype = \"clock\"\n\n[[item]]\ntype = \"button\"\naction = \"dance\"\n").unwrap_err().starts_with("ligne 4 : valeur inconnue «dance»"));
+    }
+
+    /// Chaque ligne du glossaire FR → EN du README est exercée par `TOUT_FR` / `TOUT_EN`.
+    #[test]
+    fn glossaire_du_readme() {
+        let readme = include_str!("../README.md");
+        let glossaire = readme.split("### Glossaire").nth(1).expect("section Glossaire").split("\n## ").next().unwrap();
+        let mots = |texte: &str| texte.split(|c: char| !(c.is_alphanumeric() || c == '_')).map(String::from).collect::<std::collections::HashSet<_>>();
+        let (fr, en) = (mots(TOUT_FR), mots(TOUT_EN));
+        let lignes: Vec<(&str, &str)> = glossaire
+            .lines()
+            .filter(|l| l.starts_with("| `"))
+            .map(|l| {
+                let mut cases = l.split('|').map(|c| c.trim().trim_matches('`'));
+                (cases.nth(1).unwrap(), cases.next().unwrap())
+            })
+            .collect();
+        assert!(lignes.len() >= 45, "{} lignes", lignes.len());
+        for (f, e) in lignes {
+            assert!(fr.contains(f), "« {f} » n'est pas dans TOUT_FR");
+            assert!(en.contains(e), "« {e} » n'est pas dans TOUT_EN");
+        }
+    }
+
     #[test]
     fn control_strip_masque_par_defaut() {
         assert!(lire("").unwrap().masquer_control_strip);
@@ -420,7 +700,7 @@ symbole = "speaker.wave.2.fill"
         for (ecrit, attendu) in [("texte", Affichage::Texte), ("les_deux", Affichage::LesDeux)] {
             assert!(matches!(lire(&format!("[[element]]\ntype = \"bouton\"\naffichage = \"{ecrit}\"\n")).unwrap().elements[0], Element::Bouton { affichage: Some(a), .. } if a == attendu));
         }
-        assert!(lire("[[element]]\ntype = \"bouton\"\naffichage = \"gros\"\n").unwrap_err().starts_with("ligne 1 : valeur inconnue «gros», attendu parmi «icone»"));
+        assert!(lire("[[element]]\ntype = \"bouton\"\naffichage = \"gros\"\n").unwrap_err().starts_with("ligne 1 : valeur inconnue «gros», attendu parmi «icon», «icone»"));
     }
 
     #[test]

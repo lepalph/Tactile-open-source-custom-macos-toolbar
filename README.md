@@ -99,6 +99,63 @@ Une action s'écrit soit comme un mot (`action = "suivant"`), soit comme une tab
 
 `app` prend le nom du dossier `.app` dans Applications, sans l'extension, en anglais quand l'app en a un : `"TextEdit"`, `"Activity Monitor"`, `"DaVinci Resolve"`. Pour le lire : clic droit sur l'app dans le Finder → Lire les informations ; le nom en haut est celui à écrire. Si deux apps portent le même nom, l'identifiant est plus sûr : `osascript -e 'id of app "Figma"'` l'affiche (`com.figma.Desktop`). Une app introuvable est signalée dans le journal (menu → Voir le journal).
 
+### Glossaire : les clés en anglais
+
+Le fichier s'écrit en français (c'est la forme de référence, celle de l'éditeur à venir), mais chaque clé, type, réglage et action a un alias anglais, pour partager une barre avec qui ne lit pas le français : [exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut en anglais. Les deux formes peuvent se mélanger ; les messages d'erreur restent en français.
+
+| Français | Anglais |
+|---|---|
+| `masquer_control_strip` | `hide_control_strip` |
+| `element` | `item` |
+| `bouton` | `button` |
+| `heure` | `clock` |
+| `en_cours` | `now_playing` |
+| `espace` | `space` |
+| `souple` | `flexible` |
+| `groupe` | `group` |
+| `batterie` | `battery` |
+| `texte` | `text` |
+| `symbole` | `symbol` |
+| `gabarit` | `template` |
+| `couleur` | `color` |
+| `couleur_texte` | `text_color` |
+| `taille` | `size` |
+| `affichage` | `display` |
+| `icone` | `icon` |
+| `les_deux` | `both` |
+| `largeur` | `width` |
+| `appui_long` | `long_press` |
+| `reglage` | `setting` |
+| `luminosite` | `brightness` |
+| `commande` | `command` |
+| `intervalle` | `interval` |
+| `delai` | `timeout` |
+| `luminosite_plus` | `brightness_up` |
+| `luminosite_moins` | `brightness_down` |
+| `volume_plus` | `volume_up` |
+| `volume_moins` | `volume_down` |
+| `basculer_muet` | `toggle_mute` |
+| `lecture_pause` | `play_pause` |
+| `suivant` | `next` |
+| `precedent` | `previous` |
+| `veille` | `sleep` |
+| `echap` | `esc` |
+| `barre_apple` | `apple_bar` |
+| `touche` | `key` |
+| `slider` | `slider` |
+| `script` | `script` |
+| `format` | `format` |
+| `image` | `image` |
+| `action` | `action` |
+| `volume` | `volume` |
+| `shell` | `shell` |
+| `keycode` | `keycode` |
+| `app` | `app` |
+| `url` | `url` |
+| `applescript` | `applescript` |
+
+Dans la sortie JSON d'un `script` aussi : `text`, `symbol`, `color`, `text_color`.
+
 ### Extra : Claude vocal
 
 Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La transcription (whisper.cpp) et la voix (Piper) tournent sur ton Mac. Installation : [extras/claude-voix](extras/claude-voix/README.md) ; éléments à ajouter à ta barre : [exemples/claude-vocal.toml](exemples/claude-vocal.toml).

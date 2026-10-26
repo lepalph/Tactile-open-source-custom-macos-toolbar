@@ -1,0 +1,55 @@
+# Tactile's default bar, with English keys (the French keys of barre.toml are the canonical form; both are accepted).
+# To change it, copy this file to ~/.config/tactile/barre.toml. Items show from left to right, in file order.
+# Tactile reloads the file as soon as it is saved. Error messages are in French for now.
+
+# Hide Apple's strip of system buttons, on the right.
+hide_control_strip = true
+
+# Show Apple's bar (per-app buttons); the ✳ icon in the Control Strip brings this one back.
+[[item]]
+type = "button"
+symbol = "apple.logo"
+width = 56
+action = "apple_bar"
+
+# Screen brightness slider.
+[[item]]
+type = "slider"
+setting = "brightness"
+symbol = "sun.max.fill"
+
+# Volume slider.
+[[item]]
+type = "slider"
+setting = "volume"
+symbol = "speaker.wave.2.fill"
+
+# Flexible space: pushes what follows towards the centre.
+[[item]]
+type = "flexible"
+
+# ⏪ Previous track.
+[[item]]
+type = "button"
+symbol = "backward.fill"
+action = "previous"
+
+# Now playing (width in points).
+[[item]]
+type = "now_playing"
+width = 330
+
+# ⏩ Next track.
+[[item]]
+type = "button"
+symbol = "forward.fill"
+action = "next"
+
+# Flexible space: pushes what follows to the right.
+[[item]]
+type = "flexible"
+
+# Clock (HH = hours, mm = minutes).
+[[item]]
+type = "clock"
+format = "HH:mm"

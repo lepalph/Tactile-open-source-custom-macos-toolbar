@@ -13,21 +13,34 @@ pub type Resultat<T> = Result<T, String>;
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Action {
+    #[serde(alias = "brightness_up")]
     LuminositePlus,
+    #[serde(alias = "brightness_down")]
     LuminositeMoins,
+    #[serde(alias = "brightness")]
     Luminosite(f32),
+    #[serde(alias = "volume_up")]
     VolumePlus,
+    #[serde(alias = "volume_down")]
     VolumeMoins,
     Volume(f32),
+    #[serde(alias = "toggle_mute")]
     BasculerMuet,
+    #[serde(alias = "play_pause")]
     LecturePause,
+    #[serde(alias = "next")]
     Suivant,
+    #[serde(alias = "previous")]
     Precedent,
+    #[serde(alias = "sleep")]
     Veille,
+    #[serde(alias = "esc")]
     Echap,
+    #[serde(alias = "apple_bar")]
     BarreApple,
     Shell(String),
     /// `{ touche = "cmd+shift+4" }` : un raccourci clavier.
+    #[serde(alias = "key")]
     Touche(clavier::Touche),
     /// `{ keycode = 53 }` : une touche par son code, pour celles qui n'ont pas de nom.
     Keycode(u16),
@@ -88,6 +101,15 @@ pub fn attendre(programme: &str, args: &[&str]) -> Resultat<()> {
     Err(format!("{nom} {} : {}", args.iter().map(|a| format!("« {a} »")).collect::<Vec<_>>().join(" "), if stderr.is_empty() { format!("code {}", sortie.status.code().unwrap_or(-1)) } else { stderr }))
 }
 
+/// Lance une commande sans attendre sa fin.
+pub fn lancer(programme: &str, args: &[&str]) -> Resultat<()> {
+    Command::new(programme)
+        .args(args)
+        .spawn()
+        .map(|_| ())
+        .map_err(|e| format!("{programme} : {e}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -101,13 +123,4 @@ mod tests {
         assert_eq!(attendre("/usr/bin/osascript", &["-e", "return 1 + 1"]), Ok(()));
         assert!(attendre("/nexiste/pas", &[]).unwrap_err().starts_with("/nexiste/pas : "));
     }
-}
-
-/// Lance une commande sans attendre sa fin.
-pub fn lancer(programme: &str, args: &[&str]) -> Resultat<()> {
-    Command::new(programme)
-        .args(args)
-        .spawn()
-        .map(|_| ())
-        .map_err(|e| format!("{programme} : {e}"))
 }
