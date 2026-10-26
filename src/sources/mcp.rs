@@ -2,10 +2,10 @@
 //! Streamable HTTP. Double époque, comme le demande la spécification 2026-07-28 : sonde `server/discover`
 //! (serveur moderne, `_meta` à chaque requête), sinon poignée de main `initialize` (serveurs 2025, encore les plus courants).
 
-use super::http;
+use super::{http, TAILLE_MAX};
 use crate::barre::{inscrire, retirer, tuer_groupe, Processus};
 use serde_json::{json, Value};
-use std::io::{BufRead, Write};
+use std::io::{BufRead, Read, Write};
 use std::os::unix::process::CommandExt;
 use std::process::{Child, ChildStdin, Stdio};
 use std::sync::mpsc::{Receiver, RecvTimeoutError};
@@ -67,16 +67,32 @@ impl Client {
             .stderr(Stdio::null())
             .spawn()
             .map_err(|e| format!("zsh : {e}"))?;
-        if !inscrire(processus, enfant.id() as i32) {
+        let pid = enfant.id() as i32;
+        if !inscrire(processus, pid) {
             return Err("barre remplacée".into());
         }
         let sortie = enfant.stdout.take().expect("stdout demandé");
         let (envoi, lignes) = std::sync::mpsc::channel();
-        // Le fil s'arrête à la fin de la sortie, quand le serveur meurt ou est tué.
+        // Le fil s'arrête à la fin de la sortie, quand le serveur meurt ou est tué. Chaque ligne est lue bornée
+        // (pas `lines()`, qui garderait une ligne sans fin) : au-delà de 1 Mo, le serveur est tué.
         std::thread::spawn(move || {
-            for ligne in std::io::BufReader::new(sortie).lines().map_while(Result::ok) {
-                if envoi.send(ligne).is_err() {
-                    break;
+            let mut lecteur = std::io::BufReader::new(sortie);
+            loop {
+                let mut ligne = Vec::new();
+                match (&mut lecteur).take(TAILLE_MAX as u64 + 1).read_until(b'\n', &mut ligne) {
+                    Ok(0) | Err(_) => break,
+                    Ok(_) if ligne.len() > TAILLE_MAX => {
+                        eprintln!("tactile : serveur MCP : réponse de plus de 1 Mo, serveur arrêté");
+                        tuer_groupe(pid);
+                        break;
+                    }
+                    Ok(_) => {
+                        let fin = ligne.strip_suffix(b"\n").unwrap_or(&ligne);
+                        let fin = fin.strip_suffix(b"\r").unwrap_or(fin);
+                        if envoi.send(String::from_utf8_lossy(fin).into_owned()).is_err() {
+                            break;
+                        }
+                    }
                 }
             }
         });
@@ -332,6 +348,19 @@ mod tests {
         assert!(debut.elapsed() < Duration::from_secs(3));
         assert!(Client::stdio("commande-qui-nexiste-pas-tactile", &p, Duration::from_secs(2)).is_err());
         assert_eq!(p.lock().unwrap().as_ref().unwrap().len(), 0, "le sleep 39 est tué");
+    }
+
+    /// S3 : un serveur qui écrit 50 Mo sans fin de ligne. La ligne est coupée à 1 Mo et le serveur tué, sans que la
+    /// mémoire du test prenne les 50 Mo (avant : `lines()` gardait toute la ligne).
+    #[test]
+    fn une_ligne_geante_arrete_le_serveur() {
+        let p = processus();
+        let avant = crate::essais::pic_memoire();
+        let debut = Instant::now();
+        assert!(Client::stdio("head -c 50000000 /dev/zero; sleep 21", &p, Duration::from_secs(30)).is_err());
+        let pris = crate::essais::pic_memoire() - avant;
+        assert!(debut.elapsed() < Duration::from_secs(10), "pas tué au dépassement : {:?}", debut.elapsed());
+        assert!(pris < 30 << 20, "{} Mo de plus en mémoire", pris >> 20);
     }
 
     /// Streamable HTTP sur un serveur local : moderne en JSON, puis ancien (sonde refusée en 400, session, SSE).

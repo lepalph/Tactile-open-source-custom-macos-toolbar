@@ -13,6 +13,7 @@ use super::vues::{couleur, styler, titre};
 use super::{batterie, Id, ETAT, PREFIXE};
 use crate::actions::media;
 use crate::config::{CouleurSelon, SymboleSelon};
+use crate::sources::TAILLE_MAX;
 
 pub(super) enum Rafraichi {
     Heure { bouton: Id, formateur: Id },
@@ -134,6 +135,9 @@ fn appliquer(bouton: Id, riche: &Riche, element: &str) {
     styler(bouton, riche.couleur_texte.as_deref(), None);
 }
 
+/// La valeur d'une commande dont la sortie dépasse `sources::TAILLE_MAX`.
+pub(crate) const TROP_LONG: &str = "⚠ trop long";
+
 /// Ce qu'un fil renvoie : la sortie à afficher, et ce qui a cloché (vide si rien).
 pub(crate) struct Sortie {
     pub texte: String,
@@ -212,21 +216,44 @@ pub(crate) fn executer(commande: &mut std::process::Command, entree: Option<&str
         }
         tue
     });
-    let sortie = enfant.wait_with_output();
+    // Lecture bornée pendant la lecture (pas `wait_with_output`, qui garde tout) : au-delà de 1 Mo, le groupe est tué.
+    // stderr dans un fil, sinon un enfant qui le remplit bloquerait pendant qu'on lit stdout.
+    use std::io::Read;
+    let (mut stdout, mut stderr) = (enfant.stdout.take().expect("stdout demandé"), enfant.stderr.take().expect("stderr demandé"));
+    let lecteur_erreur = std::thread::spawn(move || {
+        let mut octets = Vec::new();
+        let _ = (&mut stderr).take(TAILLE_MAX as u64).read_to_end(&mut octets);
+        // Le reste est jeté : l'enfant n'est pas bloqué, la mémoire reste bornée.
+        let _ = std::io::copy(&mut stderr, &mut std::io::sink());
+        octets
+    });
+    let mut texte = Vec::new();
+    let lu = (&mut stdout).take(TAILLE_MAX as u64 + 1).read_to_end(&mut texte);
+    let trop_long = texte.len() > TAILLE_MAX;
+    if trop_long {
+        tuer_groupe(pid);
+        texte = Vec::new();
+    }
+    drop(stdout);
+    let statut = enfant.wait();
     let _ = fini.send(());
     let tue = garde.join().unwrap_or(false);
     retirer(processus, pid);
-    let Ok(sortie) = sortie else { return Sortie { texte: String::new(), erreur: "sortie illisible".into() } };
-    let stderr = String::from_utf8_lossy(&sortie.stderr).trim().to_string();
+    let stderr = lecteur_erreur.join().unwrap_or_default();
+    let (Ok(_), Ok(statut)) = (lu, statut) else { return Sortie { texte: String::new(), erreur: "sortie illisible".into() } };
+    if trop_long {
+        return Sortie { texte: TROP_LONG.into(), erreur: "sortie de plus de 1 Mo, commande arrêtée".into() };
+    }
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
     let erreur = if tue {
         format!("tué après {} s", delai.as_secs_f64())
-    } else if !sortie.status.success() || !stderr.is_empty() {
-        let code = sortie.status.code().map_or("signal".to_string(), |c| format!("code {c}"));
+    } else if !statut.success() || !stderr.is_empty() {
+        let code = statut.code().map_or("signal".to_string(), |c| format!("code {c}"));
         if stderr.is_empty() { code } else { format!("{code}, {stderr}") }
     } else {
         String::new()
     };
-    Sortie { texte: String::from_utf8_lossy(&sortie.stdout).into_owned(), erreur }
+    Sortie { texte: String::from_utf8_lossy(&texte).into_owned(), erreur }
 }
 
 pub(super) fn rafraichir() {
@@ -373,6 +400,25 @@ mod tests {
         assert_eq!(sortie.erreur, "code 3, oups");
         assert_eq!(executer_script("echo bien", Duration::from_secs(5), &p).erreur, "");
         assert_eq!(p.lock().unwrap().as_ref().unwrap().len(), 0);
+    }
+
+    use crate::essais::pic_memoire;
+
+    /// S3 (revue 0.3, trouvaille 2) : 50 Mo sur la sortie. La lecture s'arrête à 1 Mo, le groupe est tué, la valeur
+    /// dit « ⚠ trop long » ; la mémoire du test ne prend pas les 50 Mo (avant : tout était gardé, deux fois).
+    #[test]
+    fn une_sortie_geante_est_coupee_sans_remplir_la_memoire() {
+        let avant = pic_memoire();
+        let debut = Instant::now();
+        let sortie = executer_script("head -c 50000000 /dev/zero; sleep 20", Duration::from_secs(30), &processus());
+        let pris = pic_memoire() - avant;
+        assert!(debut.elapsed() < Duration::from_secs(10), "pas tué au dépassement : {:?}", debut.elapsed());
+        assert_eq!(sortie.texte, TROP_LONG);
+        assert_eq!(sortie.erreur, "sortie de plus de 1 Mo, commande arrêtée");
+        assert!(pris < 30 << 20, "{} Mo de plus en mémoire", pris >> 20);
+        assert_eq!(vivants("head -c 50000000 /dev/zero; sleep 20"), 0, "le groupe survit");
+        // Sous la limite, rien ne change.
+        assert_eq!(executer_script("head -c 1000 /dev/zero", Duration::from_secs(5), &processus()).texte.len(), 1000);
     }
 
     #[test]

@@ -7,7 +7,8 @@
 //! `iconesApps { noms }`, `choisirImage`, `deposerImage { nom, donnees }` (fichier glissé, en base64), `importerImage { chemin }`
 //! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`,
 //! `exporter { barre, zip? }` (NSSavePanel), `exporterVers { barre, chemin }`, `importer` (NSOpenPanel),
-//! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport`, `annulerImport`.
+//! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport`, `annulerImport`. Un chemin venu
+//! de la page n'est suivi que s'il passe `chemin_permis` (pilote, ou fichier rendu par NSSavePanel).
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
 //! `tactile.glyphes({nom: dataURL|null})`, `tactile.iconesApps({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
 //! `tactile.abimeGarde(nom)`, `tactile.erreur(texte)`, `tactile.appChoisie(nom)`,
@@ -44,6 +45,8 @@ thread_local! {
     static MODIFIE: Cell<bool> = const { Cell::new(false) };
     /// La barre importée que la page montre en aperçu, en attente de « Remplacer ma barre ».
     static IMPORT: RefCell<Option<partage::Paquet>> = const { RefCell::new(None) };
+    /// Le fichier que NSSavePanel vient de rendre à la page (`exportAvertir`) : le seul que `exporterVers` écrit hors pilote.
+    static ACCORDE: RefCell<Option<PathBuf>> = const { RefCell::new(None) };
 }
 
 /// Versions gardées : `barre.toml.precedent` (la plus récente), puis `.precedent-2` … `.precedent-5`.
@@ -105,11 +108,10 @@ fn recevoir(message: Value) {
                 js(&script);
             }
         }
-        "capture" => {
-            if let Some(chemin) = message["chemin"].as_str() {
-                capturer(Path::new(chemin));
-            }
-        }
+        "capture" => match message["chemin"].as_str() {
+            Some(chemin) if chemin_permis(chemin, pilote(), None) => capturer(Path::new(chemin)),
+            _ => refuser_chemin("capture", &message),
+        },
         "enregistrer" => {
             let chemin = config::chemin();
             match enregistrer(&chemin, message["barre"].clone()) {
@@ -194,10 +196,10 @@ fn recevoir(message: Value) {
                 importer_image(icones::importer(&source, &icones::dossier(&config::chemin())));
             }
         }
-        "importerImage" => {
-            let source = message["chemin"].as_str().unwrap_or("");
-            importer_image(icones::importer(Path::new(source), &icones::dossier(&config::chemin())));
-        }
+        "importerImage" => match message["chemin"].as_str() {
+            Some(source) if chemin_permis(source, pilote(), None) => importer_image(icones::importer(Path::new(source), &icones::dossier(&config::chemin()))),
+            _ => refuser_chemin("importerImage", &message),
+        },
         "deposerImage" => {
             let (nom, donnees) = (message["nom"].as_str().unwrap_or(""), message["donnees"].as_str().unwrap_or(""));
             importer_image(icones::importer_depot(nom, donnees, &icones::dossier(&config::chemin())));
@@ -223,10 +225,10 @@ fn recevoir(message: Value) {
                 preparer_import(partage::ouvrir(&fichier), &fichier.to_string_lossy());
             }
         }
-        "importerBarre" => {
-            let chemin = message["chemin"].as_str().unwrap_or("");
-            preparer_import(partage::ouvrir(Path::new(chemin)), chemin);
-        }
+        "importerBarre" => match message["chemin"].as_str() {
+            Some(chemin) if chemin_permis(chemin, pilote(), None) => preparer_import(partage::ouvrir(Path::new(chemin)), chemin),
+            _ => refuser_chemin("importerBarre", &message),
+        },
         "deposerBarre" => {
             let nom = message["nom"].as_str().unwrap_or("");
             let paquet = icones::decoder_depot(message["donnees"].as_str().unwrap_or(""))
@@ -270,6 +272,37 @@ fn envoyer_config(config: Result<Barre, String>) {
     }
 }
 
+/// Un message à chemin refusé : rien n'est lu ni écrit, le journal le dit.
+fn refuser_chemin(type_: &str, message: &Value) {
+    eprintln!("tactile : éditeur, « {type_} » refusé : chemin {} hors des dossiers permis (sélecteur, ou pilote TACTILE_EDITEUR_JS dans le dossier temporaire ou le dépôt)", message["chemin"]);
+}
+
+/// Le pilote `TACTILE_EDITEUR_JS` est-il actif ?
+fn pilote() -> bool {
+    std::env::var_os("TACTILE_EDITEUR_JS").is_some_and(|c| !c.is_empty())
+}
+
+/// Un chemin venu de la page (`capture`, `importerImage`, `importerBarre`, `exporterVers`) : la page n'a pas à
+/// désigner un fichier de son choix, même si une injection y entrait. Il est suivi s'il vient d'être rendu par le
+/// sélecteur de fichier (`accorde`) ; sinon seulement en mode pilote, dans le dossier temporaire ou le dépôt.
+fn chemin_permis(chemin: &str, pilote: bool, accorde: Option<&Path>) -> bool {
+    let chemin = Path::new(chemin);
+    if accorde == Some(chemin) {
+        return true;
+    }
+    if !pilote || !chemin.is_absolute() || chemin.components().any(|c| c == std::path::Component::ParentDir) {
+        return false;
+    }
+    // Le dossier réel (liens résolus), et pas de lien au bout : `/tmp/x -> /etc` ne mène nulle part.
+    let Some(dossier) = chemin.parent().and_then(|d| d.canonicalize().ok()) else { return false };
+    if std::fs::symlink_metadata(chemin).is_ok_and(|m| m.file_type().is_symlink()) {
+        return false;
+    }
+    // Le dépôt : le dossier courant s'il a un Cargo.toml (lancé depuis le Finder, c'est `/`).
+    let depot = std::env::current_dir().ok().filter(|d| d.join("Cargo.toml").is_file());
+    [Some(std::env::temp_dir()), Some(PathBuf::from("/tmp")), depot].into_iter().flatten().filter_map(|z| z.canonicalize().ok()).any(|z| dossier.starts_with(z))
+}
+
 /// La copie faite (chemin avec `~` et aperçu), ou la raison du refus.
 fn importer_image(copie: Result<PathBuf, String>) {
     match copie {
@@ -287,7 +320,7 @@ fn preparer_import(paquet: Result<partage::Paquet, partage::Texte>, nom: &str) {
         Ok(p) => {
             let apercu = json!({
                 "nom": Path::new(nom).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
-                "barre": p.barre, "commandes": p.commandes, "avis": p.avis, "logos": p.logos(),
+                "barre": p.barre, "commandes": p.commandes, "avis": p.avis, "logos": p.logos(), "alertes": p.alertes(),
             });
             IMPORT.set(Some(p));
             js(&format!("tactile.importPret({apercu})"));
@@ -305,11 +338,14 @@ fn exporter(message: &Value) {
     };
     let logos = partage::logos(&barre);
     let cible = match message["chemin"].as_str() {
-        Some(c) => PathBuf::from(c),
+        // Le .toml que NSSavePanel vient de rendre (après `exportAvertir`), ou un pilote.
+        Some(c) if chemin_permis(c, pilote(), ACCORDE.take().as_deref()) => PathBuf::from(c),
+        Some(_) => return refuser_chemin("exporterVers", message),
         None => {
             let zip = logos > 0 || message["zip"].as_bool() == Some(true);
             let Some(choisi) = choisir_destination(if zip { "barre.zip" } else { "barre.toml" }, zip) else { return };
             if logos > 0 && message["zip"].as_bool() != Some(true) && choisi.extension().is_some_and(|e| e.eq_ignore_ascii_case("toml")) {
+                ACCORDE.set(Some(choisi.clone()));
                 return js(&format!("tactile.exportAvertir({logos}, {})", json!(choisi)));
             }
             choisi
@@ -720,6 +756,45 @@ mod tests {
         let d = std::env::temp_dir().join(format!("tactile-editeur-{nom}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&d);
         d
+    }
+
+    /// S5 (revue 0.3, trouvaille 4) : un chemin venu de la page n'est suivi qu'en mode pilote, dans le dossier
+    /// temporaire ou le dépôt, ou s'il vient d'être rendu par un sélecteur de fichier.
+    #[test]
+    fn chemins_venus_de_la_page() {
+        let d = dossier_essai("chemins");
+        std::fs::create_dir_all(&d).unwrap();
+        let dans_tmp = d.join("capture.png").to_string_lossy().into_owned();
+        let depot = std::env::current_dir().unwrap().join("docs/capture.png").to_string_lossy().into_owned();
+        // Sans pilote : rien, sauf le fichier que le sélecteur vient de rendre.
+        assert!(!chemin_permis(&dans_tmp, false, None));
+        assert!(!chemin_permis(&depot, false, None));
+        assert!(chemin_permis("/Users/x/Desktop/barre.toml", false, Some(Path::new("/Users/x/Desktop/barre.toml"))));
+        assert!(!chemin_permis("/Users/x/Desktop/autre.toml", false, Some(Path::new("/Users/x/Desktop/barre.toml"))));
+        // Pilote : dossier temporaire et dépôt seulement.
+        assert!(chemin_permis(&dans_tmp, true, None));
+        assert!(chemin_permis(&depot, true, None));
+        assert!(chemin_permis("/tmp/x.png", true, None));
+        let home = std::env::var("HOME").unwrap();
+        let refuses = [
+            "/etc/passwd".to_string(),
+            format!("{home}/.ssh/authorized_keys"),
+            format!("{home}/Library/LaunchAgents/x.plist"),
+            "~/.zshrc".into(),
+            "capture.png".into(),
+            format!("{}/../../../etc/passwd", d.display()),
+            d.join("absent/x.png").to_string_lossy().into_owned(),
+            String::new(),
+        ];
+        for c in &refuses {
+            assert!(!chemin_permis(c, true, None), "{c}");
+        }
+        // Un lien posé dans le dossier temporaire ne mène pas ailleurs.
+        std::os::unix::fs::symlink("/etc", d.join("lien")).unwrap();
+        std::os::unix::fs::symlink("/etc/hosts", d.join("hosts")).unwrap();
+        assert!(!chemin_permis(&d.join("lien/passwd").to_string_lossy(), true, None));
+        assert!(!chemin_permis(&d.join("hosts").to_string_lossy(), true, None));
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

@@ -9,8 +9,9 @@ cd "${0:A:h}/.."
 source scripts/pilote-editeur.sh
 command -v gifski >/dev/null || { echo "gifski manque : brew install gifski" >&2; exit 1; }
 
-# Le logo copié par l'éditeur s'affiche avec son chemin : un dossier lisible sous le home plutôt que /var/folders.
-dossier=$HOME/Library/Caches/tactile-demo
+# Le logo copié par l'éditeur s'affiche avec son chemin : un dossier lisible sous le home plutôt que /var/folders,
+# dans le dépôt (le pilote ne lit et n'écrit que dans le dossier temporaire ou le dépôt).
+dossier=$PWD/target/tactile-demo
 rm -rf "$dossier"; mkdir -p "$dossier"
 trap 'rm -rf "$dossier"' EXIT
 

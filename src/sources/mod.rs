@@ -203,7 +203,8 @@ fn lire(source: &Source, client: &mut Option<mcp::Client>, processus: &Processus
     } else if let Some(commande) = &source.commande {
         let sortie = executer(std::process::Command::new("/bin/zsh").args(["-c", commande]), None, DELAI, processus);
         let resultat = match sortie {
-            s if s.texte.len() > TAILLE_MAX => Err("sortie de plus de 1 Mo".into()),
+            // Coupée par `executer` au-delà de `TAILLE_MAX` : une erreur, pas la valeur « ⚠ trop long ».
+            s if s.texte == crate::barre::TROP_LONG => Err(s.erreur),
             s if !s.erreur.is_empty() && s.texte.trim().is_empty() => Err(s.erreur),
             s => Ok(valeur_de_texte(&s.texte)),
         };

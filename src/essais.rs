@@ -187,3 +187,20 @@ pub(crate) fn sans_panique<R>(f: impl FnOnce() -> R) -> Result<R, String> {
         e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default()
     })
 }
+
+/// Pic de mémoire du processus de test (`getrusage`, `ru_maxrss` : en octets sur macOS).
+pub(crate) fn pic_memoire() -> i64 {
+    #[repr(C)]
+    struct Rusage {
+        temps: [i64; 4],
+        maxrss: i64,
+        reste: [i64; 13],
+    }
+    unsafe extern "C" {
+        fn getrusage(qui: i32, usage: *mut Rusage) -> i32;
+    }
+    let mut u = Rusage { temps: [0; 4], maxrss: 0, reste: [0; 13] };
+    // 0 : RUSAGE_SELF.
+    assert_eq!(unsafe { getrusage(0, &mut u) }, 0);
+    u.maxrss
+}

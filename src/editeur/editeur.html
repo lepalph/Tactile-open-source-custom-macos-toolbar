@@ -310,6 +310,7 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
 <dialog id="import" class="import" aria-labelledby="imp-titre" aria-describedby="imp-texte">
   <h2 id="imp-titre"></h2>
   <p id="imp-texte"></p>
+  <div class="etat erreur" id="imp-alerte" role="alert"></div>
   <div class="scene"><div class="touchbar" id="imp-barre" aria-hidden="true"></div><div class="strip" aria-hidden="true" data-i18n="controlStrip"></div></div>
   <p class="resume" id="imp-resume"></p>
   <h3 data-i18n="impCmdTitre"></h3>
@@ -616,6 +617,8 @@ window.tactile = {
     $('imp-resume').textContent = [n === 1 ? t('impElement') : t('impElements').replace('{n}', n),
       apps.length && t(apps.length === 1 ? 'impApp' : 'impApps').replace('{a}', apps.join(', ')),
       a.logos && (a.logos === 1 ? t('impLogo') : t('impLogos').replace('{n}', a.logos))].filter(Boolean).join(' · ');
+    // Un mot de passe du trousseau envoyé hors de ce Mac : dit en tête, avant tout le reste (phrases écrites par Rust).
+    $('imp-alerte').textContent = (a.alertes || []).map(x => x[langue] || x.fr).join(' ');
     const c = a.commandes || [];
     $('imp-cmd-aide').textContent = c.length ? t('impCmdAide') : t('impAucune');
     $('imp-commandes').hidden = !c.length;
