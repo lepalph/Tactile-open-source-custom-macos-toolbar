@@ -1752,6 +1752,40 @@ mod proprietes {
         assert!(lire("[[element]]\ntype = \"bouton\"\ntexte = \"nan\"\n").is_ok(), "un texte « nan » n'est pas un nombre");
     }
 
+    /// `[[item]]` (alias anglais) mélangé à `[[element]]` au hasard, dans la principale comme dans les barres
+    /// d'application : même barre, dans l'ordre du fichier. Seuls les en-têtes sans sous-table sont renommés
+    /// (`[element.action]` s'accroche au dernier `[[element]]` : c'est la règle de TOML, pas un alias).
+    #[test]
+    fn element_et_item_melanges_au_hasard() {
+        let mut h = Hasard::new(77);
+        let mut renommes = 0;
+        for graine in 0..300 {
+            let barre = Hasard::new(graine).barre();
+            let toml = ecrire(&barre).unwrap();
+            let lignes: Vec<&str> = toml.lines().collect();
+            let melange: Vec<String> = lignes
+                .iter()
+                .enumerate()
+                .map(|(i, l)| {
+                    let (entete, prefixe) = match *l {
+                        "[[element]]" => ("[[item]]", "element."),
+                        "[[application.element]]" => ("[[application.item]]", "application.element."),
+                        _ => return l.to_string(),
+                    };
+                    let suivant = lignes[i + 1..].iter().find(|s| s.starts_with('[') && s.ends_with(']'));
+                    if suivant.is_some_and(|s| s.trim_start_matches('[').starts_with(prefixe)) || !h.pile() {
+                        return l.to_string();
+                    }
+                    renommes += 1;
+                    entete.to_string()
+                })
+                .collect();
+            let melange = melange.join("\n");
+            assert_eq!(lire(&melange).unwrap_or_else(|e| panic!("graine {graine} : {e}\n{melange}")), barre, "graine {graine}\n{melange}");
+        }
+        assert!(renommes > 300, "{renommes}");
+    }
+
     /// Un fichier tronqué, une ligne en double, un caractère en trop ou en moins : `lire` répond par une erreur située,
     /// jamais par une panique (la barre tournerait sans config, l'éditeur fermerait).
     #[test]
