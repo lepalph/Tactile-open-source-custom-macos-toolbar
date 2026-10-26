@@ -5,14 +5,21 @@
 //! `prereglage { nom }`, `symboles { noms }`, `choisirApp`, `verifierApp { nom }`, `modifie { valeur }`,
 //! `fermer`, `ouvrirFichier`, `relire`, `titre { texte }`, `journal { texte }`, `capture { chemin }`,
 //! `choisirImage`, `deposerImage { nom, donnees }` (fichier glissé, en base64), `importerImage { chemin }`
-//! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`.
+//! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`,
+//! `exporter { barre, zip? }` (NSSavePanel), `exporterVers { barre, chemin }`, `importer` (NSOpenPanel),
+//! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport`, `annulerImport`.
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
 //! `tactile.glyphes({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
 //! `tactile.abimeGarde(nom)`, `tactile.erreur(texte)`, `tactile.appChoisie(nom)`,
 //! `tactile.appVerifiee(nom, trouvee, suggestion)`, `tactile.demanderFermeture()`,
-//! `tactile.imageChoisie(chemin, dataURL)`, `tactile.imageRefusee(texte)`, `tactile.images({chemin: dataURL|null})`.
+//! `tactile.imageChoisie(chemin, dataURL)`, `tactile.imageRefusee(texte)`, `tactile.images({chemin: dataURL|null})`,
+//! `tactile.exportAvertir(logos)`, `tactile.exporte(nom, logos, avis)`, `tactile.importPret(apercu)`,
+//! `tactile.importe(manuel, aPrecedent)`, `tactile.partageRefuse({fr, en})`.
 
 mod icones;
+mod partage;
+
+pub use partage::{exporter_cli, importer_cli};
 
 use crate::config::{self, Barre, Element};
 use objc2::rc::Retained;
@@ -20,7 +27,7 @@ use objc2::runtime::{AnyObject, Bool, NSObject};
 use objc2::{class, define_class, msg_send, ClassType};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use serde_json::{json, Value};
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -35,6 +42,8 @@ thread_local! {
     static SEUL: Cell<bool> = const { Cell::new(false) };
     /// Des changements non enregistrés dans la page (message `modifie`) : fermer demande confirmation.
     static MODIFIE: Cell<bool> = const { Cell::new(false) };
+    /// La barre importée que la page montre en aperçu, en attente de « Remplacer ma barre ».
+    static IMPORT: RefCell<Option<partage::Paquet>> = const { RefCell::new(None) };
 }
 
 /// Versions gardées : `barre.toml.precedent` (la plus récente), puis `.precedent-2` … `.precedent-5`.
@@ -181,7 +190,7 @@ fn recevoir(message: Value) {
             }
         }
         "choisirImage" => {
-            if let Some(source) = icones::choisir() {
+            if let Some(source) = icones::choisir(&icones::FORMATS) {
                 importer_image(icones::importer(&source, &icones::dossier(&config::chemin())));
             }
         }
@@ -202,6 +211,34 @@ fn recevoir(message: Value) {
                 .collect();
             js(&format!("tactile.images({})", Value::Object(images)));
         }
+        "exporter" | "exporterVers" => exporter(&message),
+        "importer" => {
+            if let Some(fichier) = icones::choisir(&["toml", "zip"]) {
+                preparer_import(partage::ouvrir(&fichier), &fichier.to_string_lossy());
+            }
+        }
+        "importerBarre" => {
+            let chemin = message["chemin"].as_str().unwrap_or("");
+            preparer_import(partage::ouvrir(Path::new(chemin)), chemin);
+        }
+        "deposerBarre" => {
+            let nom = message["nom"].as_str().unwrap_or("");
+            let paquet = icones::decoder_depot(message["donnees"].as_str().unwrap_or(""))
+                .map_err(|e| partage::Texte { fr: e, en: "file too large: 10 MB at most".into() })
+                .and_then(|octets| partage::ouvrir_octets(octets, None));
+            preparer_import(paquet, nom);
+        }
+        "confirmerImport" => {
+            let Some(paquet) = IMPORT.take() else { return };
+            match partage::installer(&paquet, &config::chemin()) {
+                Ok(manuel) => {
+                    envoyer_config(config::charger());
+                    js(&format!("tactile.importe({}, {})", json!(manuel), version(&config::chemin(), 1).exists()));
+                }
+                Err(e) => js(&format!("tactile.partageRefuse({})", json!(e))),
+            }
+        }
+        "annulerImport" => drop(IMPORT.take()),
         "journal" => eprintln!("tactile : éditeur, {}", message["texte"].as_str().unwrap_or("")),
         "titre" => {
             if let Some(t) = message["texte"].as_str() {
@@ -235,6 +272,69 @@ fn importer_image(copie: Result<PathBuf, String>) {
             js(&format!("tactile.imageChoisie({}, {})", json!(chemin), json!(icones::apercu(&chemin))));
         }
         Err(e) => js(&format!("tactile.imageRefusee({})", json!(e))),
+    }
+}
+
+/// La barre importée, lue et vérifiée : gardée en attente, montrée en aperçu avec ce qu'elle lance.
+fn preparer_import(paquet: Result<partage::Paquet, partage::Texte>, nom: &str) {
+    match paquet {
+        Ok(p) => {
+            let apercu = json!({
+                "nom": Path::new(nom).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default(),
+                "barre": p.barre, "commandes": p.commandes, "avis": p.avis, "logos": p.logos(),
+            });
+            IMPORT.set(Some(p));
+            js(&format!("tactile.importPret({apercu})"));
+        }
+        Err(e) => js(&format!("tactile.partageRefuse({})", json!(e))),
+    }
+}
+
+/// `exporter { barre, zip? }` : NSSavePanel puis écriture ; `exporterVers { barre, chemin }` écrit sans sélecteur.
+/// Un `.toml` choisi pour une barre qui a des logos : la page propose le `.zip` (`exportAvertir`) avant d'écrire.
+fn exporter(message: &Value) {
+    let barre = match serde_json::from_value::<Barre>(message["barre"].clone()).map_err(|e| e.to_string()).and_then(|b| config::lire(&config::ecrire(&b)?)) {
+        Ok(b) => b,
+        Err(e) => return js(&format!("tactile.partageRefuse({})", json!(partage::Texte { fr: format!("barre illisible : {e}"), en: format!("unreadable bar: {e}") }))),
+    };
+    let logos = partage::logos(&barre);
+    let cible = match message["chemin"].as_str() {
+        Some(c) => PathBuf::from(c),
+        None => {
+            let zip = logos > 0 || message["zip"].as_bool() == Some(true);
+            let Some(choisi) = choisir_destination(if zip { "barre.zip" } else { "barre.toml" }, zip) else { return };
+            if logos > 0 && message["zip"].as_bool() != Some(true) && choisi.extension().is_some_and(|e| e.eq_ignore_ascii_case("toml")) {
+                return js(&format!("tactile.exportAvertir({logos}, {})", json!(choisi)));
+            }
+            choisi
+        }
+    };
+    match partage::exporter(&barre, None, &cible) {
+        Ok(e) => {
+            let nom = e.fichier.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            js(&format!("tactile.exporte({}, {}, {})", json!(nom), e.logos, json!(e.avis)));
+        }
+        Err(e) => js(&format!("tactile.partageRefuse({})", json!(e))),
+    }
+}
+
+/// NSSavePanel : où écrire l'export. `zip` : seule l'extension .zip est proposée.
+fn choisir_destination(nom: &str, zip: bool) -> Option<PathBuf> {
+    unsafe {
+        let panneau: Id = msg_send![class!(NSSavePanel), savePanel];
+        let _: () = msg_send![panneau, setNameFieldStringValue: &*texte(nom)];
+        let types: Id = msg_send![class!(NSMutableArray), array];
+        for t in if zip { &["zip"][..] } else { &["toml", "zip"][..] } {
+            let _: () = msg_send![types, addObject: &*texte(t)];
+        }
+        let _: () = msg_send![panneau, setAllowedFileTypes: types];
+        let reponse: isize = msg_send![panneau, runModal];
+        if reponse != 1 {
+            return None;
+        }
+        let url: Id = msg_send![panneau, URL];
+        let chemin: Id = msg_send![url, path];
+        Some(PathBuf::from((*(chemin as *const NSString)).to_string()))
     }
 }
 

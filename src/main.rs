@@ -7,24 +7,24 @@ mod menu;
 use std::path::PathBuf;
 
 const AIDE: &str = "Tactile : ta Touch Bar, décrite dans ~/.config/tactile/barre.toml.
-
 Usage :
   tactile                        lance la barre (icône dans la barre des menus)
   tactile --personnaliser        ouvre la fenêtre « Personnaliser ma barre », sans la Touch Bar
   tactile --verifier [fichier]   vérifie un fichier de barre (syntaxe, symboles, apps, largeur)
-  tactile --version              affiche la version
-  tactile --help                 affiche cette aide (--check et --customize marchent aussi)
+  tactile --exporter <fichier>   exporte ta barre : un .toml, ou un .zip avec ses logos
+  tactile --importer <fichier> [--oui]   montre ce que la barre lance, puis remplace la tienne
+  tactile --version | --help     version, cette aide (--check, --customize, --export, --import, --yes marchent aussi)
 Variables : TACTILE_CONFIG=fichier, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1 (voir CONTRIBUTING.md).
 Journal : ~/Library/Logs/Tactile.log";
 
 const HELP: &str = "Tactile: your Touch Bar, described in ~/.config/tactile/barre.toml.
-
 Usage:
   tactile                        starts the bar (menu bar icon)
   tactile --customize            opens the \"Customize my bar\" window, without the Touch Bar
   tactile --check [file]         checks a bar file (syntax, symbols, apps, width)
-  tactile --version              prints the version
-  tactile --help                 prints this help (--verifier and --personnaliser work too)
+  tactile --export <file>        exports your bar: a .toml, or a .zip with its logos
+  tactile --import <file> [--yes]   shows what the bar runs, then replaces yours
+  tactile --version | --help     version, this help (--verifier, --personnaliser, --exporter, --importer, --oui work too)
 Variables: TACTILE_CONFIG=file, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1 (see CONTRIBUTING.md).
 Log: ~/Library/Logs/Tactile.log";
 
@@ -52,6 +52,9 @@ enum Commande {
     Version,
     Verifier(Option<PathBuf>),
     Personnaliser,
+    Exporter(PathBuf),
+    /// Le fichier, et `--oui` : sans confirmation.
+    Importer(PathBuf, bool),
     Inconnue(String),
 }
 
@@ -63,8 +66,19 @@ fn commande(args: &[String]) -> Commande {
         [a] if a == "--verifier" || a == "--check" => Commande::Verifier(None),
         [a] if a == "--personnaliser" || a == "--customize" => Commande::Personnaliser,
         [a, fichier] if a == "--verifier" || a == "--check" => Commande::Verifier(Some(PathBuf::from(fichier))),
+        [a, fichier] if (a == "--exporter" || a == "--export") && !fichier.starts_with("--") => Commande::Exporter(PathBuf::from(fichier)),
+        [a, fichier] if (a == "--importer" || a == "--import") && !fichier.starts_with("--") => Commande::Importer(PathBuf::from(fichier), false),
+        [a, x, y] if a == "--importer" || a == "--import" => match (oui(x), oui(y)) {
+            (false, true) if !x.starts_with("--") => Commande::Importer(PathBuf::from(x), true),
+            (true, false) if !y.starts_with("--") => Commande::Importer(PathBuf::from(y), true),
+            _ => Commande::Inconnue(a.clone()),
+        },
         [a, ..] => Commande::Inconnue(a.clone()),
     }
+}
+
+fn oui(a: &str) -> bool {
+    a == "--oui" || a == "--yes"
 }
 
 /// Journal de Tactile quand il n'y a pas de terminal ; « Voir le journal » dans le menu l'ouvre.
@@ -99,6 +113,8 @@ fn main() {
         Commande::Verifier(fichier) => std::process::exit(verifier(&fichier.unwrap_or_else(config::chemin))),
         // La fenêtre « Personnaliser ma barre » seule, sans toucher à la Touch Bar.
         Commande::Personnaliser => return editeur::lancer_seul(),
+        Commande::Exporter(fichier) => std::process::exit(editeur::exporter_cli(&fichier, aide() == AIDE)),
+        Commande::Importer(fichier, oui) => std::process::exit(editeur::importer_cli(&fichier, oui, aide() == AIDE)),
         Commande::Inconnue(a) => {
             let aide = aide();
             let erreur = if aide == AIDE { format!("tactile : argument inconnu « {a} »") } else { format!("tactile: unknown argument \"{a}\"") };
@@ -186,6 +202,16 @@ mod tests {
         assert_eq!(commande(&args(&["--truc"])), Commande::Inconnue("--truc".into()));
         assert_eq!(commande(&args(&["--help", "x"])), Commande::Inconnue("--help".into()));
         assert_eq!(commande(&args(&["--customize", "x"])), Commande::Inconnue("--customize".into()));
+        // Exporter et importer, en français et en anglais ; --oui avant ou après le fichier.
+        assert_eq!(commande(&args(&["--exporter", "b.zip"])), Commande::Exporter("b.zip".into()));
+        assert_eq!(commande(&args(&["--export", "b.toml"])), Commande::Exporter("b.toml".into()));
+        assert_eq!(commande(&args(&["--importer", "b.zip"])), Commande::Importer("b.zip".into(), false));
+        assert_eq!(commande(&args(&["--import", "b.zip", "--yes"])), Commande::Importer("b.zip".into(), true));
+        assert_eq!(commande(&args(&["--importer", "--oui", "b.zip"])), Commande::Importer("b.zip".into(), true));
+        assert_eq!(commande(&args(&["--exporter"])), Commande::Inconnue("--exporter".into()));
+        assert_eq!(commande(&args(&["--importer", "--oui"])), Commande::Inconnue("--importer".into()));
+        assert_eq!(commande(&args(&["--importer", "b.zip", "--truc"])), Commande::Inconnue("--importer".into()));
+        assert_eq!(commande(&args(&["--importer", "--oui", "--yes"])), Commande::Inconnue("--importer".into()));
     }
 
     #[test]
@@ -195,6 +221,9 @@ mod tests {
         for option in ["--personnaliser", "--customize", "--verifier", "--check", "--version", "--help"] {
             assert!(AIDE.contains(option) && HELP.contains(option), "{option}");
             assert_ne!(commande(&args(&[option])), Commande::Inconnue(option.into()));
+        }
+        for option in ["--exporter", "--export", "--importer", "--import", "--oui", "--yes"] {
+            assert!(AIDE.contains(option) && HELP.contains(option), "{option}");
         }
     }
 

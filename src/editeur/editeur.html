@@ -242,6 +242,17 @@ dialog p { color: var(--texte2); }
 dialog .choix { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 dialog .choix .gauche { margin-right: auto; }
 dialog .choix button { min-width: 80px; }
+/* Import : la barre reçue à l'échelle 1, puis ce qu'elle peut lancer, avant de remplacer la sienne */
+dialog.import { width: min(1064px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
+dialog.import .scene { padding: 0; margin: 14px 0 6px; justify-content: flex-start; overflow: hidden; }
+dialog.import .el { cursor: default; }
+dialog.import .resume { font-size: 12px; color: var(--texte2); }
+dialog.import h3 { margin: 18px 0 4px 2px; }
+dialog.import .encart { max-height: 236px; overflow: auto; margin-top: 8px; }
+dialog.import .ligne .nom strong { font-weight: 500; }
+dialog.import .ligne code { font: 12px/1.4 ui-monospace, "SF Mono", Menlo, monospace; color: var(--texte); white-space: pre-wrap; word-break: break-all; text-align: left;
+  -webkit-user-select: text; user-select: text; }
+dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2); font-size: 12px; }
 
 @media (prefers-reduced-motion: no-preference) {
   .face, button, select, input.interrupteur, input.interrupteur::after, .segmente button { transition: background-color var(--vite), transform var(--vite), box-shadow var(--vite); }
@@ -259,6 +270,8 @@ dialog .choix button { min-width: 80px; }
       <button type="button" data-langue="fr" aria-pressed="true">FR</button>
       <button type="button" data-langue="en" aria-pressed="false">EN</button>
     </div>
+    <button type="button" id="importer" data-i18n="importer"></button>
+    <button type="button" id="exporter" data-i18n="exporter"></button>
     <button type="button" id="revenir" data-i18n="revenir" disabled></button>
     <button type="button" id="enregistrer" class="primaire" data-i18n="enregistrer"></button>
   </div>
@@ -289,6 +302,22 @@ dialog .choix button { min-width: 80px; }
   <h2 id="conf-titre"></h2>
   <p id="conf-texte"></p>
   <div class="choix" id="conf-choix"></div>
+</dialog>
+
+<dialog id="import" class="import" aria-labelledby="imp-titre" aria-describedby="imp-texte">
+  <h2 id="imp-titre"></h2>
+  <p id="imp-texte"></p>
+  <div class="scene"><div class="touchbar" id="imp-barre" aria-hidden="true"></div><div class="strip" aria-hidden="true" data-i18n="controlStrip"></div></div>
+  <p class="resume" id="imp-resume"></p>
+  <h3 data-i18n="impCmdTitre"></h3>
+  <p class="aide" id="imp-cmd-aide"></p>
+  <div class="encart" id="imp-commandes"></div>
+  <h3 id="imp-avis-titre" data-i18n="impAvis"></h3>
+  <ul class="avis" id="imp-avis"></ul>
+  <div class="choix" id="imp-choix">
+    <button type="button" value="annuler" data-i18n="annuler"></button>
+    <button type="button" value="oui" class="primaire" data-i18n="impRemplacer"></button>
+  </div>
 </dialog>
 
 <script>
@@ -338,6 +367,15 @@ const T = {
     symboleUtiliser: 'Utiliser {s}', parDefaut: 'par défaut : {v}', largeurAide: 'La barre fait 1004 points de large.',
     soupleAide: 'Prend toute la place libre. Deux espaces souples centrent ce qui se trouve entre eux.',
     appIntrouvable: 'Aucune application « {a} » sur ce Mac.', appProche: 'La plus proche :', appUtiliser: 'Utiliser « {s} »', appConseil: 'Avec Choisir…, le nom est toujours juste.',
+    importer: 'Importer…', exporter: 'Exporter…',
+    impTitre: 'Importer « {f} » ?', impTexte: 'Cette barre remplacera la tienne. L’actuelle reste dans l’historique : « Revenir à la version précédente » la rétablit.',
+    impElements: '{n} éléments', impElement: '1 élément', impApps: 'barres d’application : {a}', impApp: 'barre d’application : {a}', impLogos: '{n} logos', impLogo: '1 logo',
+    impCmdTitre: 'Ce qu’elle peut lancer sur ton Mac', impCmdAide: 'Lis chaque ligne avant d’accepter : une commande peut tout faire sur ton Mac, y compris effacer des fichiers.',
+    impAucune: 'Rien : ni commande, ni script, ni raccourci, ni app.', impAvis: 'À savoir', impRemplacer: 'Remplacer ma barre',
+    importe: 'Barre importée. Ta Touch Bar est à jour, et l’ancienne barre est dans l’historique.', importRefuse: 'Import refusé : {m}', exportRefuse: 'Export impossible : {m}',
+    exporte: 'Barre exportée dans {f}.', exporteLogos: 'Barre exportée dans {f}, avec ses logos ({n}).',
+    expAvertir: 'Ta barre a des logos. L’exporter en .zip ?', expAvertirTexte: 'Un .toml n’emporte pas les images : sur un autre Mac, ces boutons afficheraient leur texte. Le .zip contient la barre et ses logos.',
+    manuelGarde: 'Ton fichier d’origine, avec ses commentaires, est gardé sous le nom {f}.', expGarderToml: 'Garder le .toml', expZip: 'Exporter en .zip', trop: 'plus de 10 Mo',
   },
   en: {
     titre: 'Customize my bar', sousTitre: 'Click an item to edit it, drag it to move it. Save updates your Touch Bar right away.',
@@ -382,6 +420,15 @@ const T = {
     symboleUtiliser: 'Use {s}', parDefaut: 'default: {v}', largeurAide: 'The bar is 1004 points wide.',
     soupleAide: 'Takes all the free space. Two flexible spaces center whatever sits between them.',
     appIntrouvable: 'No app called “{a}” on this Mac.', appProche: 'Closest match:', appUtiliser: 'Use “{s}”', appConseil: 'Choose… always gets the name right.',
+    importer: 'Import…', exporter: 'Export…',
+    impTitre: 'Import “{f}”?', impTexte: 'This bar will replace yours. The current one stays in the history: “Go back to the previous version” brings it back.',
+    impElements: '{n} items', impElement: '1 item', impApps: 'app bars: {a}', impApp: 'app bar: {a}', impLogos: '{n} logos', impLogo: '1 logo',
+    impCmdTitre: 'What it can run on your Mac', impCmdAide: 'Read each line before you accept: a command can do anything on your Mac, including deleting files.',
+    impAucune: 'Nothing: no command, script, shortcut or app.', impAvis: 'Good to know', impRemplacer: 'Replace my bar',
+    importe: 'Bar imported. Your Touch Bar is up to date, and the old bar is in the history.', importRefuse: 'Import refused: {m}', exportRefuse: 'Export failed: {m}',
+    exporte: 'Bar exported to {f}.', exporteLogos: 'Bar exported to {f}, with its logos ({n}).',
+    expAvertir: 'Your bar has logos. Export it as a .zip?', expAvertirTexte: 'A .toml doesn’t carry images: on another Mac, these buttons would show their text instead. The .zip holds the bar and its logos.',
+    manuelGarde: 'Your original file, with its comments, is kept as {f}.', expGarderToml: 'Keep the .toml', expZip: 'Export as .zip', trop: 'larger than 10 MB',
   },
 };
 let langue = 'fr';
@@ -464,7 +511,7 @@ window.tactile = {
     tout();
   },
   images(map) {
-    Object.assign(images, map); dessinerBarre();
+    Object.assign(images, map); dessinerBarre(); dessinerImport();
     if (elem()?.image in map) dessinerProprietes(true);
   },
   /* La copie est faite dans icones/ : `chemin` est celui de la copie (avec ~). */
@@ -488,7 +535,7 @@ window.tactile = {
     tout();
   },
   glyphes(map) {
-    Object.assign(glyphes, map); dessinerBarre();
+    Object.assign(glyphes, map); dessinerBarre(); dessinerImport();
     const decor = Object.keys(map).some(n => DECOR.has(n));
     if (decor) { dessinerPalette(); etat(...dernierEtat); }
     dessinerProprietes(decor);
@@ -509,6 +556,50 @@ window.tactile = {
     if (r === 'oui') enregistrer(true);
     else if (r === 'sans') envoyer({ type: 'fermer' });
   },
+  /* Export et import : `texte` venu de Rust est { fr, en }. */
+  partageRefuse(texte) {
+    const m = String(texte?.[langue] ?? texte?.fr ?? texte);
+    etat(t(partage === 'export' ? 'exportRefuse' : 'importRefuse').replace('{m}', m) + (/[.!?]$/.test(m) ? '' : '.'), 'erreur');
+  },
+  async exportAvertir(n, chemin) {
+    const r = await confirmer(t('expAvertir'), t('expAvertirTexte'), [['toml', t('expGarderToml'), 'secondaire gauche'], ['annuler', t('annuler')], ['zip', t('expZip'), 'primaire']]);
+    if (r === 'zip') envoyer({ type: 'exporter', barre, zip: true });
+    else if (r === 'toml') envoyer({ type: 'exporterVers', barre, chemin });
+  },
+  exporte(nom, logos, avis) {
+    const plus = (avis || []).map(a => ' ' + (a[langue] || a.fr) + '.').join('');
+    etat((logos ? t('exporteLogos').replace('{n}', logos) : t('exporte')).replace('{f}', nom) + plus, 'ok');
+  },
+  /* La barre reçue, lue et vérifiée par Rust : aperçu, ce qu'elle lance, puis confirmation explicite. */
+  importPret(a) {
+    const d = $('import');
+    if (d.open) return;
+    importEnCours = a;
+    const b = a.barre, apps = (b.application || []).map(x => x.app);
+    demanderGlyphes(symbolesDe(b.element || [])); demanderImages(imagesDe([...(b.element || []), ...(b.application || []).flatMap(x => x.element || [])]));
+    $('imp-titre').textContent = t('impTitre').replace('{f}', a.nom || 'barre');
+    $('imp-texte').textContent = t('impTexte') + (modifie ? ' ' + t('perdues') : '');
+    const n = (b.element || []).length;
+    $('imp-resume').textContent = [n === 1 ? t('impElement') : t('impElements').replace('{n}', n),
+      apps.length && t(apps.length === 1 ? 'impApp' : 'impApps').replace('{a}', apps.join(', ')),
+      a.logos && (a.logos === 1 ? t('impLogo') : t('impLogos').replace('{n}', a.logos))].filter(Boolean).join(' · ');
+    const c = a.commandes || [];
+    $('imp-cmd-aide').textContent = c.length ? t('impCmdAide') : t('impAucune');
+    $('imp-commandes').hidden = !c.length;
+    $('imp-commandes').innerHTML = c.map(x => `<div class="ligne"><div class="nom"><strong>${esc(x.quoi[langue] || x.quoi.fr)}</strong><span class="legende">${esc(x.ou[langue] || x.ou.fr)}</span></div><div class="ctrl"><code>${esc(x.valeur)}</code></div></div>`).join('');
+    const avis = a.avis || [];
+    $('imp-avis-titre').hidden = $('imp-avis').hidden = !avis.length;
+    $('imp-avis').innerHTML = avis.map(x => `<li>${esc(x[langue] || x.fr)}</li>`).join('');
+    dessinerImport();
+    d.returnValue = '';
+    d.showModal();
+    // Avec des commandes, Annuler a le focus : remplacer demande un clic voulu.
+    d.querySelector(c.length ? 'button[value="annuler"]' : 'button.primaire').focus();
+  },
+  importe(manuel, precedent) {
+    aPrecedent = !!precedent; boutons();
+    etat(t('importe') + (manuel ? ' ' + t('manuelGarde').replace('{f}', manuel) : ''), 'ok');
+  },
   appVerifiee(nom, trouvee, suggestion) { apps[nom] = { trouvee, suggestion }; ['action', 'appui_long'].forEach(verifierApp); },
   appChoisie(nom) {
     const e = elem(); if (!e) return;
@@ -519,6 +610,20 @@ window.tactile = {
 };
 let champActionEnCours = null;
 let prereglageAttendu = false;
+let importEnCours = null;   // { nom, barre, commandes, avis, logos } : la barre importée en attente de confirmation
+let partage = 'import';     // le dernier geste d'import ou d'export, pour le message d'erreur
+
+function dessinerImport() {
+  if (!importEnCours) return;
+  const b = importEnCours.barre, tb = $('imp-barre');
+  tb.classList.toggle('courte', b.masquer_control_strip === false);
+  tb.innerHTML = (b.element || []).map(e => `<div class="el" data-type="${esc(e.type)}">${face(e)}</div>`).join('');
+}
+$('imp-choix').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) $('import').close(b.value); });
+$('import').addEventListener('close', () => {
+  envoyer({ type: $('import').returnValue === 'oui' ? 'confirmerImport' : 'annulerImport' });
+  importEnCours = null;
+});
 
 /* ---------- Modèle ---------- */
 function elem(s = sel) {
@@ -652,6 +757,7 @@ function tout() { dessinerBarre(); dessinerPalette(); dessinerProprietes(true); 
 function boutons() {
   $('revenir').disabled = !aPrecedent;
   $('enregistrer').disabled = !!illisible;
+  $('exporter').disabled = !!illisible;
   $('masquer').disabled = !!illisible;
   document.querySelectorAll('#ajouts button').forEach(b => { b.disabled = !!illisible; });
 }
@@ -937,14 +1043,18 @@ $('proprietes').addEventListener('change', ev => {
 /* ---------- Image glissée depuis le Finder ----------
    Le JS ne voit pas le chemin du fichier : il le lit (FileReader) et envoie son contenu en base64 ; Rust l'écrit dans icones/.
    Partout ailleurs, le dépôt est refusé : sans ça, la WKWebView ouvrirait le fichier à la place de la page. */
+const MAX_DEPOT = 10 * 1024 * 1024;   // comme icones::DEPOT_MAX côté Rust
 const avecFichiers = ev => [...(ev.dataTransfer?.types || [])].includes('Files');
 const cibleDepot = ev => illisible ? null : ev.target.closest?.('.cible-image, #barre .el[data-type="bouton"]');
 const finDepot = () => document.querySelectorAll('.depot').forEach(n => n.classList.remove('depot'));
+/* Un .toml ou un .zip glissé n'importe où dans la fenêtre : import de barre (aperçu, puis confirmation). Le nom
+   n'est connu qu'au dépôt : le survol accepte tout fichier, et seules les cibles d'image sont soulignées. */
+const estBarre = f => /\.(toml|zip)$/i.test(f?.name || '');
 document.addEventListener('dragover', ev => {
   if (!avecFichiers(ev)) return;
   ev.preventDefault();
   const c = cibleDepot(ev);
-  ev.dataTransfer.dropEffect = c ? 'copy' : 'none';
+  ev.dataTransfer.dropEffect = 'copy';
   if (!c?.classList.contains('depot')) { finDepot(); c?.classList.add('depot'); }
 });
 document.addEventListener('dragleave', ev => { if (!ev.relatedTarget) finDepot(); });
@@ -952,16 +1062,25 @@ document.addEventListener('drop', ev => {
   if (!avecFichiers(ev)) return;
   ev.preventDefault(); finDepot();
   const c = cibleDepot(ev), f = ev.dataTransfer.files[0];
+  if (estBarre(f) && !$('import').open) {
+    partage = 'import';
+    if (f.size > MAX_DEPOT) return tactile.partageRefuse({ fr: T.fr.trop, en: T.en.trop });
+    const lecteur = new FileReader();
+    lecteur.onload = () => envoyer({ type: 'deposerBarre', nom: f.name, donnees: String(lecteur.result).split(',')[1] || '' });
+    return lecteur.readAsDataURL(f);
+  }
   if (!c || !f) return;
   if (c.matches('.el')) selectionner({ i: +c.dataset.i });
   imageCible = { ...sel };
-  if (f.size > 20e6) return tactile.imageRefusee(langue === 'fr' ? 'plus de 20 Mo' : 'larger than 20 MB');
+  if (f.size > MAX_DEPOT) return tactile.imageRefusee(t('trop'));
   const lecteur = new FileReader();
   lecteur.onload = () => envoyer({ type: 'deposerImage', nom: f.name, donnees: String(lecteur.result).split(',')[1] || '' });
   lecteur.readAsDataURL(f);
 });
 
 /* ---------- Haut de page ---------- */
+$('importer').addEventListener('click', () => { partage = 'import'; envoyer({ type: 'importer' }); });
+$('exporter').addEventListener('click', () => { partage = 'export'; envoyer({ type: 'exporter', barre }); });
 $('masquer').addEventListener('change', ev => { barre.masquer_control_strip = ev.target.checked; changer(); });
 $('enregistrer').addEventListener('click', () => enregistrer(false));
 $('revenir').addEventListener('click', async () => {

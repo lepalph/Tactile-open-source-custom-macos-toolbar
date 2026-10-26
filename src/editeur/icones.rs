@@ -60,6 +60,16 @@ pub(super) fn avec_tilde(chemin: &Path) -> String {
 
 /// Copie `source` dans `dossier` et renvoie le chemin de la copie. Même contenu = même nom : rien n'est recopié.
 pub(super) fn importer(source: &Path, dossier: &Path) -> Result<PathBuf, String> {
+    copier(source, dossier, false)
+}
+
+/// Comme `importer`, mais l'image est toujours redessinée en PNG (40 px de haut), jamais copiée telle quelle :
+/// pour les logos d'une barre importée, venus d'un fichier dont on ne sait rien.
+pub(super) fn importer_en_png(source: &Path, dossier: &Path) -> Result<PathBuf, String> {
+    copier(source, dossier, true)
+}
+
+fn copier(source: &Path, dossier: &Path, toujours_png: bool) -> Result<PathBuf, String> {
     let extension = source.extension().map(|e| e.to_string_lossy().to_lowercase()).unwrap_or_default();
     if !FORMATS.contains(&extension.as_str()) {
         return Err(format!("format non pris en charge : {}. Choisis un PNG, JPEG, HEIC, GIF, TIFF, SVG, PDF ou ICNS", source.display()));
@@ -67,9 +77,9 @@ pub(super) fn importer(source: &Path, dossier: &Path) -> Result<PathBuf, String>
     let octets = std::fs::read(source).map_err(|e| format!("impossible de lire {} : {e}", source.display()))?;
     // `reduire` est ce que la barre fait de l'image : s'il échoue, la barre ne l'afficherait pas non plus.
     let reduite = crate::barre::reduire(&source.to_string_lossy(), false).ok_or_else(|| format!("{} n'est pas une image lisible", source.display()))?;
-    let convertir = A_CONVERTIR.contains(&extension.as_str());
+    let convertir = toujours_png || A_CONVERTIR.contains(&extension.as_str());
     let stem = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-    let cible = dossier.join(format!("{}-{}.{}", nettoyer(&stem), hachage(&octets), if convertir { "png" } else { &extension }));
+    let cible = dossier.join(format!("{}-{}.{}", nettoyer(sans_hachage(&stem)), hachage(&octets), if convertir { "png" } else { &extension }));
     if cible.exists() {
         return Ok(cible);
     }
@@ -83,13 +93,24 @@ pub(super) fn importer(source: &Path, dossier: &Path) -> Result<PathBuf, String>
     Ok(cible)
 }
 
-/// Fichier déposé dans la page (lu en base64 par le JS) : écrit à part sous son nom, puis importé comme un fichier choisi.
-pub(super) fn importer_depot(nom: &str, base64: &str, dossier: &Path) -> Result<PathBuf, String> {
-    // Une icône pèse quelques centaines de Ko ; 30 Mo en base64 suffisent largement.
-    if base64.len() > 30_000_000 {
-        return Err("image trop lourde (plus de 20 Mo)".into());
+/// « logo-1a2b3c4d » → « logo » : un logo déjà passé par `icones/` (export puis import) garde son nom au lieu d'en empiler deux.
+pub(super) fn sans_hachage(stem: &str) -> &str {
+    match stem.rsplit_once('-') {
+        Some((debut, fin)) if !debut.is_empty() && fin.len() == 8 && fin.bytes().all(|o| o.is_ascii_hexdigit()) => debut,
+        _ => stem,
     }
-    let octets = unsafe {
+}
+
+/// Taille maximale d'un fichier déposé dans la page (image ou barre à importer).
+pub(super) const DEPOT_MAX: usize = 10 * 1024 * 1024;
+
+/// Le contenu d'un fichier déposé dans la page, envoyé en base64 par le JS ; refusé au-delà de `DEPOT_MAX`.
+pub(super) fn decoder_depot(base64: &str) -> Result<Vec<u8>, String> {
+    // Vérifié avant de décoder : 4 caractères base64 pour 3 octets.
+    if base64.len() > DEPOT_MAX.div_ceil(3) * 4 {
+        return Err("fichier trop lourd : 10 Mo au plus".into());
+    }
+    unsafe {
         let donnees: Id = msg_send![class!(NSData), alloc];
         let donnees: Id = msg_send![donnees, initWithBase64EncodedString: &*texte(base64), options: 0usize];
         if donnees.is_null() {
@@ -98,8 +119,13 @@ pub(super) fn importer_depot(nom: &str, base64: &str, dossier: &Path) -> Result<
         let donnees = objc2::rc::Retained::from_raw(donnees).ok_or("fichier déposé illisible")?;
         let longueur: usize = msg_send![&*donnees, length];
         let debut: *const std::ffi::c_void = msg_send![&*donnees, bytes];
-        if debut.is_null() { Vec::new() } else { std::slice::from_raw_parts(debut.cast::<u8>(), longueur).to_vec() }
-    };
+        Ok(if debut.is_null() { Vec::new() } else { std::slice::from_raw_parts(debut.cast::<u8>(), longueur).to_vec() })
+    }
+}
+
+/// Fichier déposé dans la page (lu en base64 par le JS) : écrit à part sous son nom, puis importé comme un fichier choisi.
+pub(super) fn importer_depot(nom: &str, base64: &str, dossier: &Path) -> Result<PathBuf, String> {
+    let octets = decoder_depot(base64).map_err(|e| e.replace("fichier trop lourd", "image trop lourde"))?;
     let nom = Path::new(nom).file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "image".into());
     let temporaire = std::env::temp_dir().join(format!("tactile-depot-{}-{}", std::process::id(), hachage(&octets)));
     std::fs::create_dir_all(&temporaire).map_err(|e| format!("dossier temporaire : {e}"))?;
@@ -144,14 +170,14 @@ pub(super) fn base64(octets: &[u8]) -> String {
     }
 }
 
-/// NSOpenPanel sur les images ; renvoie le fichier choisi.
-pub(super) fn choisir() -> Option<PathBuf> {
+/// NSOpenPanel sur les `types` donnés (extensions) ; renvoie le fichier choisi.
+pub(super) fn choisir(types_permis: &[&str]) -> Option<PathBuf> {
     unsafe {
         let panneau: Id = msg_send![class!(NSOpenPanel), openPanel];
         let _: () = msg_send![panneau, setCanChooseDirectories: Bool::NO];
         let _: () = msg_send![panneau, setAllowsMultipleSelection: Bool::NO];
         let types: Id = msg_send![class!(NSMutableArray), array];
-        for f in FORMATS {
+        for f in types_permis {
             let _: () = msg_send![types, addObject: &*texte(f)];
         }
         let _: () = msg_send![panneau, setAllowedFileTypes: types];
@@ -201,6 +227,9 @@ mod tests {
         assert_eq!(nettoyer("日本"), "image");
         assert_eq!(nettoyer("***"), "image");
         assert_eq!(nettoyer(&"a".repeat(80)).len(), 40);
+        assert_eq!(sans_hachage("logo-1a2b3c4d"), "logo");
+        assert_eq!(sans_hachage("logo-v2"), "logo-v2");
+        assert_eq!(sans_hachage("-1a2b3c4d"), "-1a2b3c4d");
         assert_eq!(hachage(b"abc"), hachage(b"abc"));
         assert_ne!(hachage(b"abc"), hachage(b"abd"));
         let maison = std::env::var("HOME").unwrap();
@@ -260,6 +289,15 @@ mod tests {
         std::fs::write(&faux, "pas une image").unwrap();
         assert!(importer(&faux, &d.join("icones")).unwrap_err().contains("lisible"));
         std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Plus de 10 Mo : refusé avant d'être décodé, avec un message clair (le JS fait la même vérification).
+    #[test]
+    fn depot_de_plus_de_10_mo_refuse() {
+        let lourd = "A".repeat((DEPOT_MAX + 3) / 3 * 4 + 4);
+        assert_eq!(importer_depot("x.png", &lourd, Path::new("/nulle/part")).unwrap_err(), "image trop lourde : 10 Mo au plus");
+        assert_eq!(decoder_depot(&lourd).unwrap_err(), "fichier trop lourd : 10 Mo au plus");
+        assert_eq!(decoder_depot(&"A".repeat(DEPOT_MAX / 3 * 4)).unwrap().len(), DEPOT_MAX / 3 * 3);
     }
 
     #[test]
