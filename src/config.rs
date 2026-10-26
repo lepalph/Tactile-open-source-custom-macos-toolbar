@@ -717,7 +717,7 @@ inherit = true
     /// Chaque ligne du glossaire FR → EN du README est exercée par `TOUT_FR` / `TOUT_EN`.
     #[test]
     fn glossaire_du_readme() {
-        let readme = include_str!("../README.md");
+        let readme = include_str!("../README.fr.md");
         let glossaire = readme.split("### Glossaire").nth(1).expect("section Glossaire").split("\n## ").next().unwrap();
         let mots = |texte: &str| texte.split(|c: char| !(c.is_alphanumeric() || c == '_')).map(String::from).collect::<std::collections::HashSet<_>>();
         let (fr, en) = (mots(TOUT_FR), mots(TOUT_EN));
