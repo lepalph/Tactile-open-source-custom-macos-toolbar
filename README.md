@@ -28,6 +28,7 @@ Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, br
 - A `type = "script"` item runs any shell command every `interval` seconds and shows what it prints. If the command prints JSON, it also picks its own symbol and colors.
 - An `[[application]]` table gives an app its own bar while it is in front. With `inherit = true`, the edges of your main bar (sliders, clock) stay put.
 - A button can send a shortcut (`action = { key = "cmd+shift+4" }`, resolved on your keyboard layout, AZERTY included), open an app or a URL, or run AppleScript or a shell command. `long_press` gives it a second action.
+- A `launcher` shows an app's real icon, with a dot while the app runs; put a few in a `group` and you have an app drawer. A `[[source]]` feeds live text from a URL, a command or an MCP tool (the weather, a build status), and API keys stay in the macOS keychain.
 
 ## A bar in ten lines
 
@@ -52,15 +53,17 @@ Tactile is built for its author's own use first, so the order below follows what
 
 | What | Status |
 |---|---|
-| Data sources for live items: HTTP, MCP servers, commands | In progress |
-| Slider styles | In progress |
-| A bar per website | In progress |
-| Import and export a bar (`.toml`, or `.zip` with its logos) | In progress |
-| App launcher and system shortcuts | In progress |
+| App launchers, app drawer and system shortcuts (Mission Control, Spotlight, screenshots…) | Done (unreleased) |
+| Import and export a bar (`.toml`, or `.zip` with its logos) | Done (unreleased) |
+| Your own logos on buttons | Done (unreleased) |
+| Data sources for live items: HTTP, commands, MCP servers | Done (unreleased) |
+| Slider styles, and a free-standing slider | Planned |
+| A bar per website | Planned |
+| Edit per-app bars in the editor | Planned |
 | Modules: a widget is a program in any language that talks JSON with Tactile | Planned |
 | A community gallery of bars and modules, checked in CI by `tactile --check` | Planned, after the building blocks |
 
-If you want to help, the [good first issues](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) are small and come with the files to look at. Before you start on a roadmap item, open an issue, since the ones marked in progress are being written now.
+If you want to help, the [good first issues](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) are small and come with the files to look at. Before you start on a roadmap item, open an issue so two people don't write the same thing.
 
 ## Why Tactile
 

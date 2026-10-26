@@ -28,6 +28,7 @@ Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : b
 - Un élément `type = "script"` lance n'importe quelle commande toutes les `intervalle` secondes et affiche ce qu'elle écrit. Si la commande sort du JSON, elle choisit aussi son symbole et ses couleurs.
 - Une table `[[application]]` donne sa propre barre à une app tant qu'elle est au premier plan. Avec `herite = true`, les bords de ta barre principale (curseurs, heure) ne bougent pas.
 - Un bouton envoie un raccourci (`action = { touche = "cmd+shift+4" }`, lu sur ta disposition de clavier, AZERTY compris), ouvre une app ou une adresse, lance un AppleScript ou une commande. `appui_long` lui donne une seconde action.
+- Un `lanceur` montre la vraie icône d'une app, avec un point tant qu'elle tourne ; quelques-uns dans un `groupe` font un tiroir d'apps. Une `[[source]]` alimente un texte vivant depuis une adresse, une commande ou un outil MCP (la météo, l'état d'un build), et les clés d'API restent dans le trousseau macOS.
 
 ## Une barre en dix lignes
 
@@ -52,15 +53,17 @@ Tactile est d'abord fait pour l'usage de son auteur : l'ordre ci-dessous suit se
 
 | Quoi | État |
 |---|---|
-| Sources de données pour les éléments vivants : HTTP, serveurs MCP, commandes | En cours |
-| Styles de curseur | En cours |
-| Une barre par site web | En cours |
-| Importer et exporter une barre (`.toml`, ou `.zip` avec ses logos) | En cours |
-| Lanceur d'apps et raccourcis système | En cours |
+| Lanceurs d'apps, tiroir d'apps et raccourcis système (Mission Control, Spotlight, captures…) | Fait (pas encore publié) |
+| Importer et exporter une barre (`.toml`, ou `.zip` avec ses logos) | Fait (pas encore publié) |
+| Tes propres logos sur les boutons | Fait (pas encore publié) |
+| Sources de données pour les éléments vivants : HTTP, commandes, serveurs MCP | Fait (pas encore publié) |
+| Styles de curseur, et un curseur libre | Prévu |
+| Une barre par site web | Prévu |
+| Régler les barres par app dans l'éditeur | Prévu |
 | Modules : un widget est un programme, dans n'importe quel langage, qui parle JSON avec Tactile | Prévu |
 | Une galerie communautaire de barres et de modules, vérifiés en CI par `tactile --verifier` | Prévu, après les briques |
 
-Pour aider, commence par les [good first issues](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) : elles sont petites et indiquent les fichiers à lire. Avant de te lancer sur un point de la feuille de route, ouvre une issue : ceux marqués « en cours » s'écrivent en ce moment.
+Pour aider, commence par les [good first issues](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) : elles sont petites et indiquent les fichiers à lire. Avant de te lancer sur un point de la feuille de route, ouvre une issue, pour ne pas écrire la même chose à deux.
 
 ## Pourquoi Tactile
 
