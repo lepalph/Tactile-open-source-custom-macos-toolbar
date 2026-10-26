@@ -1,20 +1,71 @@
-//! Éléments qui se mettent à jour seuls : heure, titre en cours, scripts.
-//! Le travail lent (commandes, media-control) tourne dans un fil à part ; le résultat revient par un canal.
+//! Éléments qui se mettent à jour seuls : heure, titre en cours, scripts, batterie.
+//! Le travail lent (commandes, media-control, pmset) tourne dans un fil à part ; le résultat revient par un canal.
 
 use objc2::{class, msg_send};
 use objc2_foundation::NSString;
+use serde::Deserialize;
 use std::os::unix::process::CommandExt;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use super::vues::titre;
-use super::{Id, ETAT};
+use super::elements::Icone;
+use super::vues::{couleur, styler, titre};
+use super::{batterie, Id, ETAT, PREFIXE};
 use crate::actions::media;
 
 pub(super) enum Rafraichi {
     Heure { bouton: Id, formateur: Id },
     EnCours { bouton: Id },
-    Script { bouton: Id, commande: String, intervalle: Duration, delai: Duration, prochain: Instant, en_cours: bool, derniere_erreur: String },
+    Script { bouton: Id, commande: String, intervalle: Duration, delai: Duration, prochain: Instant, en_cours: bool, derniere_erreur: String, derniere_sortie: String, element: String },
+    Batterie { bouton: Id, symbole: bool, prochain: Instant, en_cours: bool },
+}
+
+/// Sortie d'un script qui commence par `{` : il règle aussi son icône et ses couleurs. Tout est facultatif.
+#[derive(Debug, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Riche {
+    #[serde(default, alias = "text")]
+    pub texte: String,
+    #[serde(alias = "symbol")]
+    pub symbole: Option<String>,
+    pub image: Option<String>,
+    #[serde(alias = "color")]
+    pub couleur: Option<String>,
+    #[serde(alias = "text_color")]
+    pub couleur_texte: Option<String>,
+}
+
+/// JSON si la sortie commence par `{`, sinon le texte brut. Un JSON faux est affiché tel quel et signalé.
+pub(super) fn analyser_sortie(brut: &str) -> Result<Riche, String> {
+    let texte = brut.trim_end();
+    if !texte.starts_with('{') {
+        return Ok(Riche { texte: texte.to_string(), ..Riche::default() });
+    }
+    serde_json::from_str(texte).map_err(|e| format!("JSON illisible ({e})"))
+}
+
+/// Applique texte, icône et couleurs à un bouton de script. Les champs absents reviennent à l'ordinaire.
+fn appliquer(bouton: Id, riche: &Riche, element: &str) {
+    titre(bouton, &riche.texte);
+    let icone = riche.symbole.as_deref().map(Icone::Symbole).or(riche.image.as_deref().map(|c| Icone::Image(c, false)));
+    let image = icone.and_then(|i| match i.charger() {
+        Some(image) => Some(image),
+        None => {
+            eprintln!("tactile : script : {} « {} » (élément {})", i.repli().1, i.nom(), element.strip_prefix(PREFIXE).map_or(element, |e| e.trim_start_matches('.')));
+            None
+        }
+    });
+    unsafe {
+        let _: () = msg_send![bouton, setImage: image.unwrap_or(std::ptr::null_mut())];
+        // 2 = image à gauche du texte, 1 = image seule, 0 = texte seul.
+        let position: isize = match (image.is_some(), riche.texte.is_empty()) { (true, false) => 2, (true, true) => 1, (false, _) => 0 };
+        let _: () = msg_send![bouton, setImagePosition: position];
+        // Un script est sans bordure ; une couleur de fond la fait apparaître.
+        let fond = riche.couleur.as_deref().and_then(couleur);
+        let _: () = msg_send![bouton, setBordered: objc2::runtime::Bool::new(fond.is_some())];
+        let _: () = msg_send![bouton, setBezelColor: fond.unwrap_or(std::ptr::null_mut())];
+    }
+    styler(bouton, riche.couleur_texte.as_deref(), None);
 }
 
 /// Ce qu'un fil renvoie : la sortie à afficher, et ce qui a cloché (vide si rien).
@@ -91,16 +142,34 @@ pub(super) fn rafraichir() {
         let Some(etat) = etat.as_mut() else { return };
         while let Ok((i, sortie)) = etat.reception.try_recv() {
             match etat.rafraichis.get_mut(i) {
-                Some(Rafraichi::Script { bouton, commande, en_cours, derniere_erreur, .. }) => {
+                Some(Rafraichi::Script { bouton, commande, en_cours, derniere_erreur, derniere_sortie, element, .. }) => {
                     *en_cours = false;
-                    titre(*bouton, sortie.texte.trim_end());
-                    // Une fois par changement, pas à chaque intervalle.
-                    if sortie.erreur != *derniere_erreur {
-                        if !sortie.erreur.is_empty() {
-                            eprintln!("tactile : script « {commande} » : {}", sortie.erreur);
+                    let mut erreur = sortie.erreur;
+                    if sortie.texte != *derniere_sortie {
+                        *derniere_sortie = sortie.texte;
+                        match analyser_sortie(derniere_sortie) {
+                            Ok(riche) => appliquer(*bouton, &riche, element),
+                            Err(e) => {
+                                titre(*bouton, derniere_sortie.trim_end());
+                                erreur = if erreur.is_empty() { e } else { format!("{erreur}, {e}") };
+                            }
                         }
-                        *derniere_erreur = sortie.erreur;
                     }
+                    // Une fois par changement, pas à chaque intervalle.
+                    if erreur != *derniere_erreur {
+                        if !erreur.is_empty() {
+                            eprintln!("tactile : script « {commande} » : {erreur}");
+                        }
+                        *derniere_erreur = erreur;
+                    }
+                }
+                Some(Rafraichi::Batterie { bouton, symbole, en_cours, .. }) => {
+                    *en_cours = false;
+                    let riche = match batterie::analyser(&sortie.texte) {
+                        Some(b) => Riche { texte: b.texte(*symbole), symbole: symbole.then(|| b.symbole().to_string()), ..Riche::default() },
+                        None => Riche { texte: "pile ?".into(), ..Riche::default() },
+                    };
+                    appliquer(*bouton, &riche, "batterie");
                 }
                 Some(Rafraichi::EnCours { bouton }) => titre(*bouton, &sortie.texte),
                 _ => {}
@@ -140,6 +209,14 @@ pub(super) fn rafraichir() {
                         let _ = envoi.send((i, executer_script(&commande, delai, &processus)));
                     });
                 }
+                Rafraichi::Batterie { prochain, en_cours, .. } if !*en_cours && maintenant >= *prochain => {
+                    *en_cours = true;
+                    *prochain = maintenant + batterie::INTERVALLE;
+                    let envoi = etat.envoi.clone();
+                    std::thread::spawn(move || {
+                        let _ = envoi.send((i, Sortie { texte: batterie::lire(), erreur: String::new() }));
+                    });
+                }
                 _ => {}
             }
         }
@@ -157,6 +234,22 @@ mod tests {
     fn vivants(motif: &str) -> usize {
         let ps = std::process::Command::new("/usr/bin/pgrep").args(["-f", motif]).output().unwrap();
         String::from_utf8_lossy(&ps.stdout).lines().count()
+    }
+
+    #[test]
+    fn sortie_json_ou_texte_brut() {
+        assert_eq!(analyser_sortie("ok\n"), Ok(Riche { texte: "ok".into(), ..Riche::default() }));
+        assert_eq!(
+            analyser_sortie("{\"texte\":\"ok\",\"couleur\":\"#00AA00\"}\n"),
+            Ok(Riche { texte: "ok".into(), couleur: Some("#00AA00".into()), ..Riche::default() })
+        );
+        assert_eq!(
+            analyser_sortie(r##"{"text": "12°", "symbol": "cloud.rain.fill", "image": "~/x.png", "color": "#1F3A5F", "text_color": "#FFFFFF"}"##),
+            Ok(Riche { texte: "12°".into(), symbole: Some("cloud.rain.fill".into()), image: Some("~/x.png".into()), couleur: Some("#1F3A5F".into()), couleur_texte: Some("#FFFFFF".into()) })
+        );
+        assert_eq!(analyser_sortie("{}"), Ok(Riche::default()));
+        assert!(analyser_sortie("{\"texte\": }").unwrap_err().starts_with("JSON illisible ("));
+        assert!(analyser_sortie("{\"titre\": \"x\"}").unwrap_err().contains("unknown field `titre`"));
     }
 
     #[test]

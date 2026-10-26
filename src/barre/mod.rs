@@ -5,6 +5,7 @@
 //! dans l'unique barre système.
 
 mod autotest;
+mod batterie;
 mod elements;
 mod plateau;
 mod rafraichi;

@@ -24,7 +24,7 @@ Au repos, Tactile consomme 0,5 % de CPU et 13 Mo de mémoire (mesuré). L'app es
 Facultatif :
 
 - Pour la musique en cours : `brew install media-control` (voir [pourquoi](#pourquoi-media-control)).
-- Pour la touche esc simulée (action `echap`), autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité.
+- Pour les touches simulées (actions `echap`, `touche`, `keycode`), autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité.
 
 ## Le menu de Tactile
 
@@ -61,14 +61,15 @@ Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symb
 
 | `type` | Champs | Ce que ça affiche |
 |---|---|---|
-| `bouton` | `texte`, `symbole` (nom d'un symbole SF), `couleur` (`"#RRGGBB"`), `largeur` (points), `action`, `appui_long` (action, après 0,5 s) | Un bouton. Tous les champs sont facultatifs. |
+| `bouton` | `texte`, `symbole` (nom d'un symbole SF) ou `image` (chemin d'un PNG, PDF, icns… ; `~` accepté ; `gabarit = true` pour une image monochrome teintée comme un symbole), `couleur` (fond, `"#RRGGBB"`), `couleur_texte`, `taille` (police, en points), `affichage` (`"icone"`, `"texte"` ou `"les_deux"`, défaut), `largeur` (points), `action`, `appui_long` (action, après 0,5 s) | Un bouton. Tous les champs sont facultatifs. Une image introuvable s'affiche en texte, comme un symbole inconnu. |
 | `slider` | `reglage` (`"luminosite"` ou `"volume"`), `symbole` | Un bouton qui ouvre une sous-barre avec un curseur ; ✕ la referme. |
 | `heure` | `format` (format de date Apple, `"HH:mm"` par défaut) | L'heure, mise à jour en continu. |
 | `en_cours` | `largeur` | Le titre et l'artiste en cours de lecture (44 caractères au plus, rafraîchi toutes les 2 s) ; un appui met en pause ou relance. Demande `media-control`. |
-| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `delai` (secondes, 5 par défaut), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle et tuée au-delà de `delai`. Un texte plus large que l’élément est coupé. Code de retour non nul ou texte sur stderr : une ligne dans le journal. |
+| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `delai` (secondes, 5 par défaut), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle et tuée au-delà de `delai`. Un texte plus large que l’élément est coupé. Code de retour non nul ou texte sur stderr : une ligne dans le journal. Si la sortie commence par `{`, elle est lue comme du JSON : `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/pluie.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, chaque clé facultative ; le script règle ainsi son icône et ses couleurs. |
+| `batterie` | `symbole` (`true` par défaut : une pile à côté du pourcentage, avec un éclair en charge ; `false` : texte seul, `⚡ 85 %` en charge), `largeur` (96 par défaut) | Le niveau de la batterie, relu toutes les 30 s (`pmset -g batt`). |
 | `espace` | `largeur` (obligatoire) | Un vide de largeur fixe. |
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
-| `groupe` | `texte`, `symbole`, puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
+| `groupe` | `texte`, `symbole`, `largeur` (72 par défaut), puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
 
 En tête de fichier, `masquer_control_strip = true` (par défaut) donne toute la largeur à ta barre (1004 points) ; `false` garde le Control Strip d'Apple à droite (il reste 685 points, et une ✕ système à gauche). Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 points (le texte est coupé avec …). Ce qui ne tient pas dans la barre n'est pas affiché : le journal le dit (« la barre déborde … n élément(s) seront cachés »).
 
@@ -112,7 +113,8 @@ Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La trans
 | Un élément de la fin a disparu | La barre déborde : le journal dit combien d'éléments sont cachés. Réduis des `largeur` ou retire un élément. |
 | Un `script` reste vide | Son erreur est dans le journal (code de retour, stderr, « tué après 5 s »). Lancé depuis le Finder, le PATH ne contient pas `/opt/homebrew/bin` : écris le chemin complet des outils. |
 | La musique en cours reste vide | Installe `media-control` (`brew install media-control`) ; il faut aussi que quelque chose joue. |
-| La touche esc ne fait rien | Autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité. |
+| La touche esc ou un raccourci ne fait rien | Autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité. |
+| `{ app = "…" }` n'ouvre rien | Le nom est celui du dossier `.app` ([trouver le nom d'une app](#trouver-le-nom-dune-app)) ; le journal dit « Unable to find application ». |
 
 ### Pourquoi media-control
 

@@ -25,7 +25,16 @@ pub enum Element {
     Bouton {
         texte: Option<String>,
         symbole: Option<String>,
+        /// Chemin d'une image (PNG, PDF, icns…), redimensionnée à 20 pt de haut ; `~` est accepté.
+        image: Option<String>,
+        /// `true` : l'image est un gabarit, teinté comme un symbole SF.
+        #[serde(default)]
+        gabarit: bool,
         couleur: Option<String>,
+        couleur_texte: Option<String>,
+        /// Taille de la police en points.
+        taille: Option<f64>,
+        affichage: Option<Affichage>,
         largeur: Option<f64>,
         action: Option<Action>,
         appui_long: Option<Action>,
@@ -55,9 +64,24 @@ pub enum Element {
     Groupe {
         texte: Option<String>,
         symbole: Option<String>,
+        largeur: Option<f64>,
         #[serde(rename = "element", default)]
         elements: Vec<Element>,
     },
+    Batterie {
+        /// `true` par défaut : un symbole de pile à côté du pourcentage ; `false` : texte seul, ⚡ en charge.
+        symbole: Option<bool>,
+        largeur: Option<f64>,
+    },
+}
+
+/// Ce qu'un bouton montre quand il a un symbole (ou une image) et un texte.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Affichage {
+    Icone,
+    Texte,
+    LesDeux,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
@@ -183,11 +207,20 @@ mod tests {
     use super::*;
 
     fn bouton(action: Action) -> Element {
+        bouton_symbole(None, None, action)
+    }
+
+    fn bouton_symbole(symbole: Option<&str>, largeur: Option<f64>, action: Action) -> Element {
         Element::Bouton {
             texte: None,
-            symbole: None,
+            symbole: symbole.map(String::from),
+            image: None,
+            gabarit: false,
             couleur: None,
-            largeur: None,
+            couleur_texte: None,
+            taille: None,
+            affichage: None,
+            largeur,
             action: Some(action),
             appui_long: None,
         }
@@ -198,14 +231,7 @@ mod tests {
         let attendu = Barre {
             masquer_control_strip: true,
             elements: vec![
-                Element::Bouton {
-                    texte: None,
-                    symbole: Some("apple.logo".into()),
-                    couleur: None,
-                    largeur: Some(56.0),
-                    action: Some(Action::BarreApple),
-                    appui_long: None,
-                },
+                bouton_symbole(Some("apple.logo"), Some(56.0), Action::BarreApple),
                 Element::Slider {
                     reglage: Reglage::Luminosite,
                     symbole: Some("sun.max.fill".into()),
@@ -215,25 +241,11 @@ mod tests {
                     symbole: Some("speaker.wave.2.fill".into()),
                 },
                 Element::Souple,
-                Element::Bouton {
-                    texte: None,
-                    symbole: Some("backward.fill".into()),
-                    couleur: None,
-                    largeur: None,
-                    action: Some(Action::Precedent),
-                    appui_long: None,
-                },
+                bouton_symbole(Some("backward.fill"), None, Action::Precedent),
                 Element::EnCours {
                     largeur: Some(330.0),
                 },
-                Element::Bouton {
-                    texte: None,
-                    symbole: Some("forward.fill".into()),
-                    couleur: None,
-                    largeur: None,
-                    action: Some(Action::Suivant),
-                    appui_long: None,
-                },
+                bouton_symbole(Some("forward.fill"), None, Action::Suivant),
                 Element::Souple,
                 Element::Heure {
                     format: Some("HH:mm".into()),
@@ -365,15 +377,9 @@ symbole = "speaker.wave.2.fill"
             Element::Groupe {
                 texte: None,
                 symbole: Some("speaker.wave.2.fill".into()),
+                largeur: None,
                 elements: vec![
-                    Element::Bouton {
-                        texte: None,
-                        symbole: Some("speaker.slash.fill".into()),
-                        couleur: None,
-                        largeur: None,
-                        action: Some(Action::BasculerMuet),
-                        appui_long: None,
-                    },
+                    bouton_symbole(Some("speaker.slash.fill"), None, Action::BasculerMuet),
                     Element::Slider {
                         reglage: Reglage::Volume,
                         symbole: None
@@ -390,6 +396,39 @@ symbole = "speaker.wave.2.fill"
             barre.elements[0],
             Element::Script { commande: "uptime".into(), intervalle: 2.0, delai: Some(1.5), largeur: None, action: None }
         );
+    }
+
+    #[test]
+    fn apparence_d_un_bouton() {
+        let barre = lire("[[element]]\ntype = \"bouton\"\ntexte = \"Pr\"\nimage = \"~/premiere.png\"\ngabarit = true\ncouleur_texte = \"#FFFFFF\"\ntaille = 13\naffichage = \"icone\"\n").unwrap();
+        assert_eq!(
+            barre.elements[0],
+            Element::Bouton {
+                texte: Some("Pr".into()),
+                symbole: None,
+                image: Some("~/premiere.png".into()),
+                gabarit: true,
+                couleur: None,
+                couleur_texte: Some("#FFFFFF".into()),
+                taille: Some(13.0),
+                affichage: Some(Affichage::Icone),
+                largeur: None,
+                action: None,
+                appui_long: None,
+            }
+        );
+        for (ecrit, attendu) in [("texte", Affichage::Texte), ("les_deux", Affichage::LesDeux)] {
+            assert!(matches!(lire(&format!("[[element]]\ntype = \"bouton\"\naffichage = \"{ecrit}\"\n")).unwrap().elements[0], Element::Bouton { affichage: Some(a), .. } if a == attendu));
+        }
+        assert!(lire("[[element]]\ntype = \"bouton\"\naffichage = \"gros\"\n").unwrap_err().starts_with("ligne 1 : valeur inconnue «gros», attendu parmi «icone»"));
+    }
+
+    #[test]
+    fn groupe_avec_largeur_et_batterie() {
+        let barre = lire("[[element]]\ntype = \"groupe\"\ntexte = \"Export\"\nlargeur = 100\n\n[[element]]\ntype = \"batterie\"\n\n[[element]]\ntype = \"batterie\"\nsymbole = false\nlargeur = 80\n").unwrap();
+        assert_eq!(barre.elements[0], Element::Groupe { texte: Some("Export".into()), symbole: None, largeur: Some(100.0), elements: vec![] });
+        assert_eq!(barre.elements[1], Element::Batterie { symbole: None, largeur: None });
+        assert_eq!(barre.elements[2], Element::Batterie { symbole: Some(false), largeur: Some(80.0) });
     }
 
     #[test]

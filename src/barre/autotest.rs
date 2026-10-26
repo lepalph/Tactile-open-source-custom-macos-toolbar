@@ -7,7 +7,7 @@ use objc2::{msg_send, sel};
 use std::cell::Cell;
 
 use super::{cible, Id, COURANTE, ETAT};
-use crate::actions::{luminosite, media, volume};
+use crate::actions::{self, luminosite, media, volume, Action};
 
 thread_local! {
     static ETAPE: Cell<usize> = const { Cell::new(0) };
@@ -17,6 +17,46 @@ thread_local! {
 }
 
 const ETAT_VOCAL: &str = "/tmp/claude-voix/etat";
+
+/// Barre des étapes 22-26 : script JSON (vert, en tête : c'est ce que verifier.sh reconnaît), image, groupe large,
+/// batterie, raccourci sans effet (f15), app inoffensive et AppleScript qui la ferme.
+const BARRE_RICHE: &str = r##"
+[[element]]
+type = "script"
+commande = '''echo '{"texte":"ok","couleur":"#00AA00"}' '''
+intervalle = 5
+largeur = 60
+
+[[element]]
+type = "bouton"
+texte = "Pr"
+image = "/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns"
+couleur_texte = "#FFFFFF"
+taille = 15
+
+[[element]]
+type = "groupe"
+texte = "Export"
+largeur = 140
+
+[[element]]
+type = "batterie"
+
+[[element]]
+type = "bouton"
+symbole = "keyboard"
+action = { touche = "f15" }
+
+[[element]]
+type = "bouton"
+texte = "TextEdit"
+action = { app = "TextEdit" }
+
+[[element]]
+type = "bouton"
+texte = "Quit"
+action = { applescript = 'tell application "TextEdit" to quit' }
+"##;
 
 pub(super) fn programmer() {
     unsafe {
@@ -61,6 +101,18 @@ fn glisser(nom: &str, valeur: f32) -> bool {
         let _: () = msg_send![cible(), glisse: item];
     }
     true
+}
+
+fn titre(nom: &str) -> String {
+    controle(nom).map(|b| unsafe { let t: Id = msg_send![b, title]; (*(t as *const objc2_foundation::NSString)).to_string() }).unwrap_or_default()
+}
+
+fn a_une_image(nom: &str) -> bool {
+    controle(nom).is_some_and(|b| { let i: Id = unsafe { msg_send![b, image] }; !i.is_null() })
+}
+
+fn textedit_ouvert() -> bool {
+    std::process::Command::new("/usr/bin/pgrep").args(["-x", "TextEdit"]).output().is_ok_and(|s| s.status.success())
 }
 
 fn etat_vocal() -> String {
@@ -114,6 +166,7 @@ fn attendu(n: usize) -> &'static str {
         1 | 2 | 4 | 5 => "sous",
         7 | 8 => "apple",
         20 => "erreur",
+        22..=25 => "riche",
         _ => "principale",
     }
 }
@@ -165,6 +218,30 @@ pub(super) fn etape() {
             let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
             super::installer(&config.unwrap());
             noter(n, controle("erreur").is_none() && COURANTE.get() == principale(), "config valide : l'erreur disparaît");
+            true
+        }
+        22 => {
+            super::installer(&crate::config::lire(BARRE_RICHE).expect("barre riche invalide"));
+            let manquants: Vec<&str> = ["Pr", "ouvrir Export", "batterie", "keyboard", "TextEdit", "Quit"].into_iter().filter(|c| controle(c).is_none()).collect();
+            noter(n, manquants.is_empty(), &format!("barre riche installée (manquants : {manquants:?})"));
+            true
+        }
+        23 => {
+            let script = ETAT.with_borrow(|e| e.as_ref().and_then(|e| e.controles.iter().find(|(c, _)| c.starts_with("script echo")).map(|(c, _)| c.clone()))).unwrap_or_default();
+            let fond: Id = controle(&script).map_or(std::ptr::null_mut(), |b| unsafe { msg_send![b, bezelColor] });
+            noter(n, titre(&script) == "ok" && !fond.is_null(), &format!("script JSON : texte « {} », fond coloré {}", titre(&script), !fond.is_null()));
+            noter(n, a_une_image("Pr") && titre("Pr") == "Pr", "bouton avec image de fichier et texte");
+            let pile = titre("batterie");
+            noter(n, pile.trim_end_matches(" %").parse::<u8>().is_ok() && a_une_image("batterie"), &format!("batterie « {pile} » avec symbole"));
+            noter(n, actions::executer(&Action::Touche(crate::actions::clavier::Touche::try_from("f15".to_string()).unwrap())).is_ok(), "raccourci f15 envoyé");
+            cliquer(n, "keyboard") && cliquer(n, "TextEdit")
+        }
+        24 => { noter(n, textedit_ouvert(), "action app : TextEdit ouvert"); cliquer(n, "Quit") }
+        25 => { noter(n, !textedit_ouvert(), "action applescript : TextEdit fermé"); true }
+        26 => {
+            let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
+            super::installer(&crate::config::charger().unwrap_or_else(|_| config.unwrap()));
+            noter(n, controle("Quit").is_none() && COURANTE.get() == principale(), "barre de l'utilisateur rétablie");
             eprintln!("AUTOTEST fin {} échec(s)", ECHECS.get());
             false
         }

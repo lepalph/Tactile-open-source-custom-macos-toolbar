@@ -18,7 +18,7 @@ TACTILE_AUTOTEST=1 target/release/tactile 2>$journal &
 pid=$!
 
 vus=0
-for i in {1..400}; do
+for i in {1..600}; do
   sleep 0.1
   n=$(grep -c '^AUTOTEST [0-9]* pas' $journal)
   if (( n > vus )); then
@@ -60,9 +60,18 @@ func rougeAGauche(_ f: String) -> Bool {
     } }
     return n > 100
 }
+// Le script JSON de la barre riche (étapes 22-25) est vert, en tête de barre.
+func vertAGauche(_ f: String) -> Bool {
+    let r = NSBitmapImageRep(data: try! Data(contentsOf: URL(fileURLWithPath: f)))!
+    var n = 0
+    for x in stride(from: 0, to: 300, by: 3) { for y in stride(from: 0, to: r.pixelsHigh, by: 3) {
+        if let c = r.colorAt(x: x, y: y), c.greenComponent > 0.4, c.redComponent < 0.3, c.blueComponent < 0.3 { n += 1 }
+    } }
+    return n > 100
+}
 for f in fichiers {
     let p = pixels(f)
-    var vu = rougeAGauche(f) ? "erreur" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
+    var vu = rougeAGauche(f) ? "erreur" : vertAGauche(f) ? "riche" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
     if vu == "apple" && !droiteAllumee(f) { vu = "noir" }
     let attendu = String(f.split(separator: "-").last!.dropLast(4))
     let verdict = vu == attendu ? "ok   " : vu == "noir" ? "?    " : "ÉCHEC"

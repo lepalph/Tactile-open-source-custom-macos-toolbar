@@ -5,10 +5,40 @@ use objc2::{class, msg_send, sel};
 use std::time::{Duration, Instant};
 
 use super::rafraichi::Rafraichi;
-use super::vues::{barre_touch, couleur, item_vue, largeur_fixe, largeur_max, symbole, texte};
+use super::vues::{barre_touch, couleur, image, item_vue, largeur_fixe, largeur_max, styler, symbole, texte};
 use super::{cible, Commande, Etat, Id, PREFIXE};
 use crate::actions::{self, Action};
-use crate::config::{Element, Reglage};
+use crate::config::{Affichage, Element, Reglage};
+
+/// Ce qui illustre un bouton : un symbole SF, ou un fichier image (gabarit ou non).
+#[derive(Clone, Copy)]
+pub(super) enum Icone<'a> {
+    Symbole(&'a str),
+    Image(&'a str, bool),
+}
+
+impl<'a> Icone<'a> {
+    pub(super) fn charger(self) -> Option<Id> {
+        match self {
+            Icone::Symbole(nom) => symbole(nom),
+            Icone::Image(chemin, gabarit) => image(chemin, gabarit),
+        }
+    }
+
+    pub(super) fn nom(self) -> &'a str {
+        match self {
+            Icone::Symbole(nom) | Icone::Image(nom, _) => nom,
+        }
+    }
+
+    /// Ce qui s'affiche en texte quand l'icône manque, et le mot du journal.
+    pub(super) fn repli(self) -> (&'a str, &'static str) {
+        match self {
+            Icone::Symbole(nom) => (nom, "symbole SF inconnu"),
+            Icone::Image(chemin, _) => (chemin.rsplit('/').next().unwrap_or(chemin), "image introuvable"),
+        }
+    }
+}
 
 pub(super) fn enregistrer(etat: &mut Etat, court: Option<Commande>, long: Option<Commande>) -> usize {
     etat.commandes.push((court, long));
@@ -16,13 +46,14 @@ pub(super) fn enregistrer(etat: &mut Etat, court: Option<Commande>, long: Option
 }
 
 /// `element` est l'identifiant de l'item (`fr.palph.tactile.3.1` = premier enfant du troisième élément), pour le journal.
-pub(super) fn bouton(titre: Option<&str>, image: Option<&str>, index: usize, avec_appui_long: bool, element: &str) -> Id {
-    // Un symbole inconnu n'est pas une raison de perdre la barre : son nom s'affiche en texte.
-    let (titre, image) = match image.map(|nom| (nom, symbole(nom))) {
+pub(super) fn bouton(titre: Option<&str>, icone: Option<Icone>, index: usize, avec_appui_long: bool, element: &str) -> Id {
+    // Un symbole inconnu ou une image absente n'est pas une raison de perdre la barre : son nom s'affiche en texte.
+    let (titre, image) = match icone.map(|i| (i, i.charger())) {
         Some((_, Some(i))) => (titre, Some(i)),
-        Some((nom, None)) => {
-            eprintln!("tactile : symbole SF inconnu « {nom} » (élément {})", element.strip_prefix(PREFIXE).map_or(element, |e| e.trim_start_matches('.')));
-            (Some(nom), None)
+        Some((icone, None)) => {
+            let (nom, quoi) = icone.repli();
+            eprintln!("tactile : {quoi} « {} » (élément {})", icone.nom(), element.strip_prefix(PREFIXE).map_or(element, |e| e.trim_start_matches('.')));
+            (titre.or(Some(nom)), None)
         }
         None => (titre, None),
     };
@@ -55,9 +86,9 @@ pub(super) fn bouton_texte(etat: &mut Etat, action: Option<Action>) -> Id {
 }
 
 /// Bouton replié (symbole + chevron) qui ouvre une sous-barre faite de ✕ suivi de `items`.
-pub(super) fn depliable(identifiant: &str, nom: Option<&str>, libelle: Option<&str>, items: Vec<Id>, etat: &mut Etat) -> Id {
+pub(super) fn depliable(identifiant: &str, nom: Option<&str>, libelle: Option<&str>, largeur: Option<f64>, items: Vec<Id>, etat: &mut Etat) -> Id {
     let fermer = enregistrer(etat, Some(Commande::Fermer), None);
-    let croix = bouton(None, Some("xmark"), fermer, false, identifiant);
+    let croix = bouton(None, Some(Icone::Symbole("xmark")), fermer, false, identifiant);
     etat.controles.push(("fermer".into(), croix));
     largeur_fixe(croix, 64.0);
     let mut contenu = vec![item_vue(&format!("{identifiant}.fermer"), croix)];
@@ -65,9 +96,9 @@ pub(super) fn depliable(identifiant: &str, nom: Option<&str>, libelle: Option<&s
     etat.barres.push(barre_touch(&format!("{identifiant}.barre"), contenu));
     let ouvrir = enregistrer(etat, Some(Commande::Ouvrir(etat.barres.len() - 1)), None);
     let titre = format!("{}  ›", libelle.unwrap_or(""));
-    let b = bouton(Some(titre.trim_start()), nom, ouvrir, false, identifiant);
+    let b = bouton(Some(titre.trim_start()), nom.map(Icone::Symbole), ouvrir, false, identifiant);
     etat.controles.push((format!("ouvrir {}", nom.or(libelle).unwrap_or("")), b));
-    largeur_fixe(b, 72.0);
+    largeur_fixe(b, largeur.unwrap_or(LARGEUR_GROUPE));
     item_vue(identifiant, b)
 }
 
@@ -98,7 +129,7 @@ pub(super) fn slider(identifiant: &str, reglage: Reglage, nom: &str, etat: &mut 
     };
     let nom_reglage = if tag == 0 { "luminosite" } else { "volume" };
     etat.controles.push((format!("slider {nom_reglage}"), item));
-    depliable(identifiant, Some(nom), None, vec![item], etat)
+    depliable(identifiant, Some(nom), None, None, vec![item], etat)
 }
 
 pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -> Vec<Id> {
@@ -106,13 +137,20 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
     for (i, element) in elements.iter().enumerate() {
         let ident = format!("{prefixe}.{}", i + 1);
         let item = match element {
-            Element::Bouton { texte: t, symbole: s, couleur: c, largeur, action, appui_long } => {
+            Element::Bouton { texte: t, symbole: s, image: i, gabarit, couleur: c, couleur_texte, taille, affichage, largeur, action, appui_long } => {
                 let index = enregistrer(etat, action.clone().map(Commande::Systeme), appui_long.clone().map(Commande::Systeme));
-                let b = bouton(t.as_deref(), s.as_deref(), index, appui_long.is_some(), &ident);
-                etat.controles.push((t.clone().or(s.clone()).unwrap_or_default(), b));
+                let icone = s.as_deref().map(Icone::Symbole).or(i.as_deref().map(|chemin| Icone::Image(chemin, *gabarit)));
+                let (titre, icone) = match affichage {
+                    Some(Affichage::Texte) if t.is_some() => (t.as_deref(), None),
+                    Some(Affichage::Icone) if icone.is_some() => (None, icone),
+                    _ => (t.as_deref(), icone),
+                };
+                let b = bouton(titre, icone, index, appui_long.is_some(), &ident);
+                etat.controles.push((t.clone().or(s.clone()).or(i.clone()).unwrap_or_default(), b));
                 if let Some(col) = c.as_deref().and_then(couleur) {
                     unsafe { let _: () = msg_send![b, setBezelColor: col]; }
                 }
+                styler(b, couleur_texte.as_deref(), *taille);
                 match largeur {
                     Some(l) => largeur_fixe(b, *l),
                     None if t.is_some() => largeur_max(b, LARGEUR_MAX_TEXTE),
@@ -154,7 +192,16 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                     prochain: Instant::now(),
                     en_cours: false,
                     derniere_erreur: String::new(),
+                    derniere_sortie: String::new(),
+                    element: ident.clone(),
                 });
+                item_vue(&ident, b)
+            }
+            Element::Batterie { symbole: s, largeur } => {
+                let b = bouton_texte(etat, None);
+                largeur_fixe(b, largeur.unwrap_or(LARGEUR_BATTERIE));
+                etat.controles.push(("batterie".into(), b));
+                etat.rafraichis.push(Rafraichi::Batterie { bouton: b, symbole: s.unwrap_or(true), prochain: Instant::now(), en_cours: false });
                 item_vue(&ident, b)
             }
             Element::Espace { largeur } => {
@@ -163,9 +210,9 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 item_vue(&ident, vue)
             }
             Element::Souple => std::ptr::null_mut(),
-            Element::Groupe { texte: t, symbole: s, elements: enfants } => {
+            Element::Groupe { texte: t, symbole: s, largeur, elements: enfants } => {
                 let sous_items = construire(enfants, &ident, etat);
-                depliable(&ident, s.as_deref(), t.as_deref(), sous_items, etat)
+                depliable(&ident, s.as_deref(), t.as_deref(), *largeur, sous_items, etat)
             }
         };
         items.push(item);
@@ -187,6 +234,12 @@ pub(super) fn largeur_script(largeur: Option<f64>) -> f64 {
 /// Largeur au-delà de laquelle un texte sans `largeur` (bouton, heure, titre en cours) est coupé avec « … ».
 pub(super) const LARGEUR_MAX_TEXTE: f64 = 200.0;
 
+/// Largeur du bouton qui ouvre un groupe ou un slider, sans `largeur`.
+pub(super) const LARGEUR_GROUPE: f64 = 72.0;
+
+/// Largeur de l'élément batterie sans `largeur` : « ⚡ 100 % » avec son symbole.
+pub(super) const LARGEUR_BATTERIE: f64 = 96.0;
+
 /// Largeur de la barre en points : toute la Touch Bar, ou ce qu'il reste à côté du Control Strip.
 pub(super) fn largeur_barre(masquer_control_strip: bool) -> f64 {
     if masquer_control_strip { 1004.0 } else { 685.0 }
@@ -196,12 +249,13 @@ pub(super) fn largeur_barre(masquer_control_strip: bool) -> f64 {
 fn largeur_estimee(element: &Element) -> f64 {
     let texte = |t: &str| (t.chars().count() as f64 * 9.0 + 24.0).min(LARGEUR_MAX_TEXTE);
     match element {
-        Element::Bouton { largeur: Some(l), .. } | Element::EnCours { largeur: Some(l) } | Element::Espace { largeur: l } => *l,
-        Element::Bouton { texte: t, symbole: s, .. } => t.as_deref().map_or(72.0, texte) + if t.is_some() && s.is_some() { 24.0 } else { 0.0 },
+        Element::Bouton { largeur: Some(l), .. } | Element::EnCours { largeur: Some(l) } | Element::Espace { largeur: l } | Element::Groupe { largeur: Some(l), .. } => *l,
+        Element::Bouton { texte: t, symbole: s, image: i, .. } => t.as_deref().map_or(LARGEUR_GROUPE, texte) + if t.is_some() && (s.is_some() || i.is_some()) { 24.0 } else { 0.0 },
         Element::Heure { format } => texte(format.as_deref().unwrap_or("HH:mm")),
         Element::EnCours { largeur: None } => LARGEUR_MAX_TEXTE,
         Element::Script { largeur, .. } => largeur_script(*largeur),
-        Element::Slider { .. } | Element::Groupe { .. } => 72.0,
+        Element::Batterie { largeur, .. } => largeur.unwrap_or(LARGEUR_BATTERIE),
+        Element::Slider { .. } | Element::Groupe { .. } => LARGEUR_GROUPE,
         Element::Souple => 0.0,
     }
 }
@@ -228,7 +282,7 @@ mod tests {
     #[test]
     fn symbole_inconnu_donne_un_bouton_texte() {
         super::super::preparer_cible();
-        let b = bouton(None, Some("symbole.qui.nexiste.pas"), 0, false, "fr.palph.tactile.3");
+        let b = bouton(None, Some(Icone::Symbole("symbole.qui.nexiste.pas")), 0, false, "fr.palph.tactile.3");
         let titre: Id = unsafe { msg_send![b, title] };
         let image: Id = unsafe { msg_send![b, image] };
         assert_eq!(unsafe { (*(titre as *const objc2_foundation::NSString)).to_string() }, "symbole.qui.nexiste.pas");
@@ -236,11 +290,32 @@ mod tests {
     }
 
     #[test]
+    fn image_introuvable_donne_un_bouton_texte() {
+        super::super::preparer_cible();
+        let b = bouton(Some("Pr"), Some(Icone::Image("~/icones/premiere.png", false)), 0, false, "fr.palph.tactile.4");
+        let titre: Id = unsafe { msg_send![b, title] };
+        let image: Id = unsafe { msg_send![b, image] };
+        assert_eq!(unsafe { (*(titre as *const objc2_foundation::NSString)).to_string() }, "Pr");
+        assert!(image.is_null());
+        let b = bouton(None, Some(Icone::Image("~/icones/premiere.png", false)), 0, false, "fr.palph.tactile.4");
+        let titre: Id = unsafe { msg_send![b, title] };
+        assert_eq!(unsafe { (*(titre as *const objc2_foundation::NSString)).to_string() }, "premiere.png");
+        let b = bouton(Some("Pr"), Some(Icone::Image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", false)), 0, false, "");
+        let image: Id = unsafe { msg_send![b, image] };
+        assert!(!image.is_null());
+    }
+
+    #[test]
     fn debordement_compte_les_elements_caches() {
         let bouton = |texte: Option<&str>, largeur: Option<f64>| Element::Bouton {
             texte: texte.map(String::from),
             symbole: Some("bolt.fill".into()),
+            image: None,
+            gabarit: false,
             couleur: None,
+            couleur_texte: None,
+            taille: None,
+            affichage: None,
             largeur,
             action: None,
             appui_long: None,

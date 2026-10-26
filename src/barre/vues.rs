@@ -17,6 +17,53 @@ pub(super) fn symbole(nom: &str) -> Option<Id> {
     (!image.is_null()).then_some(image)
 }
 
+/// Hauteur des images personnalisées, celle des symboles SF dans la barre.
+const HAUTEUR_IMAGE: f64 = 20.0;
+
+/// `None` si le fichier n'existe pas ou n'est pas une image. `~` est étendu ; `gabarit` teinte l'image comme un symbole.
+pub(super) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
+    let chemin = match chemin.strip_prefix("~/") {
+        Some(suite) => format!("{}/{suite}", std::env::var("HOME").unwrap_or_default()),
+        None => chemin.to_string(),
+    };
+    unsafe {
+        let image: Id = msg_send![class!(NSImage), alloc];
+        let image: Id = msg_send![image, initWithContentsOfFile: &*texte(&chemin)];
+        if image.is_null() {
+            return None;
+        }
+        let taille: objc2_foundation::NSSize = msg_send![image, size];
+        if taille.height > 0.0 {
+            let _: () = msg_send![image, setSize: objc2_foundation::NSSize::new(taille.width * HAUTEUR_IMAGE / taille.height, HAUTEUR_IMAGE)];
+        }
+        let _: () = msg_send![image, setTemplate: Bool::new(gabarit)];
+        Some(image)
+    }
+}
+
+/// Couleur du texte et taille de police d'un bouton ; sans couleur, le titre redevient ordinaire.
+/// À rappeler après chaque `titre` : `setTitle:` efface les attributs.
+pub(super) fn styler(bouton: Id, couleur_texte: Option<&str>, taille: Option<f64>) {
+    unsafe {
+        if let Some(t) = taille {
+            let police: Id = msg_send![class!(NSFont), systemFontOfSize: t];
+            let _: () = msg_send![bouton, setFont: police];
+        }
+        let Some(col) = couleur_texte.and_then(couleur) else { return };
+        let actuel: Id = msg_send![bouton, title];
+        let police: Id = msg_send![bouton, font];
+        let attributs: Id = msg_send![class!(NSMutableDictionary), dictionary];
+        let _: () = msg_send![attributs, setObject: col, forKey: &*texte("NSColor")];
+        let _: () = msg_send![attributs, setObject: police, forKey: &*texte("NSFont")];
+        let paragraphe: Id = msg_send![class!(NSMutableParagraphStyle), new];
+        let _: () = msg_send![paragraphe, setAlignment: 2isize];
+        let _: () = msg_send![attributs, setObject: paragraphe, forKey: &*texte("NSParagraphStyle")];
+        let titre: Id = msg_send![class!(NSAttributedString), alloc];
+        let titre: Id = msg_send![titre, initWithString: actuel, attributes: attributs];
+        let _: () = msg_send![bouton, setAttributedTitle: titre];
+    }
+}
+
 pub(super) fn couleur(hexa: &str) -> Option<Id> {
     let h = hexa.trim_start_matches('#');
     let v = u32::from_str_radix(h, 16).ok().filter(|_| h.len() == 6)?;
@@ -88,5 +135,15 @@ mod tests {
     fn symbole_inconnu_ne_donne_pas_d_image() {
         assert!(symbole("xmark").is_some());
         assert!(symbole("symbole.qui.nexiste.pas").is_none());
+    }
+
+    #[test]
+    fn image_redimensionnee_ou_absente() {
+        let i = image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", true).unwrap();
+        let taille: objc2_foundation::NSSize = unsafe { msg_send![i, size] };
+        assert_eq!((taille.width, taille.height), (HAUTEUR_IMAGE, HAUTEUR_IMAGE));
+        assert!(unsafe { msg_send![i, isTemplate] });
+        assert!(image("~/image-qui-nexiste-pas.png", false).is_none());
+        assert!(image("/etc/hosts", false).is_none());
     }
 }
