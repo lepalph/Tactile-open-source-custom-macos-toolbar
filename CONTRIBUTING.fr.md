@@ -1,5 +1,7 @@
 # Contribuer à Tactile
 
+🇬🇧 [Read in English](CONTRIBUTING.md)
+
 Merci de ton intérêt. Commence par [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : la carte du code, les recettes pour ajouter une action ou un élément, et les pièges déjà rencontrés. Le pourquoi des choix est dans [docs/DECISIONS.md](docs/DECISIONS.md).
 
 ## Style
