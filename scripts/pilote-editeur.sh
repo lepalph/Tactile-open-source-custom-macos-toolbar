@@ -31,3 +31,33 @@ const finir = async () => {
 };
 JS
 }
+
+# Pour les GIF : un pointeur dessiné dans la page (les captures WebKit n'ont pas celui du système) et des images
+# numérotées `NNNN-hK.png`, K = nombre de fois que l'image est répétée (les temps d'arrêt).
+animation_js() {
+    cat <<'JS'
+let numero = 0;
+const image = async (repeter = 1) => { capture(String(++numero).padStart(4, '0') + '-h' + repeter + '.png'); await attendre(140); };
+const pointeur = document.createElement('div');
+pointeur.innerHTML = '<svg width="22" height="30" viewBox="0 0 22 30"><path d="M2 2 L2 24 L7.5 18.5 L11.5 27.5 L15 26 L11 17.2 L19 17.2 Z" fill="#000" stroke="#fff" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+Object.assign(pointeur.style, { position: 'fixed', left: '0', top: '0', zIndex: 99999, pointerEvents: 'none', filter: 'drop-shadow(0 1px 2px rgb(0 0 0 / 0.4))' });
+document.body.append(pointeur);
+let px = 640, py = 420;
+const placer = (x, y) => { px = x; py = y; pointeur.style.transform = `translate(${x - 2}px, ${y - 2}px)`; };
+placer(px, py);
+const centre = el => { const r = el.getBoundingClientRect(); return [r.left + Math.min(r.width / 2, 40), r.top + r.height / 2]; };
+// Glisse vers l'élément en `n` images, avec une courbe douce (ease-in-out).
+const aller = async (el, n = 8) => {
+  const [x0, y0] = [px, py], [x1, y1] = centre(el);
+  for (let k = 1; k <= n; k++) { const t = k / n, e = t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2; placer(x0 + (x1 - x0) * e, y0 + (y1 - y0) * e); await image(); }
+};
+const cliquer = async (el, n = 8) => { await aller(el, n); el.click(); document.activeElement?.blur(); await image(3); };
+// Le champ est relu à chaque lettre : certaines saisies redessinent le panneau (recherche de symbole).
+const taper = async (selecteur, texte) => {
+  let deja = q(selecteur).value;
+  for (const c of texte) { const el = q(selecteur); deja += c; el.value = deja; el.dispatchEvent(new Event('input', { bubbles: true })); await image(); }
+  await attendre(400); await image(3);
+};
+const q = s => document.querySelector(s);
+JS
+}

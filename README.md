@@ -19,7 +19,7 @@
 
 Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, brightness and volume sliders, the track that's playing, a clock, your own commands. One tap switches between your bar and Apple's.
 
-![Tactile on the Touch Bar, above the "Customize my bar" window that edits it](docs/hero.png)
+![A bar with Escape, an app drawer, the track playing, the weather in Paris, the battery and the clock, above the "Customize my bar" window where the drawer and its four app launchers are selected](docs/hero.png)
 
 ## Highlights
 
@@ -29,6 +29,10 @@ Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, br
 - An `[[application]]` table gives an app its own bar while it is in front. With `inherit = true`, the edges of your main bar (sliders, clock) stay put.
 - A button can send a shortcut (`action = { key = "cmd+shift+4" }`, resolved on your keyboard layout, AZERTY included), open an app or a URL, or run AppleScript or a shell command. `long_press` gives it a second action.
 - A `launcher` shows an app's real icon, with a dot while the app runs; put a few in a `group` and you have an app drawer. A `[[source]]` feeds live text from a URL, a command or an MCP tool (the weather, a build status), and API keys stay in the macOS keychain.
+
+| Pick a symbol for the app drawer, add Mail to it, save | Put your own logo on a button, then make it monochrome |
+|---|---|
+| ![The editor: the drawer gets the tray symbol, a Mail launcher is added to it with its real icon, then Save updates the Touch Bar](docs/demo-editeur.gif) | ![The editor: a new Deploy button gets an orange logo, then the Monochrome switch turns it white like Apple's symbols](docs/demo-logo.gif) |
 
 ## A bar in ten lines
 

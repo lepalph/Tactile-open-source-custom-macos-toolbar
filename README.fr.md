@@ -19,7 +19,7 @@
 
 Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : boutons, curseurs de luminosité et de volume, musique en cours, heure, commandes à toi. Tu passes de ta barre à celle d'Apple d'un toucher.
 
-![Tactile sur la Touch Bar, au-dessus de la fenêtre « Personnaliser ma barre » qui la règle](docs/hero.png)
+![Une barre avec Échap, un tiroir d'apps, le morceau en cours, la météo de Paris, la batterie et l'heure, au-dessus de la fenêtre de réglage (en anglais) où le tiroir et ses quatre lanceurs sont sélectionnés](docs/hero.png)
 
 ## En bref
 
@@ -29,6 +29,10 @@ Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : b
 - Une table `[[application]]` donne sa propre barre à une app tant qu'elle est au premier plan. Avec `herite = true`, les bords de ta barre principale (curseurs, heure) ne bougent pas.
 - Un bouton envoie un raccourci (`action = { touche = "cmd+shift+4" }`, lu sur ta disposition de clavier, AZERTY compris), ouvre une app ou une adresse, lance un AppleScript ou une commande. `appui_long` lui donne une seconde action.
 - Un `lanceur` montre la vraie icône d'une app, avec un point tant qu'elle tourne ; quelques-uns dans un `groupe` font un tiroir d'apps. Une `[[source]]` alimente un texte vivant depuis une adresse, une commande ou un outil MCP (la météo, l'état d'un build), et les clés d'API restent dans le trousseau macOS.
+
+| Un symbole pour le tiroir d'apps, Mail ajouté dedans, enregistrer | Ton propre logo sur un bouton, puis en monochrome |
+|---|---|
+| ![L'éditeur (en anglais) : le tiroir prend le symbole d'un bac, un lanceur Mail y est ajouté avec sa vraie icône, puis Save met la Touch Bar à jour](docs/demo-editeur.gif) | ![L'éditeur (en anglais) : un nouveau bouton Deploy reçoit un logo orange, puis l'interrupteur Monochrome le rend blanc comme les symboles d'Apple](docs/demo-logo.gif) |
 
 ## Une barre en dix lignes
 
