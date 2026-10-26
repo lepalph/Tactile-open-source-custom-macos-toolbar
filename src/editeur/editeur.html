@@ -125,6 +125,31 @@ main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
 .sous li button { min-height: 36px; padding: 0 10px; }
 .vide-props { color: var(--texte2); max-width: 46ch; margin-top: 40px; }
 .explication { color: var(--texte2); font-size: 12px; margin: 4px 0 0; max-width: 480px; }
+.explication .alerte { color: var(--erreur); }
+.explication button.lien { min-height: 32px; font-size: 12px; }
+
+/* Changements non enregistrés : un point à côté du titre, comme le bouton rouge de la fenêtre */
+.modifie { display: inline-flex; align-items: center; gap: 6px; margin-left: 10px; font-size: 12px; font-weight: 500; color: var(--texte2); vertical-align: 3px; }
+.modifie::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.modifie[hidden] { display: none; }
+
+/* Fichier illisible : l'erreur prend la place des réglages */
+.illisible { max-width: 620px; }
+.illisible h2 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--texte); margin: 4px 0 10px; }
+.illisible .etat p { margin: 0; }
+.illisible pre { margin: 8px 0 0; font: 12px/1.4 "SF Mono", Menlo, monospace; white-space: pre-wrap; word-break: break-all; color: var(--texte); }
+.illisible > p { color: var(--texte2); max-width: 62ch; margin: 12px 0 0; }
+.illisible .cote { margin-top: 16px; }
+.palette button:disabled, .case:has(input:disabled) { opacity: 0.45; }
+
+/* Confirmation dans la page : <dialog> modal, Échap = Annuler */
+dialog { border: 0; border-radius: 10px; padding: 20px 20px 16px; width: min(440px, calc(100vw - 32px)); background: var(--panneau); color: var(--texte);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.28); }
+dialog::backdrop { background: rgb(0 0 0 / 0.25); }
+dialog h2 { font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--texte); margin: 0 0 6px; }
+dialog p { margin: 0; color: var(--texte2); }
+dialog .choix { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+dialog .choix .gauche { margin-right: auto; }
 @media (prefers-reduced-motion: no-preference) {
   .face, button { transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1); }
 }
@@ -133,7 +158,7 @@ main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
 <body>
 <header>
   <div>
-    <h1 data-i18n="titre">Personnaliser ma barre</h1>
+    <h1><span data-i18n="titre">Personnaliser ma barre</span><span class="modifie" id="badge-modifie" data-i18n="modifieBadge" hidden></span></h1>
     <p class="aide" data-i18n="sousTitre"></p>
   </div>
   <div class="outils">
@@ -167,6 +192,12 @@ main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
   <section class="proprietes" id="proprietes" aria-live="polite"></section>
 </main>
 
+<dialog id="confirmation" aria-labelledby="conf-titre" aria-describedby="conf-texte">
+  <h2 id="conf-titre"></h2>
+  <p id="conf-texte"></p>
+  <div class="choix" id="conf-choix"></div>
+</dialog>
+
 <script>
 'use strict';
 /* ---------- Textes FR / EN ---------- */
@@ -195,7 +226,20 @@ const T = {
     actEchap: 'Touche esc', actBarreApple: 'Afficher la barre d’Apple',
     choisir: 'Choisir…', application: 'Application', adresse: 'Adresse', niveau: 'Niveau', raccourci: 'Raccourci', raccourciAide: 'cmd, shift, ctrl, alt, fn, puis une touche : cmd+shift+4, f5, esc.',
     enregistre: 'Enregistré. Ta Touch Bar est à jour.', pasEnregistre: 'Pas enregistré : ', modifie: 'Modifications non enregistrées.', charge: 'Barre chargée, pas encore enregistrée.',
-    titreFenetre: 'Personnaliser ma barre',
+    titreFenetre: 'Personnaliser ma barre', modifieBadge: 'Modifié',
+    illisibleTitre: 'Ton fichier de barre contient une erreur',
+    illisibleTexte: 'Tactile n’arrive pas à le lire. Ton fichier n’a pas été modifié, et Enregistrer reste désactivé pour ne pas l’écraser.',
+    illisibleIssue: 'Corrige-le dans un éditeur de texte, puis clique « Relire le fichier ». Tu peux aussi repartir d’une barre toute faite : ton fichier sera d’abord copié à côté, sous un autre nom.',
+    ouvrirFichier: 'Ouvrir le fichier', relire: 'Relire le fichier', repartir: 'Repartir d’une barre toute faite',
+    illisibleApercu: 'Ta barre ne peut pas s’afficher : son fichier contient une erreur.',
+    abimeGarde: 'Barre chargée, pas encore enregistrée. Ton ancien fichier est gardé sous le nom {f}.',
+    confFermer: 'Enregistrer tes modifications avant de fermer ?', confFermerTexte: 'Si tu fermes sans enregistrer, elles seront perdues.',
+    fermerSans: 'Ne pas enregistrer', annuler: 'Annuler', remplacer: 'Remplacer', revenirCourt: 'Revenir',
+    confPrereglage: 'Remplacer ta barre par « {n} » ?', perdues: 'Tes modifications non enregistrées seront perdues.',
+    confRevenir: 'Revenir à la version précédente ?', confRevenirTexte: 'Ta Touch Bar change tout de suite. La version actuelle reste dans l’historique.',
+    revenu: 'Version précédente rétablie. Ta Touch Bar est à jour.',
+    enregistreManuel: 'Enregistré. Ta Touch Bar est à jour. Ton fichier d’origine, avec ses commentaires, est gardé sous le nom {f}.',
+    appIntrouvable: 'Aucune application « {a} » sur ce Mac.', appProche: 'La plus proche :', appUtiliser: 'Utiliser « {s} »', appConseil: 'Avec Choisir…, le nom est toujours juste.',
   },
   en: {
     titre: 'Customize my bar', sousTitre: 'Click an item to edit it, drag it to move it. Save updates your Touch Bar right away.',
@@ -221,7 +265,20 @@ const T = {
     actEchap: 'Esc key', actBarreApple: 'Show Apple’s bar',
     choisir: 'Choose…', application: 'App', adresse: 'Address', niveau: 'Level', raccourci: 'Shortcut', raccourciAide: 'cmd, shift, ctrl, alt, fn, then a key: cmd+shift+4, f5, esc.',
     enregistre: 'Saved. Your Touch Bar is up to date.', pasEnregistre: 'Not saved: ', modifie: 'Unsaved changes.', charge: 'Bar loaded, not saved yet.',
-    titreFenetre: 'Customize my bar',
+    titreFenetre: 'Customize my bar', modifieBadge: 'Edited',
+    illisibleTitre: 'Your bar file has an error',
+    illisibleTexte: 'Tactile can’t read it. Your file hasn’t been changed, and Save stays off so it can’t be overwritten.',
+    illisibleIssue: 'Fix it in a text editor, then click “Reload the file”. You can also start over from a ready-made bar: your file is first copied next to it under another name.',
+    ouvrirFichier: 'Open the file', relire: 'Reload the file', repartir: 'Start from a ready-made bar',
+    illisibleApercu: 'Your bar can’t be shown: its file has an error.',
+    abimeGarde: 'Bar loaded, not saved yet. Your old file is kept as {f}.',
+    confFermer: 'Save your changes before closing?', confFermerTexte: 'If you close without saving, they’ll be lost.',
+    fermerSans: 'Don’t save', annuler: 'Cancel', remplacer: 'Replace', revenirCourt: 'Go back',
+    confPrereglage: 'Replace your bar with “{n}”?', perdues: 'Your unsaved changes will be lost.',
+    confRevenir: 'Go back to the previous version?', confRevenirTexte: 'Your Touch Bar changes right away. The current version stays in the history.',
+    revenu: 'Previous version restored. Your Touch Bar is up to date.',
+    enregistreManuel: 'Saved. Your Touch Bar is up to date. Your original file, with its comments, is kept as {f}.',
+    appIntrouvable: 'No app called “{a}” on this Mac.', appProche: 'Closest match:', appUtiliser: 'Use “{s}”', appConseil: 'Choose… always gets the name right.',
   },
 };
 let langue = 'fr';
@@ -256,6 +313,8 @@ let barre = { masquer_control_strip: true, element: [] };
 let sel = null;            // { i } ou { i, j } (sous-élément d'un groupe)
 let modifie = false;
 let aPrecedent = false;
+let illisible = null;      // { message, extrait } : le fichier ne se lit pas, rien n'est modifiable ni enregistrable
+const apps = {};           // nom tapé → { trouvee, suggestion }, réponse de Rust
 const glyphes = {};        // nom → data URL, ou null si inconnu
 const demandes = new Set();
 const $ = id => document.getElementById(id);
@@ -277,16 +336,34 @@ window.tactile = {
   charger(b, precedent) {
     // Le reste (les [[application]], que la fenêtre ne règle pas) traverse l'enregistrement intact.
     barre = { ...b, masquer_control_strip: !!b.masquer_control_strip, element: b.element || [] };
-    aPrecedent = !!precedent; sel = null;
-    modifie = prereglageAttendu;
+    aPrecedent = !!precedent; sel = null; illisible = null;
+    marquer(prereglageAttendu);
     etat(prereglageAttendu ? t('charge') : '');
     prereglageAttendu = false;
     demanderGlyphes(symbolesDe(barre.element));
     tout();
   },
+  /* Le fichier ne se lit pas : pas de barre vide à enregistrer par-dessus, seulement l'erreur et deux issues. */
+  illisible(message, extrait, precedent) {
+    illisible = { message, extrait }; aPrecedent = !!precedent; sel = null; prereglageAttendu = false;
+    barre = { masquer_control_strip: true, element: [] };
+    marquer(false); etat('');
+    tout();
+  },
   glyphes(map) { Object.assign(glyphes, map); dessinerBarre(); dessinerProprietes(false); },
-  enregistre() { modifie = false; aPrecedent = true; etat(t('enregistre'), 'ok'); boutons(); },
-  erreur(message) { etat(t('pasEnregistre') + message, 'erreur'); },
+  enregistre(manuel, precedent) {
+    marquer(false); aPrecedent = !!precedent;
+    etat(manuel ? t('enregistreManuel').replace('{f}', manuel) : t('enregistre'), 'ok'); boutons();
+  },
+  revenu() { etat(t('revenu'), 'ok'); },
+  abimeGarde(nom) { etat(t('abimeGarde').replace('{f}', nom)); },
+  erreur(message) { prereglageAttendu = false; etat(t('pasEnregistre') + message, 'erreur'); },
+  async demanderFermeture() {
+    const r = await confirmer(t('confFermer'), t('confFermerTexte'), [['sans', t('fermerSans'), 'secondaire gauche'], ['annuler', t('annuler')], ['oui', t('enregistrer'), 'primaire']]);
+    if (r === 'oui') enregistrer(true);
+    else if (r === 'sans') envoyer({ type: 'fermer' });
+  },
+  appVerifiee(nom, trouvee, suggestion) { apps[nom] = { trouvee, suggestion }; ['action', 'appui_long'].forEach(verifierApp); },
   appChoisie(nom) {
     const e = elem(); if (!e) return;
     const cible = champActionEnCours || 'action';
@@ -318,7 +395,30 @@ function neuf(type) {
     case 'groupe': return { type, symbole: 'square.grid.2x2.fill', element: [] };
   }
 }
-function changer() { modifie = true; etat(t('modifie')); dessinerBarre(); boutons(); }
+function changer() { marquer(true); etat(t('modifie')); dessinerBarre(); boutons(); }
+/* Rust le sait à chaque changement : fermer la fenêtre demande alors confirmation, et le bouton rouge porte un point. */
+function marquer(v) {
+  if (v !== modifie) envoyer({ type: 'modifie', valeur: v });
+  modifie = v; $('badge-modifie').hidden = !v;
+}
+function enregistrer(fermer) {
+  if (illisible) return;
+  envoyer({ type: 'enregistrer', barre, ...(fermer ? { fermer: true } : {}) });
+}
+/* Confirmation dans la page : choix = [[valeur, libellé, classes]] ; Échap ou Annuler renvoient 'annuler'. */
+function confirmer(titre, texte, choix) {
+  const d = $('confirmation');
+  if (d.open) return Promise.resolve('annuler');
+  $('conf-titre').textContent = titre; $('conf-texte').textContent = texte;
+  $('conf-choix').innerHTML = choix.map(([v, l, c]) => `<button type="button" value="${v}" class="${c || ''}">${esc(l)}</button>`).join('');
+  return new Promise(fin => {
+    $('conf-choix').onclick = ev => { const b = ev.target.closest('button'); if (b) d.close(b.value); };
+    d.onclose = () => fin(d.returnValue || 'annuler');
+    d.returnValue = '';
+    d.showModal();
+    d.querySelector('button.primaire')?.focus();
+  });
+}
 function ajouter(type, dansGroupe) {
   const e = neuf(type);
   demanderGlyphes([e.symbole]);
@@ -390,11 +490,16 @@ function dessinerBarre() {
   const b = $('barre');
   b.classList.toggle('courte', !barre.masquer_control_strip);
   $('masquer').checked = barre.masquer_control_strip;
-  if (!barre.element.length) { b.innerHTML = `<div class="vide">${esc(t('vide'))}</div>`; return; }
+  if (!barre.element.length) { b.innerHTML = `<div class="vide">${esc(t(illisible ? 'illisibleApercu' : 'vide'))}</div>`; return; }
   b.innerHTML = barre.element.map((e, i) => `<div class="el${sel && sel.i === i ? ' sel' : ''}" data-i="${i}" data-type="${e.type}" role="option" aria-selected="${sel && sel.i === i}" tabindex="${sel ? (sel.i === i ? 0 : -1) : (i === 0 ? 0 : -1)}" draggable="true" aria-label="${esc(t(e.type))}${e.texte ? ' ' + esc(e.texte) : ''}">${face(e)}</div>`).join('');
 }
 function tout() { dessinerBarre(); dessinerPalette(); dessinerProprietes(true); boutons(); }
-function boutons() { $('revenir').disabled = !aPrecedent; }
+function boutons() {
+  $('revenir').disabled = !aPrecedent;
+  $('enregistrer').disabled = !!illisible;
+  $('masquer').disabled = !!illisible;
+  document.querySelectorAll('#ajouts button').forEach(b => { b.disabled = !!illisible; });
+}
 function etat(texte, classe) { const e = $('etat'); e.textContent = texte || ''; e.className = 'etat' + (classe ? ' ' + classe : ''); }
 
 /* Souris : clic et glisser-déposer natif */
@@ -446,11 +551,16 @@ function dessinerPalette() {
   $('preregles').innerHTML = ['simple', 'musique', 'developpeur'].map(n => `<button type="button" data-prereglage="${n}"><span class="ico" aria-hidden="true">★</span>${esc(t(n))}</button>`).join('');
 }
 $('ajouts').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) ajouter(b.dataset.ajout, false); });
-$('preregles').addEventListener('click', ev => {
-  const b = ev.target.closest('button'); if (!b) return;
+$('preregles').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) prereglage(b.dataset.prereglage); });
+/* Fichier illisible : Rust le met de côté (.abime-…) avant de charger la barre toute faite. */
+async function prereglage(nom) {
+  if (modifie && !illisible) {
+    const r = await confirmer(t('confPrereglage').replace('{n}', t(nom)), t('perdues'), [['annuler', t('annuler')], ['oui', t('remplacer'), 'primaire']]);
+    if (r !== 'oui') return;
+  }
   prereglageAttendu = true;
-  envoyer({ type: 'prereglage', nom: b.dataset.prereglage });
-});
+  envoyer({ type: 'prereglage', nom });
+}
 
 /* ---------- Propriétés ---------- */
 function actionUI(a) {
@@ -480,7 +590,7 @@ function champAction(cle, label) {
   const options = [['aucune', t('actAucune')], ['app', t('actApp')], ['url', t('actUrl')], ['touche', t('actTouche')], ['shell', t('actShell')], ['applescript', t('actApplescript')],
     ...ACTIONS_SIMPLES.map(a => [a, t(CLE_ACTION[a])]), ['luminosite_fixe', t('actLuminositeFixe')], ['volume_fixe', t('actVolumeFixe')], ...(ui.mode === 'autre' ? [['autre', t('actAutre')]] : [])];
   let detail = '';
-  if (ui.mode === 'app') detail = `<div class="cote"><input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div>`;
+  if (ui.mode === 'app') detail = `<div class="cote"><input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" aria-describedby="app-${cle}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div><p class="explication" id="app-${cle}" aria-live="polite"></p>`;
   else if (ui.mode === 'url') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || 'https://')}" aria-label="${t('adresse')}" placeholder="https://">`;
   else if (ui.mode === 'shell') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('actShell')}" placeholder="open -a Safari" spellcheck="false">`;
   else if (ui.mode === 'touche') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('raccourci')}" placeholder="cmd+shift+4" spellcheck="false" style="max-width:260px"><p class="explication">${esc(t('raccourciAide'))}</p>`;
@@ -488,6 +598,27 @@ function champAction(cle, label) {
   else if (ui.mode === 'autre') detail = `<p class="explication">${esc(JSON.stringify(ui.valeur))}</p>`;
   else if (ui.mode === 'luminosite_fixe' || ui.mode === 'volume_fixe') detail = `<div class="cote"><input type="range" min="0" max="100" step="5" data-action-valeur="${cle}" value="${Math.round((ui.valeur ?? 0.5) * 100)}" aria-label="${t('niveau')}"><span class="valeur">${Math.round((ui.valeur ?? 0.5) * 100)} %</span></div>`;
   return `<div class="ligne${detail ? ' haute' : ''}"><label class="nom" for="act-${cle}">${label}</label><div><select id="act-${cle}" data-action-mode="${cle}">${options.map(([v, l]) => `<option value="${v}"${v === ui.mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${detail ? `<div style="margin-top:8px">${detail}</div>` : ''}</div></div>`;
+}
+/* Nom d'app tapé à la main : Rust dit s'il existe et propose le plus proche (« Photoshop » → « Adobe Photoshop 2025 »). */
+let minuteurApp = null;
+function verifierApp(cle) {
+  const p = $(`app-${cle}`), e = elem(); if (!p || !e) return;
+  const nom = String(actionUI(e[cle]).valeur || '').trim();
+  const r = apps[nom];
+  if (!nom || !r || r.trouvee) {
+    p.innerHTML = '';
+    if (nom && !r) { clearTimeout(minuteurApp); minuteurApp = setTimeout(() => envoyer({ type: 'verifierApp', nom }), 300); }
+    return;
+  }
+  p.innerHTML = `<span class="alerte">${esc(t('appIntrouvable').replace('{a}', nom))}</span> `
+    + (r.suggestion ? `${esc(t('appProche'))} <button type="button" class="lien" data-app-suggestion="${cle}" data-nom="${esc(r.suggestion)}">${esc(t('appUtiliser').replace('{s}', r.suggestion))}</button> ` : '')
+    + esc(t('appConseil'));
+}
+function panneauIllisible() {
+  return `<div class="illisible"><h2>${esc(t('illisibleTitre'))}</h2>
+    <div class="etat erreur" role="alert"><p>${esc(illisible.message)}</p>${illisible.extrait ? `<pre>${esc(illisible.extrait)}</pre>` : ''}</div>
+    <p>${esc(t('illisibleTexte'))}</p><p>${esc(t('illisibleIssue'))}</p>
+    <div class="cote"><button type="button" id="i-ouvrir" class="primaire">${esc(t('ouvrirFichier'))}</button><button type="button" id="i-relire">${esc(t('relire'))}</button><button type="button" id="i-repartir">${esc(t('repartir'))}</button></div></div>`;
 }
 let rechercheSymbole = '';
 function champSymbole(e) {
@@ -517,6 +648,7 @@ function nombreChamp(cle, valeur, min, step, aide, optionnel) {
 function dessinerProprietes(reconstruire) {
   const p = $('proprietes');
   const e = elem();
+  if (illisible) { if (reconstruire) p.innerHTML = panneauIllisible(); return; }
   if (!e) { p.innerHTML = `<p class="vide-props">${esc(t('rien'))}</p>`; return; }
   if (!reconstruire && !p.querySelector('.grille')) return; // seule la grille de symboles dépend des glyphes
   const focus = document.activeElement?.id;
@@ -553,6 +685,7 @@ function dessinerProprietes(reconstruire) {
       break;
   }
   p.innerHTML = html;
+  ['action', 'appui_long'].forEach(verifierApp);
   if (focus && $(focus)) { const f = $(focus); f.focus(); if (f.setSelectionRange && f.type !== 'number') { const n = f.value.length; try { f.setSelectionRange(n, n); } catch (_) {} } }
 }
 $('proprietes').addEventListener('input', ev => {
@@ -576,11 +709,16 @@ $('proprietes').addEventListener('input', ev => {
     e[cle] = actionModele(mode, v);
     if (c.type === 'range') c.parentElement.querySelector('.valeur').textContent = `${c.value} %`;
     changer();
+    if (mode === 'app') verifierApp(cle);
   }
 });
 $('proprietes').addEventListener('click', ev => {
-  const e = elem(); if (!e) return;
   const b = ev.target.closest('button'); if (!b) return;
+  if (b.id === 'i-ouvrir') return envoyer({ type: 'ouvrirFichier' });
+  if (b.id === 'i-relire') return envoyer({ type: 'relire' });
+  if (b.id === 'i-repartir') return prereglage('musique');
+  const e = elem(); if (!e) return;
+  if (b.dataset.appSuggestion) { e[b.dataset.appSuggestion] = { app: b.dataset.nom }; changer(); dessinerProprietes(true); return; }
   if (b.id === 'p-supprimer') supprimer();
   else if (b.id === 'p-gauche') deplacer(-1);
   else if (b.id === 'p-droite') deplacer(1);
@@ -596,9 +734,12 @@ $('proprietes').addEventListener('change', ev => {
 
 /* ---------- Haut de page ---------- */
 $('masquer').addEventListener('change', ev => { barre.masquer_control_strip = ev.target.checked; changer(); });
-$('enregistrer').addEventListener('click', () => envoyer({ type: 'enregistrer', barre }));
-$('revenir').addEventListener('click', () => envoyer({ type: 'revenir' }));
-document.addEventListener('keydown', ev => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 's') { ev.preventDefault(); envoyer({ type: 'enregistrer', barre }); } });
+$('enregistrer').addEventListener('click', () => enregistrer(false));
+$('revenir').addEventListener('click', async () => {
+  const r = await confirmer(t('confRevenir'), t('confRevenirTexte') + (modifie ? ' ' + t('perdues') : ''), [['annuler', t('annuler')], ['oui', t('revenirCourt'), 'primaire']]);
+  if (r === 'oui') envoyer({ type: 'revenir' });
+});
+document.addEventListener('keydown', ev => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 's') { ev.preventDefault(); enregistrer(false); } });
 document.querySelectorAll('[data-langue]').forEach(b => b.addEventListener('click', () => { langue = b.dataset.langue; try { localStorage.setItem('langue', langue); } catch (_) {} traduire(); }));
 function traduire() {
   document.documentElement.lang = langue;
