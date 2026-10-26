@@ -169,7 +169,7 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 
 ## Mesures
 
-`TACTILE_MESURE=1` écrit au journal une ligne `mesure : …` par passage : `installer`, « enregistrement du fichier → barre rechargée » (de la date du fichier à la fin d'`installer`), « appui → sous-barre montrée », « ✕ → base montrée », « app activée → barre de l'app montrée » (le travail de Tactile après la notification ; le dessin par la Touch Bar ne se mesure pas d'ici). Mesuré sur un MacBook Pro M1 13 pouces, macOS 15.8.1, binaire release, barre de l'utilisateur + une `[[application]]` (TextEdit, `herite`), 8 enregistrements à 1,3 s d'écart, puis autotest :
+`TACTILE_AUTOTEST=fluidite TACTILE_MESURE=1` rejoue sans capture 20 ouvertures et fermetures de sous-barre, 20 allers-retours vers une barre de TextEdit (app simulée) et 20 `installer`, toutes les 0,3 s (la config doit avoir le groupe `sun.max.fill`). `TACTILE_MESURE=1` écrit au journal une ligne `mesure : …` par passage : `installer`, « enregistrement du fichier → barre rechargée » (de la date du fichier à la fin d'`installer`), « appui → sous-barre montrée », « ✕ → base montrée », « app activée → barre de l'app montrée » (le travail de Tactile après la notification ; le dessin par la Touch Bar ne se mesure pas d'ici). Mesuré sur un MacBook Pro M1 13 pouces, macOS 15.8.1, binaire release, barre de l'utilisateur + une `[[application]]` (TextEdit, `herite`), 8 enregistrements à 1,3 s d'écart, puis autotest :
 
 | | Cible | Avant (0.2.0) | Après |
 |---|---|---|---|

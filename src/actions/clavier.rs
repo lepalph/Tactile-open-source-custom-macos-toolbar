@@ -299,10 +299,15 @@ mod tests {
 
     /// La disposition « French » chargée explicitement : le test d'AZERTY tourne sur n'importe quel Mac.
     fn francais() -> *mut c_void {
+        disposition("com.apple.keylayout.French")
+    }
+
+    /// Une disposition installée par son identifiant, sans changer celle de l'utilisateur.
+    fn disposition(id: &str) -> *mut c_void {
         use objc2::runtime::AnyObject;
         use objc2::{class, msg_send};
         unsafe {
-            let valeur = objc2_foundation::NSString::from_str("com.apple.keylayout.French");
+            let valeur = objc2_foundation::NSString::from_str(id);
             let dico: *mut AnyObject = msg_send![class!(NSDictionary), dictionaryWithObject: &*valeur, forKey: kTISPropertyInputSourceID as *const AnyObject];
             let liste = TISCreateInputSourceList(dico as *const c_void, true);
             if liste.is_null() {
@@ -349,5 +354,24 @@ mod tests {
         assert_eq!(r(7), Some((18, 0)));
         // ⌘4 reste ⌘4 (keycode 21, sans Maj ajouté) : sinon ce serait la capture d'écran.
         assert_eq!(r(8), Some((21, 0)));
+    }
+
+    /// Matrice QWERTY, AZERTY, QWERTZ : lettres déplacées (a, z, y), chiffre de capture et « / », résolus sans rien envoyer.
+    #[test]
+    #[cfg_attr(ci, ignore = "dispositions clavier (TIS) de la session : pas de session ouverte sur un runner de CI")]
+    fn trois_dispositions() {
+        let _tis = TIS.lock().unwrap();
+        // (disposition, keycodes attendus de cmd+a, cmd+z, cmd+y) ; cmd+shift+4 vise toujours la touche 21.
+        for (id, a, z, y) in [("com.apple.keylayout.US", 0, 6, 16), ("com.apple.keylayout.French", 12, 13, 16), ("com.apple.keylayout.German", 0, 16, 6)] {
+            let source = disposition(id);
+            if source.is_null() {
+                eprintln!("{id} absente : sautée");
+                continue;
+            }
+            let r = unsafe { sur_disposition(source, |d| [('a', CMD), ('z', CMD), ('y', CMD), ('4', CMD | SHIFT), ('/', CMD)].map(|(c, m)| chercher(d, c, m))) }.unwrap();
+            assert_eq!(r[..4], [Some((a, 0)), Some((z, 0)), Some((y, 0)), Some((21, 0))], "{id}");
+            let (k, _) = r[4].unwrap_or_else(|| panic!("{id} : « / » introuvable"));
+            assert!(!PAVE.contains(&k), "{id} : « / » sur le pavé ({k})");
+        }
     }
 }

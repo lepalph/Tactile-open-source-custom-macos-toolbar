@@ -343,7 +343,41 @@ fn attendu(n: usize) -> &'static str {
     }
 }
 
+/// `TACTILE_AUTOTEST=fluidite` (avec `TACTILE_MESURE=1`) : 20 ouvertures et fermetures de sous-barre, 20 allers-retours
+/// vers la barre de TextEdit (app simulée, comme écran verrouillé), 20 `installer`, toutes les 0,3 s ; les durées
+/// sont les lignes `mesure :` du journal.
+fn fluidite() {
+    let k = ETAPE.get();
+    ETAPE.set(k + 1);
+    match k {
+        0 => {
+            let mut config = crate::config::charger().expect("config illisible");
+            config.applications = crate::config::lire(BARRE_APPLI).expect("barre d'application invalide").applications;
+            super::installer(&config);
+        }
+        1..=40 => { cliquer(k, if k % 2 == 1 { "ouvrir sun.max.fill" } else { "fermer" }); }
+        41..=80 => {
+            APP_SIMULEE.set((k % 2 == 1).then(|| ("com.apple.TextEdit".into(), "TextEdit".into())));
+            super::suivre_app();
+        }
+        81..=100 => {
+            let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone())).expect("barre installée");
+            super::mesurer("installer", || super::installer(&config));
+        }
+        _ => {
+            APP_SIMULEE.set(None);
+            super::installer(&crate::config::charger().expect("config illisible"));
+            eprintln!("AUTOTEST fin {} échec(s)", ECHECS.get());
+            return;
+        }
+    }
+    programmer_dans(0.3);
+}
+
 pub(super) fn etape() {
+    if std::env::var("TACTILE_AUTOTEST").is_ok_and(|v| v == "fluidite") {
+        return fluidite();
+    }
     let n = ETAPE.get();
     ETAPE.set(n + 1);
     if REPRISES.get() == 0 {
