@@ -68,13 +68,13 @@ fn afficher_source(bouton: Id, lien: &Lien, valeur: &Result<serde_json::Value, S
                 m => format!("champ absent de la source : {}", m.join(", ")),
             }
         }
-        Err(_) if lien.style.is_some() => {
-            titre(bouton, SOURCE_EN_ERREUR);
+        Err(e) if lien.style.is_some() => {
+            titre(bouton, texte_d_erreur(e));
             restyler(bouton, lien);
             String::new()
         }
-        Err(_) => {
-            appliquer(bouton, &Riche { texte: SOURCE_EN_ERREUR.into(), ..Riche::default() }, &lien.element);
+        Err(e) => {
+            appliquer(bouton, &Riche { texte: texte_d_erreur(e).into(), ..Riche::default() }, &lien.element);
             String::new()
         }
     };
@@ -137,6 +137,13 @@ fn appliquer(bouton: Id, riche: &Riche, element: &str) {
 
 /// La valeur d'une commande dont la sortie dépasse `sources::TAILLE_MAX`.
 pub(crate) const TROP_LONG: &str = "⚠ trop long";
+/// L'erreur qui va avec : une source `commande` la renvoie, l'élément affiche alors `TROP_LONG`.
+const SORTIE_TROP_LONGUE: &str = "sortie de plus de 1 Mo, commande arrêtée";
+
+/// Ce qu'affiche un élément lié à une source en erreur : « ⚠ trop long » si la sortie a été coupée, « ⚠ source » sinon.
+fn texte_d_erreur(erreur: &str) -> &'static str {
+    if erreur == SORTIE_TROP_LONGUE { TROP_LONG } else { SOURCE_EN_ERREUR }
+}
 
 /// Ce qu'un fil renvoie : la sortie à afficher, et ce qui a cloché (vide si rien).
 pub(crate) struct Sortie {
@@ -242,7 +249,7 @@ pub(crate) fn executer(commande: &mut std::process::Command, entree: Option<&str
     let stderr = lecteur_erreur.join().unwrap_or_default();
     let (Ok(_), Ok(statut)) = (lu, statut) else { return Sortie { texte: String::new(), erreur: "sortie illisible".into() } };
     if trop_long {
-        return Sortie { texte: TROP_LONG.into(), erreur: "sortie de plus de 1 Mo, commande arrêtée".into() };
+        return Sortie { texte: TROP_LONG.into(), erreur: SORTIE_TROP_LONGUE.into() };
     }
     let stderr = String::from_utf8_lossy(&stderr).trim().to_string();
     let erreur = if tue {
@@ -415,6 +422,9 @@ mod tests {
         assert!(debut.elapsed() < Duration::from_secs(10), "pas tué au dépassement : {:?}", debut.elapsed());
         assert_eq!(sortie.texte, TROP_LONG);
         assert_eq!(sortie.erreur, "sortie de plus de 1 Mo, commande arrêtée");
+        // Une source `commande` reçoit cette erreur : son élément dit « ⚠ trop long », pas « ⚠ source ».
+        assert_eq!(texte_d_erreur(&sortie.erreur), TROP_LONG);
+        assert_eq!(texte_d_erreur("code 1"), SOURCE_EN_ERREUR);
         assert!(pris < 30 << 20, "{} Mo de plus en mémoire", pris >> 20);
         assert_eq!(vivants("head -c 50000000 /dev/zero; sleep 20"), 0, "le groupe survit");
         // Sous la limite, rien ne change.

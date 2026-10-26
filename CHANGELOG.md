@@ -40,6 +40,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Errors and warnings name the key the way you wrote it (`every`, `template`, `color_by`, `command`, `[[item]]`); a missing field gives both names (`«outil» (ou «tool»)`); a string `template` on a button says to put the template in `text`.
 - `--check` sees the same app written twice (`Finder` and `com.apple.finder`, resolved through LaunchServices), and a well-formed bundle id of an app that isn't installed no longer gets the "write the .app name" advice.
 - Shortcuts accept `+` as the key (`cmd++`); `cmd+-` works too.
+- The import summary (`--import`) is titled "What this bar does on your Mac", like the editor's list, since it also covers files read and headers sent.
 - Importing a `.zip`: warnings name the item (`élément 3`, `application « Safari », élément 1`) instead of a line number nobody can see, and a warning that only exists in French keeps the French prefix (`attention :`) in an English summary.
 - CONTRIBUTING: every `cargo` command works without activating mise (`mise exec -- cargo …`), the editor step runs in the background, the real test time (about 10 s) and what the `ignored` tests are; `ignore` reasons are in English. The README lists every accepted modifier (`command`, `control`, `maj` were missing).
 - A ready-made bar dropped the `[[source]]` entries used by the app bars it kept, which then showed "⚠ source".
@@ -47,7 +48,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 ### Security
 
 - Import now shows every header of a data source. A `trousseau:` header is spelled out ("Reads your saved password “github-token” and sends it to exfil.example.com"); when that secret goes to a host other than this Mac, the editor preview opens with a warning banner and `--import` refuses without an explicit `--yes` (and still prints the warning with it). The list of what a bar does is built by one exhaustive `match` over every item, action and source field, so a new type can't be forgotten; it also lists image files read outside `icones/`.
-- A command's output (`script`, `commande` source, keychain lookup, curl) and each line from a stdio MCP server are read with a 1 MB cap while reading: past it, the process group is killed and the item shows "⚠ trop long" (the error is logged). `cat /dev/zero` no longer fills memory before the timeout.
+- A command's output (`script`, `commande` source, keychain lookup, curl) and each line from a stdio MCP server are read with a 1 MB cap while reading: past it, the process group is killed and the item (a `script`, or a `texte` bound to a `commande` source) shows "⚠ trop long" (the error is logged). `cat /dev/zero` no longer fills memory before the timeout.
 - An imported bar can only use images from its own archive (`icones/…`): an absolute, `~` or other path (`/etc/passwd`, `~/.ssh/id_rsa`) is dropped, the button falls back to its text or symbol, and the preview says "image ignored: path outside the imported bar". Your own bars keep their paths.
 - Editor: messages from the page that carry a path (`capture`, `importerImage`, `importerBarre`, `exporterVers`) are only followed with the `TACTILE_EDITEUR_JS` driver, inside the temporary folder or the repository; otherwise only the file NSSavePanel just returned can be written.
 
