@@ -167,6 +167,16 @@ pub fn chemin_app(nom: &str) -> Option<String> {
     }
 }
 
+/// Le bundle id d'une app installée (nom, bundle id ou chemin), par LaunchServices : `Finder` et `com.apple.finder` se rejoignent.
+pub fn bundle_app(nom: &str) -> Option<String> {
+    let chemin = chemin_app(nom)?;
+    unsafe {
+        let bundle: *mut AnyObject = msg_send![class!(NSBundle), bundleWithPath: &*objc2_foundation::NSString::from_str(&chemin)];
+        let id: *const objc2_foundation::NSString = if bundle.is_null() { std::ptr::null() } else { msg_send![bundle, bundleIdentifier] };
+        id.as_ref().map(|i| i.to_string())
+    }
+}
+
 /// L'app de ce `.app` tourne-t-elle ? Par son bundle id, comme le point du Dock.
 pub fn app_ouverte(chemin: &str) -> bool {
     unsafe {
@@ -263,7 +273,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "processus d'une session ouverte (Finder) : pas de session sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "needs a logged-in session (Finder): none on a CI runner")]
     fn app_ouverte_selon_ses_processus() {
         assert!(app_ouverte(&chemin_app("com.apple.finder").unwrap()), "le Finder tourne toujours");
         let grapher = std::process::Command::new("/usr/bin/pgrep").args(["-x", "Grapher"]).status().unwrap().success();

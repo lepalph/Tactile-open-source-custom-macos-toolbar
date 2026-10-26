@@ -82,13 +82,33 @@ pub(crate) fn masquer(texte: &str, secrets: &[String]) -> String {
     secrets.iter().filter(|s| !s.is_empty()).fold(texte.to_string(), |t, s| t.replace(s.as_str(), "•••"))
 }
 
-/// Sortie d'une commande, corps HTTP ou texte MCP : un objet ou une liste JSON, sinon le texte, sous `texte`.
+/// Les noms d'une sortie qui n'est pas du JSON : le français et l'alias anglais, comme toute clé.
+pub(crate) const TEXTE: [&str; 2] = ["texte", "text"];
+
+/// Sortie d'une commande, corps HTTP ou texte MCP : un objet ou une liste JSON, sinon le texte, sous `texte` et `text`.
 pub(crate) fn valeur_de_texte(texte: &str) -> Value {
     let texte = texte.trim();
     match serde_json::from_str::<Value>(texte) {
         Ok(v @ (Value::Object(_) | Value::Array(_))) => v,
-        _ => serde_json::json!({ "texte": texte }),
+        _ => Value::Object(TEXTE.iter().map(|n| (n.to_string(), Value::from(texte))).collect()),
     }
+}
+
+/// Les chemins entre accolades d'un gabarit, lus comme `rendre` les lit.
+pub(crate) fn variables(gabarit: &str) -> impl Iterator<Item = &str> {
+    let mut reste = gabarit;
+    std::iter::from_fn(move || {
+        let debut = reste.find('{')?;
+        let fin = reste[debut..].find('}')?;
+        let chemin = reste[debut + 1..debut + fin].trim();
+        reste = &reste[debut + fin + 1..];
+        Some(chemin)
+    })
+}
+
+/// Un chemin qu'aucune valeur ne peut avoir : vide, un segment vide (`a..b`), ou `texte` / `text` à la mauvaise casse.
+pub(crate) fn variable_impossible(chemin: &str) -> bool {
+    chemin.split('.').any(str::is_empty) || (!TEXTE.contains(&chemin) && TEXTE.iter().any(|t| t.eq_ignore_ascii_case(chemin)))
 }
 
 /// La valeur au chemin `a.b.0.c` (un nombre indexe une liste) ; le chemin vide donne toute la valeur.
@@ -262,8 +282,12 @@ mod tests {
         // Une accolade seule reste telle quelle ; une sortie texte se lit par {texte}.
         assert_eq!(rendre("x { y", None, None, &v).texte, "x { y");
         assert_eq!(rendre("{texte} !", None, None, &valeur_de_texte("bonjour\n")).texte, "bonjour !");
+        // Le nom anglais aussi (Sam, p1 : `{text}` affichait « — » alors que --check disait OK).
+        assert_eq!(rendre("{text} !", None, None, &valeur_de_texte("hello")).texte, "hello !");
         assert_eq!(valeur_de_texte(" [1] "), json!([1]));
-        assert_eq!(valeur_de_texte("42"), json!({ "texte": "42" }));
+        assert_eq!(valeur_de_texte("42"), json!({ "texte": "42", "text": "42" }));
+        // Ce qu'aucune valeur ne peut avoir : chemin vide, segment vide, texte / text mal écrit.
+        assert_eq!(variables("{a.b} {Text} {} {a..b} {texte} { text } {TEXTE} x { y").filter(|v| variable_impossible(v)).collect::<Vec<_>>(), ["Text", "", "a..b", "TEXTE"]);
     }
 
     #[test]

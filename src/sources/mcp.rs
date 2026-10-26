@@ -298,7 +298,7 @@ mod tests {
     #[test]
     fn resultats_d_outil() {
         assert_eq!(resultat_outil(&json!({ "content": [{ "type": "text", "text": "{\"heure\":\"12:00\"}" }] })).unwrap(), json!({ "heure": "12:00" }));
-        assert_eq!(resultat_outil(&json!({ "content": [{ "type": "text", "text": "il pleut" }] })).unwrap(), json!({ "texte": "il pleut" }));
+        assert_eq!(resultat_outil(&json!({ "content": [{ "type": "text", "text": "il pleut" }] })).unwrap(), json!({ "texte": "il pleut", "text": "il pleut" }));
         assert_eq!(resultat_outil(&json!({ "content": [], "structuredContent": { "t": 3 }, "resultType": "complete" })).unwrap(), json!({ "t": 3 }));
         assert!(!resultat_outil(&json!({ "isError": true, "content": [{ "type": "text", "text": "ville inconnue" }] })).unwrap_err().relancer());
         assert!(resultat_outil(&json!({ "resultType": "input_required" })).is_err());
@@ -395,7 +395,7 @@ mod tests {
             }
         });
         let mut client = Client::http(&format!("{ancien}/mcp"), vec![], &p, Duration::from_secs(5)).unwrap();
-        assert_eq!(client.appeler("heure", json!({})).unwrap(), json!({ "texte": "midi" }));
+        assert_eq!(client.appeler("heure", json!({})).unwrap(), json!({ "texte": "midi", "text": "midi" }));
         assert!(Client::http("http://example.org/mcp", vec![], &p, Duration::from_secs(1)).is_err());
     }
 }

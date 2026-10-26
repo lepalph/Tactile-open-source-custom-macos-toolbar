@@ -14,23 +14,25 @@ Merci de ton intérêt. Commence par [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md
    mise install
    ```
 
-2. Lance les tests. `CI=1` saute ceux qui changent vraiment la luminosité et le volume. La première compilation prend une minute environ, les tests eux-mêmes à peu près une seconde.
+   `mise install` ne met pas `cargo` dans ton `PATH`. Active mise dans ton shell ([`mise activate`](https://mise.jdx.dev/getting-started.html)) et retire le préfixe, ou garde `mise exec --` devant chaque commande `cargo`, comme ci-dessous.
+
+2. Lance les tests. `CI=1` saute ceux qui demandent le vrai matériel ou une session ouverte (luminosité, volume, dispositions clavier, rendu AppKit) : ils sortent `ignored`, avec leur raison, et c'est normal. La première compilation prend une minute environ, les tests eux-mêmes une dizaine de secondes (ceux des sources MCP et HTTP attendent des délais).
 
    ```
-   CI=1 cargo test
+   CI=1 mise exec -- cargo test
    ```
 
-3. Compile et ouvre l'éditeur sur un fichier d'essai. Il ne prend pas la Touch Bar, et ta vraie barre ne bouge pas.
+3. Compile et ouvre l'éditeur sur un fichier d'essai (créé à l'enregistrement). Il ne prend pas la Touch Bar, et ta vraie barre ne bouge pas. Le `&` te rend le terminal ; ferme la fenêtre quand tu as fini.
 
    ```
-   cargo build --release
-   TACTILE_CONFIG=/tmp/x.toml target/release/tactile --personnaliser
+   mise exec -- cargo build --release
+   TACTILE_CONFIG=/tmp/x.toml target/release/tactile --personnaliser &
    target/release/tactile --verifier exemples/simple.toml
    ```
 
 4. Choisis une [good first issue](https://github.com/lepalph/tactile-touch-bar/labels/good%20first%20issue) et laisse un commentaire pour que personne d'autre ne la prenne. Chacune donne les fichiers à lire, comment tester le changement et quand il est terminé.
 
-5. Fais le changement sur une branche. Lance `CI=1 cargo test` et `cargo clippy --all-targets -- -D warnings`, puis ouvre une demande de fusion ; le gabarit demande le reste. Une question a sa place dans l'issue elle-même, en français ou en anglais.
+5. Fais le changement sur une branche. Lance `CI=1 mise exec -- cargo test` et `mise exec -- cargo clippy --all-targets -- -D warnings`, puis ouvre une demande de fusion ; le gabarit demande le reste. Une question a sa place dans l'issue elle-même, en français ou en anglais.
 
 ## Style
 
@@ -44,7 +46,7 @@ Merci de ton intérêt. Commence par [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md
 
 Écris le test qui décrit le comportement attendu, regarde-le échouer, puis écris le code. Une action se prouve en relisant la valeur après l'avoir changée, puis en restaurant l'état d'origine (voir `src/actions/volume.rs`). `cargo test` doit passer avant toute demande de fusion.
 
-`CI=1 cargo test` : avec `CI` posée, `build.rs` active `cfg(ci)` et les tests qui touchent le matériel (luminosité, volume, batterie, rendu des symboles) sortent `ignored` (`#[cfg_attr(ci, ignore = "…")]`) ; sans, ils changent vraiment la luminosité et le volume, puis les restaurent.
+`CI=1 mise exec -- cargo test` : avec `CI` posée, `build.rs` active `cfg(ci)` et les tests qui touchent le matériel ou une session ouverte (luminosité, volume, batterie, dispositions clavier, rendu des symboles) sortent `ignored` (`#[cfg_attr(ci, ignore = "…")]`, raison écrite en anglais) ; sans, ils changent vraiment la luminosité et le volume, puis les restaurent.
 
 ## Ajouter une action
 

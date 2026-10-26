@@ -246,3 +246,20 @@ mod tests {
         assert!(!en_francais(env(&[]), || None));
     }
 }
+
+/// Le guide de contribution se suit à la lettre (Sam) : `cargo` sans mise activé, l'éditeur qui ne bloque pas la suite.
+#[cfg(test)]
+mod contribuer {
+    #[test]
+    fn commandes_du_guide_marchent_telles_quelles() {
+        for guide in [include_str!("../CONTRIBUTING.md"), include_str!("../CONTRIBUTING.fr.md")] {
+            let code = guide.split("```").skip(1).step_by(2).flat_map(str::lines);
+            for ligne in code {
+                assert!(!ligne.contains("cargo ") || ligne.contains("mise exec -- cargo "), "sans mise activé : {ligne}");
+                let editeur = ["--personnaliser", "--customize"].iter().any(|o| ligne.contains(o));
+                assert!(!editeur || ligne.trim_end().ends_with('&'), "l'éditeur bloque la ligne suivante : {ligne}");
+            }
+            assert!(!guide.contains("about a second") && !guide.contains("à peu près une seconde"));
+        }
+    }
+}
