@@ -467,6 +467,13 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
         }
         e
     };
+    // Avant tout aperçu (donc tout décodage) : une image qui annonce des dimensions géantes est refusée sur son en-tête.
+    for (nom, copie) in &copies {
+        if let Err(e) = crate::barre::controler_image(&copie.to_string_lossy()) {
+            let en = e.replace("image trop grande : ", "image too large: ").replace("maximum", "at most");
+            return Err(nettoyer(tx(format!("logo « {nom} » refusé, {e}"), format!("logo “{nom}” refused, {en}"))));
+        }
+    }
     let mut barre = config::lire(texte).map_err(fr_seul).map_err(nettoyer)?;
     let mut sources = Vec::new();
     let mut absentes = Vec::new();
@@ -752,6 +759,21 @@ mod tests {
         let temporaire = paquet.temporaire.clone().unwrap();
         drop(paquet);
         assert!(!temporaire.exists(), "le dossier temporaire part avec le paquet");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Un logo qui annonce 30000 × 30000 px dans son en-tête : l'archive est refusée à l'ouverture, avant tout aperçu.
+    #[test]
+    fn image_geante_refusee_a_l_import() {
+        let d = dossier_essai("geante");
+        let z = d.join("geante.zip");
+        let toml = b"[[element]]\ntype = \"bouton\"\nimage = \"icones/geante.png\"\n";
+        archive(&z, &[("barre.toml", toml), ("icones/geante.png", &crate::barre::png_annonce(30000, 30000))], None);
+        let avant = crate::barre::memoire_max();
+        let refus = ouvrir(&z).map(|_| ()).unwrap_err();
+        assert_eq!(refus.fr, "logo « icones/geante.png » refusé, image trop grande : 30000 × 30000 px, maximum 4096");
+        assert_eq!(refus.en, "logo “icones/geante.png” refused, image too large: 30000 × 30000 px, at most 4096");
+        assert!(crate::barre::memoire_max() - avant < 64 << 20);
         std::fs::remove_dir_all(&d).unwrap();
     }
 

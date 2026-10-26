@@ -26,7 +26,9 @@ use std::time::Instant;
 use vues::{barre_touch, texte};
 /// Pour le validateur de `config::controler` : il juge comme la barre.
 pub(crate) use elements::{debordement, largeur_barre};
-pub(crate) use vues::{icone_app, image, reduire, symbole};
+pub(crate) use vues::{controler_image, icone_app, image, reduire, symbole};
+#[cfg(test)]
+pub(crate) use vues::{memoire_max, png_annonce};
 
 type Id = *mut AnyObject;
 

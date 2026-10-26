@@ -50,7 +50,7 @@ pub(crate) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
         Some(suite) => format!("{}/{suite}", std::env::var("HOME").unwrap_or_default()),
         None => chemin.to_string(),
     };
-    en_cache(&chemin, (chemin.clone(), gabarit), || reduire(&chemin, gabarit))
+    en_cache(&chemin, (chemin.clone(), gabarit), || reduire(&chemin, gabarit).map_err(|e| eprintln!("tactile : {e}")).ok())
 }
 
 /// L'icône du `.app` à `chemin` (celle du Finder et du Dock), réduite comme une image de fichier et gardée dans le même
@@ -84,17 +84,123 @@ fn en_cache(fichier: &str, cle: (String, bool), creer: impl FnOnce() -> Option<R
 
 /// Lit le fichier et le redessine à `HAUTEUR_IMAGE` × `ECHELLE` ; l'original est relâché aussitôt.
 /// L'éditeur s'en sert aussi pour convertir un SVG, un PDF ou un icns en PNG au même rendu.
-pub(crate) fn reduire(chemin: &str, gabarit: bool) -> Option<Retained<AnyObject>> {
+/// Les dimensions passent d'abord par `controler_image` : rien n'est décodé si l'image est trop grande.
+pub(crate) fn reduire(chemin: &str, gabarit: bool) -> Result<Retained<AnyObject>, String> {
+    controler_image(chemin)?;
+    let illisible = || format!("{chemin} n'est pas une image lisible");
     unsafe {
         let source: Id = msg_send![class!(NSImage), alloc];
-        let source: Retained<AnyObject> = Retained::from_raw(msg_send![source, initWithContentsOfFile: &*texte(chemin)])?;
+        let source: Retained<AnyObject> = Retained::from_raw(msg_send![source, initWithContentsOfFile: &*texte(chemin)]).ok_or_else(illisible)?;
         let taille: NSSize = msg_send![&*source, size];
         if taille.height <= 0.0 || taille.width <= 0.0 {
-            return None;
+            return Err(illisible());
         }
         let points = NSSize::new(taille.width * HAUTEUR_IMAGE / taille.height, HAUTEUR_IMAGE);
-        redessiner(&source, points, NSRect::new(NSPoint::new(0.0, 0.0), points), false, gabarit)
+        // Le rendu est borné aussi pour un SVG ou un PDF (sans taille en pixels) : 40 px de haut, et pas plus de COTE_MAX de large.
+        let largeur = (points.width * ECHELLE).ceil();
+        if largeur > COTE_MAX as f64 {
+            return Err(format!("image trop large : {largeur} × {} px une fois réduite, maximum {COTE_MAX}", HAUTEUR_IMAGE * ECHELLE));
+        }
+        redessiner(&source, points, NSRect::new(NSPoint::new(0.0, 0.0), points), false, gabarit).ok_or_else(illisible)
     }
+}
+
+/// Côté maximal, en pixels, d'une image qu'on accepte de décoder (4096 × 4096 × 4 octets = 64 Mo au pire).
+pub(crate) const COTE_MAX: u64 = 4096;
+
+/// Les dimensions de chaque image du fichier (pages d'un TIFF, images d'un GIF), lues dans son en-tête par ImageIO sans
+/// décoder un pixel, refusées au-delà de `COTE_MAX` : un PNG de quelques octets peut annoncer 30000 × 30000 et faire
+/// allouer 3,6 Go au décodage. À appeler avant tout décodage d'un fichier venu de l'utilisateur ou d'un import ; `reduire`
+/// le fait. Un format vectoriel (SVG, PDF) n'a pas de taille en pixels : `reduire` borne son rendu.
+pub(crate) fn controler_image(chemin: &str) -> Result<(), String> {
+    use std::ffi::c_void;
+    #[link(name = "ImageIO", kind = "framework")]
+    unsafe extern "C" {
+        fn CGImageSourceCreateWithURL(url: *const c_void, options: *const c_void) -> *const c_void;
+        fn CGImageSourceGetType(source: *const c_void) -> *const c_void;
+        fn CGImageSourceGetCount(source: *const c_void) -> usize;
+        fn CGImageSourceCopyPropertiesAtIndex(source: *const c_void, index: usize, options: *const c_void) -> *const c_void;
+    }
+    #[link(name = "CoreFoundation", kind = "framework")]
+    unsafe extern "C" {
+        fn CFRelease(objet: *const c_void);
+    }
+    let trop = |l: u64, h: u64| if l > COTE_MAX || h > COTE_MAX { Err(format!("image trop grande : {l} × {h} px, maximum {COTE_MAX}")) } else { Ok(()) };
+    // ImageIO ne dit rien d'un PNG trop grand pour lui ou sans données : son en-tête IHDR (octets 16 à 24) donne la taille annoncée.
+    let mut entete = [0u8; 24];
+    let png = std::fs::File::open(chemin).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut entete)).is_ok()
+        && entete.starts_with(b"\x89PNG\r\n\x1a\n")
+        && &entete[12..16] == b"IHDR";
+    if png {
+        let mot = |i: usize| u32::from_be_bytes([entete[i], entete[i + 1], entete[i + 2], entete[i + 3]]) as u64;
+        trop(mot(16), mot(20))?;
+    }
+    unsafe {
+        let url: Id = msg_send![class!(NSURL), fileURLWithPath: &*texte(chemin)];
+        let source = CGImageSourceCreateWithURL(url as *const c_void, std::ptr::null());
+        if source.is_null() {
+            return Ok(()); // fichier absent : NSImage ne lira rien non plus
+        }
+        let type_ = CGImageSourceGetType(source) as *const NSString;
+        // Pas de type : pas une image pour ImageIO (SVG, texte), NSImage dira s'il la lit. PDF : vectoriel.
+        let matriciel = type_.as_ref().is_some_and(|t| t.to_string() != "com.adobe.pdf");
+        let mut resultat = Ok(());
+        for i in 0..if matriciel { CGImageSourceGetCount(source) } else { 0 } {
+            let proprietes = CGImageSourceCopyPropertiesAtIndex(source, i, std::ptr::null()) as Id;
+            let cote = |cle: &str| -> Option<u64> {
+                let n: Id = if proprietes.is_null() { proprietes } else { msg_send![proprietes, objectForKey: &*texte(cle)] };
+                if n.is_null() { None } else { Some(msg_send![n, unsignedLongLongValue]) }
+            };
+            let (l, h) = (cote("PixelWidth"), cote("PixelHeight"));
+            if !proprietes.is_null() {
+                CFRelease(proprietes as *const c_void);
+            }
+            resultat = match (l, h) {
+                (Some(l), Some(h)) => trop(l, h),
+                // Une image dont ImageIO ne sait pas lire la taille ne sera pas décodée non plus (sauf le PNG déjà vu).
+                _ if png => Ok(()),
+                _ => Err("image refusée : ses dimensions sont illisibles".to_string()),
+            };
+            if resultat.is_err() {
+                break;
+            }
+        }
+        CFRelease(source);
+        resultat
+    }
+}
+
+/// Un PNG de 45 octets qui annonce `l` × `h` pixels (en-tête IHDR écrit à la main, sans données d'image) :
+/// ce qu'un fichier hostile enverrait pour faire allouer des gigaoctets au décodage.
+#[cfg(test)]
+pub(crate) fn png_annonce(l: u32, h: u32) -> Vec<u8> {
+    fn crc(octets: &[u8]) -> u32 {
+        !octets.iter().fold(!0u32, |c, &o| (0..8).fold(c ^ o as u32, |c, _| if c & 1 == 1 { 0xEDB8_8320 ^ (c >> 1) } else { c >> 1 }))
+    }
+    let morceau = |nom: &[u8], donnees: &[u8]| {
+        let corps = [nom, donnees].concat();
+        [&(donnees.len() as u32).to_be_bytes()[..], &corps, &crc(&corps).to_be_bytes()].concat()
+    };
+    let ihdr = [&l.to_be_bytes()[..], &h.to_be_bytes(), &[8, 6, 0, 0, 0]].concat();
+    [&b"\x89PNG\r\n\x1a\n"[..], &morceau(b"IHDR", &ihdr), &morceau(b"IEND", &[])].concat()
+}
+
+/// Pic de mémoire du processus (octets), pour prouver qu'une image refusée n'a rien fait allouer.
+#[cfg(test)]
+pub(crate) fn memoire_max() -> i64 {
+    #[repr(C)]
+    struct Usage {
+        temps: [i64; 4],
+        max_rss: i64,
+        reste: [i64; 13],
+    }
+    unsafe extern "C" {
+        fn getrusage(qui: i32, usage: *mut Usage) -> i32;
+    }
+    let mut u = Usage { temps: [0; 4], max_rss: 0, reste: [0; 13] };
+    unsafe { getrusage(0, &mut u) };
+    let _ = (u.temps, u.reste);
+    u.max_rss
 }
 
 /// Une image de `points` (à `ECHELLE` pixels par point) où `source` occupe `cadre`, avec le point « ouverte » en bas si `point`.
@@ -252,6 +358,45 @@ mod tests {
         assert_ne!(image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", false), Some(i));
         assert!(image("~/image-qui-nexiste-pas.png", false).is_none());
         assert!(image("/etc/hosts", false).is_none());
+    }
+
+    /// Un PNG qui annonce 30000 × 30000 : refusé sur sa seule en-tête, sans allocation géante (3,6 Go s'il était décodé).
+    #[test]
+    fn image_geante_refusee_avant_decodage() {
+        let d = std::env::temp_dir().join(format!("tactile-geante-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let (geante, normale, svg) = (d.join("geante.png"), d.join("normale.png"), d.join("fine.svg"));
+        std::fs::write(&geante, png_annonce(30000, 30000)).unwrap();
+        std::fs::write(&normale, png_annonce(4096, 64)).unwrap();
+        std::fs::write(&svg, r#"<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1000"/>"#).unwrap();
+        let avant = memoire_max();
+        let message = "image trop grande : 30000 × 30000 px, maximum 4096";
+        assert_eq!(controler_image(&geante.to_string_lossy()), Err(message.into()));
+        assert_eq!(reduire(&geante.to_string_lossy(), false).err().as_deref(), Some(message));
+        assert!(image(&geante.to_string_lossy(), false).is_none());
+        assert!(memoire_max() - avant < 64 << 20, "pic mémoire : +{} Mo", (memoire_max() - avant) >> 20);
+        assert_eq!(controler_image(&normale.to_string_lossy()), Ok(()), "4096 de côté : accepté");
+        assert_eq!(controler_image(&png_dans(&d, "large.png", 4097, 1)), Err("image trop grande : 4097 × 1 px, maximum 4096".into()));
+        assert_eq!(controler_image("/etc/hosts"), Ok(()), "pas une image : NSImage le refusera");
+        assert_eq!(controler_image(&svg.to_string_lossy()), Ok(()), "vectoriel : pas de taille en pixels");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    fn png_dans(d: &std::path::Path, nom: &str, l: u32, h: u32) -> String {
+        std::fs::write(d.join(nom), png_annonce(l, h)).unwrap();
+        d.join(nom).to_string_lossy().into_owned()
+    }
+
+    /// Un SVG très large (1000:1) : le rendu à 40 px de haut ferait 40000 px de large, refusé.
+    #[test]
+    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    fn rendu_vectoriel_borne() {
+        let d = std::env::temp_dir().join(format!("tactile-vectoriel-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let svg = d.join("bande.svg");
+        std::fs::write(&svg, r#"<svg xmlns="http://www.w3.org/2000/svg" width="20000" height="20" viewBox="0 0 20000 20"><rect width="20000" height="20"/></svg>"#).unwrap();
+        assert_eq!(reduire(&svg.to_string_lossy(), false).err().as_deref(), Some("image trop large : 40000 × 40 px une fois réduite, maximum 4096"));
+        std::fs::remove_dir_all(&d).unwrap();
     }
 
     #[test]

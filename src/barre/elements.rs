@@ -349,6 +349,22 @@ mod tests {
         assert!(!image.is_null());
     }
 
+    /// Une image qui annonce 30000 × 30000 px (bouton ou image d'un script JSON, même chemin `Icone::Image`) : repli texte.
+    #[test]
+    fn image_geante_donne_un_bouton_texte() {
+        super::super::preparer_cible();
+        let chemin = std::env::temp_dir().join(format!("tactile-bouton-geante-{}.png", std::process::id()));
+        std::fs::write(&chemin, super::super::png_annonce(30000, 30000)).unwrap();
+        let avant = super::super::memoire_max();
+        let b = bouton(None, Some(Icone::Image(&chemin.to_string_lossy(), false)), 0, false, "fr.palph.tactile.5");
+        let titre: Id = unsafe { msg_send![b, title] };
+        let image: Id = unsafe { msg_send![b, image] };
+        assert_eq!(unsafe { (*(titre as *const objc2_foundation::NSString)).to_string() }, chemin.file_name().unwrap().to_string_lossy());
+        assert!(image.is_null());
+        assert!(super::super::memoire_max() - avant < 64 << 20);
+        std::fs::remove_file(&chemin).unwrap();
+    }
+
     #[test]
     fn debordement_compte_les_elements_caches() {
         let bouton = |texte: Option<&str>, largeur: Option<f64>| Element::Bouton {

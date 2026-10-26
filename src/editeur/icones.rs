@@ -76,7 +76,7 @@ fn copier(source: &Path, dossier: &Path, toujours_png: bool) -> Result<PathBuf, 
     }
     let octets = std::fs::read(source).map_err(|e| format!("impossible de lire {} : {e}", source.display()))?;
     // `reduire` est ce que la barre fait de l'image : s'il échoue, la barre ne l'afficherait pas non plus.
-    let reduite = crate::barre::reduire(&source.to_string_lossy(), false).ok_or_else(|| format!("{} n'est pas une image lisible", source.display()))?;
+    let reduite = crate::barre::reduire(&source.to_string_lossy(), false)?;
     let convertir = toujours_png || A_CONVERTIR.contains(&extension.as_str());
     let stem = source.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
     let cible = dossier.join(format!("{}-{}.{}", nettoyer(sans_hachage(&stem)), hachage(&octets), if convertir { "png" } else { &extension }));
@@ -288,6 +288,24 @@ mod tests {
         let faux = d.join("faux.png");
         std::fs::write(&faux, "pas une image").unwrap();
         assert!(importer(&faux, &d.join("icones")).unwrap_err().contains("lisible"));
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
+    /// Un PNG minuscule qui annonce 30000 × 30000 px : refusé à l'ajout (choisi ou glissé), rien n'est copié ni décodé.
+    #[test]
+    fn image_geante_refusee_a_l_ajout() {
+        let d = dossier_essai("geante");
+        let geante = d.join("geante.png");
+        let octets = crate::barre::png_annonce(30000, 30000);
+        std::fs::write(&geante, &octets).unwrap();
+        let avant = crate::barre::memoire_max();
+        let message = "image trop grande : 30000 × 30000 px, maximum 4096";
+        assert_eq!(importer(&geante, &d.join("icones")).unwrap_err(), message);
+        assert_eq!(importer_en_png(&geante, &d.join("icones")).unwrap_err(), message);
+        assert_eq!(importer_depot("geante.png", &base64(&octets), &d.join("icones")).unwrap_err(), message);
+        assert!(apercu(&geante.to_string_lossy()).is_none());
+        assert!(crate::barre::memoire_max() - avant < 64 << 20);
+        assert!(!d.join("icones").exists());
         std::fs::remove_dir_all(&d).unwrap();
     }
 

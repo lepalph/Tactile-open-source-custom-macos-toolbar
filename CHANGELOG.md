@@ -17,6 +17,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 - Editor: redesigned like macOS System Settings (sidebar, grouped rows, switches, light and dark), suggests the closest symbol for a typo, and `capture` now uses WebKit snapshots that work with the screen locked (`TACTILE_APPARENCE=clair|sombre` forces the theme).
 - The bar follows a saved file in under 300 ms (was up to 1 s): the file is checked every 0.2 s, the new bar is applied right away, and warnings are computed after it.
+- Images (button `image`, script JSON image, logos added or imported) are refused above 4096 × 4096 pixels, read from the file header before any decoding; SVG and PDF are rendered at most 4096 px wide. A tiny PNG announcing 30000 × 30000 px no longer makes the bar allocate gigabytes.
 - Editor: a file dropped in the window is limited to 10 MB, with a clear message (it was unbounded on the Rust side).
 
 ## [0.2.0] - 2026-10-26
