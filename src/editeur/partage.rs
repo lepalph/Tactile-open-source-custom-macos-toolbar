@@ -412,6 +412,10 @@ fn ouvrir_zip(octets: Vec<u8>) -> Result<Paquet, Texte> {
     if archive.len() > FICHIERS_MAX {
         return Err(tx(format!("l'archive contient trop de fichiers : {FICHIERS_MAX} au plus"), format!("the archive has too many files: {FICHIERS_MAX} at most")));
     }
+    // Le crate ne garde qu'une entrée par nom, peut-être pas celle qu'un autre outil montre : deux barre.toml, deux logos.
+    if archive.has_duplicate_names() {
+        return Err(tx("archive refusée : deux entrées portent le même nom", "archive refused: two entries have the same name"));
+    }
     let temporaire = dossier_temporaire()?;
     // Le dossier temporaire part avec le paquet, ou ici en cas de refus.
     let resultat = (|| {
@@ -449,9 +453,6 @@ fn ouvrir_zip(octets: Vec<u8>) -> Result<Paquet, Texte> {
                 return Err(trop_lourd(&fr, &en, max));
             }
             if nom == "barre.toml" {
-                if toml.is_some() {
-                    return Err(tx("archive refusée : deux barre.toml", "archive refused: two barre.toml files"));
-                }
                 toml = Some(String::from_utf8(contenu).map_err(|_| tx("barre.toml n'est pas du texte UTF-8", "barre.toml is not UTF-8 text"))?);
             } else {
                 // Écrit sous un nom vérifié par `nom_d_icone`, dans notre dossier temporaire.
@@ -995,6 +996,18 @@ mod tests {
         assert!(refus(ouvrir(&d)).fr.ends_with("n'est pas un fichier"));
         assert!(refus(ouvrir(&d.join("absent.zip"))).fr.starts_with("impossible de lire"));
         assert_eq!(refus(ouvrir_octets(vec![0xFF, 0xFE, 0], None)).en, "this file is neither a .toml nor a .zip");
+        // Deux entrées au même nom (le crate refuse de l'écrire : le nom de la seconde est changé dans les octets). Le
+        // lecteur n'en garderait qu'une, peut-être pas celle qu'un autre outil montre : toute l'archive est refusée.
+        let png = crate::barre::png_annonce(1, 1);
+        for (nom, autre) in [("barre.toml", "barre.tomX"), ("icones/a.png", "icones/a.pnX")] {
+            let entrees: &[(&str, &[u8])] = if nom == "barre.toml" { &[("barre.toml", SIMPLE), (autre, SIMPLE)] } else { &[("barre.toml", SIMPLE), (nom, &png), (autre, &png)] };
+            archive(&d.join("deux.zip"), entrees, None);
+            let mut octets = std::fs::read(d.join("deux.zip")).unwrap();
+            while let Some(i) = octets.windows(autre.len()).position(|w| w == autre.as_bytes()) {
+                octets[i + autre.len() - 1] = *nom.as_bytes().last().unwrap();
+            }
+            assert_eq!(refus(ouvrir_octets(octets, None)).fr, "archive refusée : deux entrées portent le même nom", "{nom}");
+        }
         assert!(refus(zip("binaire.zip", &[("barre.toml", &[0xFF, 0xFE])])).fr.contains("UTF-8"));
         assert!(refus(zip("rangee.zip", &[("dossier/barre.toml", SIMPLE)])).fr.contains("à sa racine"));
         assert!(refus(ouvrir_octets(b"PK\x03\x04tronque".to_vec(), None)).fr.starts_with("archive illisible"));
