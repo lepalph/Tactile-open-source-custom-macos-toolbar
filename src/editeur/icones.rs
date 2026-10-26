@@ -238,7 +238,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphics session on a CI runner")]
     fn copie_stable_sans_collision() {
         let d = dossier_essai("copie");
         let icones = d.join("icones");
@@ -263,7 +263,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphics session on a CI runner")]
     fn svg_pdf_icns_convertis_en_png_de_40_px() {
         let d = dossier_essai("conversion");
         let svg = d.join("rond.svg");
@@ -342,7 +342,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphics session on a CI runner")]
     fn depot_et_apercu() {
         let d = dossier_essai("depot");
         let png = std::fs::read(importer(Path::new(ICNS), &d.join("a")).unwrap()).unwrap();

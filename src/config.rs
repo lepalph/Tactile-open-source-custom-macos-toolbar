@@ -535,7 +535,7 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
         None => vec![],
     };
     for (i, entete) in egares {
-        c.signaler(false, &[("element", i)], "", format!("cet [[{entete}]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.{entete}]] ?"));
+        c.signaler(false, &[("element", i)], &format!("élément {}", i + 1), format!("cet [[{entete}]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.{entete}]] ?"));
     }
     c.elements(&barre.elements, &mut Vec::new(), "");
     let largeur = crate::barre::largeur_barre(barre.masquer_control_strip);

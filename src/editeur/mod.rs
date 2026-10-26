@@ -1161,7 +1161,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "apps installées et index Spotlight : propres à ce Mac")]
+    #[cfg_attr(ci, ignore = "installed apps and the Spotlight index are specific to this Mac")]
     fn app_installee_ou_non() {
         assert_eq!(chercher_app("Safari"), (true, None, false));
         assert_eq!(chercher_app("safari"), (true, None, false));
@@ -1240,7 +1240,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu de symbole SF : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "SF Symbol rendering: no graphics session on a CI runner")]
     fn un_symbole_inconnu_est_refuse() {
         assert!(glyphe("play.fill").is_some_and(|g| g.starts_with("data:image/png;base64,")));
         assert!(glyphe("truc.machin").is_none());
@@ -1250,7 +1250,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphics session on a CI runner")]
     fn icone_d_app_pour_l_apercu() {
         let safari = icone_app("Safari").unwrap();
         assert!(safari.starts_with("data:image/png;base64,iVBOR"), "{}", &safari[..40]);

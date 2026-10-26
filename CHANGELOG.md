@@ -40,6 +40,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Errors and warnings name the key the way you wrote it (`every`, `template`, `color_by`, `command`, `[[item]]`); a missing field gives both names (`«outil» (ou «tool»)`); a string `template` on a button says to put the template in `text`.
 - `--check` sees the same app written twice (`Finder` and `com.apple.finder`, resolved through LaunchServices), and a well-formed bundle id of an app that isn't installed no longer gets the "write the .app name" advice.
 - Shortcuts accept `+` as the key (`cmd++`); `cmd+-` works too.
+- Importing a `.zip`: warnings name the item (`élément 3`, `application « Safari », élément 1`) instead of a line number nobody can see, and a warning that only exists in French keeps the French prefix (`attention :`) in an English summary.
 - CONTRIBUTING: every `cargo` command works without activating mise (`mise exec -- cargo …`), the editor step runs in the background, the real test time (about 10 s) and what the `ignored` tests are; `ignore` reasons are in English. The README lists every accepted modifier (`command`, `control`, `maj` were missing).
 - A ready-made bar dropped the `[[source]]` entries used by the app bars it kept, which then showed "⚠ source".
 

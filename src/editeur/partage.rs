@@ -597,11 +597,13 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
     });
     let mut paquet = Paquet { barre, commandes: liste, avis: vec![], sources, temporaire };
     // Le validateur partagé avec `--verifier` : une barre inutilisable est refusée, le reste devient un avis.
+    // Situé par élément, pas par ligne : la personne qui importe n'a pas ce fichier sous les yeux (Lise, 0.3).
     for avis in config::controler(&paquet.barre, Some(texte)) {
+        let situe = if avis.lieu.is_empty() { avis.message } else { format!("{} : {}", avis.lieu, avis.message) };
         if avis.grave {
-            return Err(fr_seul(avis.to_string()));
+            return Err(fr_seul(situe));
         }
-        paquet.avis.push(fr_seul(avis.to_string()));
+        paquet.avis.push(fr_seul(situe));
     }
     super::verifier(&paquet.barre.elements).map_err(fr_seul)?;
     for app in &paquet.barre.applications {
@@ -699,7 +701,7 @@ pub fn exporter_cli(cible: &Path, fr: bool) -> i32 {
     match exporter(&barre, original.as_deref(), cible) {
         Ok(export) => {
             for a in &export.avis {
-                eprintln!("{} {}", if fr { "attention :" } else { "warning:" }, a.dans(fr));
+                eprintln!("{} {}", attention(a, fr), a.dans(fr));
             }
             let logos = match (export.logos, fr) {
                 (0, _) => String::new(),
@@ -769,6 +771,11 @@ pub fn importer_cli(fichier: &Path, oui: bool, fr: bool) -> i32 {
     }
 }
 
+/// Le préfixe d'un avis dans la langue de sa phrase : un avis de `config` n'existe qu'en français, il garde « attention : ».
+fn attention(avis: &Texte, fr: bool) -> &'static str {
+    if fr || avis.fr == avis.en { "attention :" } else { "warning:" }
+}
+
 /// Résumé lisible d'une barre à importer : éléments, barres d'application, logos, ce qu'elle lance, avis.
 fn resume(paquet: &Paquet, fichier: &Path, fr: bool) -> String {
     let b = &paquet.barre;
@@ -797,13 +804,13 @@ fn resume(paquet: &Paquet, fichier: &Path, fr: bool) -> String {
     if paquet.commandes.is_empty() {
         lignes.push(if fr { "Elle ne lance aucune commande." } else { "It runs no commands." }.into());
     } else {
-        lignes.push(if fr { "Ce qu'elle peut lancer sur ton Mac :" } else { "What it can run on your Mac:" }.into());
+        lignes.push(if fr { "Ce que cette barre fait sur ton Mac :" } else { "What this bar does on your Mac:" }.into());
         for c in &paquet.commandes {
             lignes.push(format!("  {} · {}{} {}", c.ou.dans(fr), c.quoi.dans(fr), if fr { " :" } else { ":" }, c.valeur));
         }
     }
     for a in &paquet.avis {
-        lignes.push(format!("{} {}", if fr { "attention :" } else { "warning:" }, a.dans(fr)));
+        lignes.push(format!("{} {}", attention(a, fr), a.dans(fr)));
     }
     lignes.join("\n")
 }
@@ -862,7 +869,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(ci, ignore = "rendu AppKit dans un contexte bitmap : pas de session graphique sur un runner de CI")]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphics session on a CI runner")]
     fn aller_retour_zip_avec_deux_logos() {
         let d = dossier_essai("zip");
         // Deux logos dans icones/ de la config d'origine, comme l'éditeur les copie.
@@ -1177,6 +1184,28 @@ mod tests {
         assert_eq!(nom_d_icone(&format!("icones/{}.png", "a".repeat(252))), None, "plus de 255 octets");
     }
 
+    /// Lise (0.3) : « warning: ligne 47 » renvoyait à un fichier que la personne qui importe ne voit pas, en
+    /// mêlant un préfixe anglais à une phrase française.
+    #[test]
+    fn avis_d_un_zip_situes_par_element_dans_une_seule_langue() {
+        let d = dossier_essai("avis-situes");
+        let toml = b"# en-tete\n\n[[element]]\ntype = \"souple\"\n[[element]]\ntype = \"souple\"\n\
+              [[element]]\ntype = \"texte\"\nsource = \"absente\"\n\
+              [[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"lanceur\"\napp = \"AppQuiNexistePasDuTout\"\n\
+              [[element]]\ntype = \"souple\"\n";
+        archive(&d.join("b.zip"), &[("barre.toml", toml)], None);
+        let paquet = ouvrir(&d.join("b.zip")).unwrap();
+        let avis: Vec<&str> = paquet.avis.iter().map(|a| a.fr.as_str()).collect();
+        assert!(avis.iter().all(|a| !a.contains("ligne")), "{avis:?}");
+        assert!(avis.iter().any(|a| a.starts_with("élément 3 : aucune [[source]] ne s'appelle « absente »")), "{avis:?}");
+        assert!(avis.iter().any(|a| a.starts_with("application « Safari », élément 1 : app « AppQuiNexistePasDuTout » introuvable")), "{avis:?}");
+        assert!(avis.iter().any(|a| a.starts_with("élément 4 : cet [[element]] est écrit après un [[application]]")), "{avis:?}");
+        let anglais = resume(&paquet, &d.join("b.zip"), false);
+        assert!(anglais.contains("\nattention : élément 3 : aucune [[source]]"), "{anglais}");
+        assert!(!anglais.contains("warning:"), "un avis en français garde son préfixe français : {anglais}");
+        std::fs::remove_dir_all(&d).unwrap();
+    }
+
     #[test]
     fn resume_dans_les_deux_langues() {
         let paquet = ouvrir_octets(
@@ -1189,11 +1218,11 @@ mod tests {
         let fichier = Path::new("/tmp/b.toml");
         assert_eq!(
             resume(&paquet, fichier, true),
-            "Barre de /tmp/b.toml : 2 éléments, 1 barre d'application (Safari).\nCe qu'elle peut lancer sur ton Mac :\n  Barre principale, élément 1 « Build » · Commande shell : make"
+            "Barre de /tmp/b.toml : 2 éléments, 1 barre d'application (Safari).\nCe que cette barre fait sur ton Mac :\n  Barre principale, élément 1 « Build » · Commande shell : make"
         );
         assert_eq!(
             resume(&paquet, fichier, false),
-            "Bar from /tmp/b.toml: 2 items, 1 app bar (Safari).\nWhat it can run on your Mac:\n  Main bar, item 1 “Build” · Shell command: make"
+            "Bar from /tmp/b.toml: 2 items, 1 app bar (Safari).\nWhat this bar does on your Mac:\n  Main bar, item 1 “Build” · Shell command: make"
         );
         let seul = ouvrir_octets(b"[[element]]\ntype = \"souple\"\n".to_vec(), None).unwrap();
         assert_eq!(resume(&seul, fichier, false), "Bar from /tmp/b.toml: 1 item.\nIt runs no commands.");
