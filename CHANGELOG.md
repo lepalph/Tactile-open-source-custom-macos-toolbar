@@ -20,6 +20,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Editor: Import offers **Add to my bar** next to Replace my bar: items, sources and app bars are merged, and a source whose name is taken is renamed along with the items that use it.
 - Editor: a main menu while the window is open (Edit: Undo, Redo, Cut, Copy, Paste, Select All; File: Close ⌘W; View: Zoom In ⌘+, Zoom Out ⌘−, Actual Size ⌘0, remembered). ⌘C, ⌘V, ⌘X, ⌘A and ⌘Z now work in the fields.
 - Editor: Delete/⌫ on a preview item can be undone (an "Undo" link in the status line, or ⌘Z); keyboard shortcuts are shown under the preview.
+- `--check` (and the editor after saving) warns when a bar runs scripts faster than once a second (more than 2 such scripts, or more than 3 runs per second): a script every 0.3 s costs about 0.4 % CPU on its own.
 
 ### Changed
 
@@ -28,6 +29,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Editor accessibility: focus stays on the same item after every redraw (Enter, symbol choice, Delete); preview items have full accessible names ("App launcher Safari, opens Safari, 2 of 9") and real `aria-selected` values; the symbol grid is a listbox with one tab stop and arrow keys; only short status messages are announced. Contrast meets WCAG AA in light and dark (focus ring, switches off, selected segment, field borders, placeholders, dark-mode links, the missing-app ⚠). Text is sized in rem and the layout holds at 200%.
 - Editor: switching language keeps the message on screen (an error stays an error); import labels are plainer (no internal action names, no line numbers or "bundle id" in warnings, the "can delete files" warning only for bars that run a command).
 - Editor: Replace (ready-made bar) and Go back put the focus on Cancel.
+- Editor: the header fits on one line (Import…, Export… and Go back are in a **⋯** menu next to Save); the window opens taller when the screen allows it, and the Add column scrolls with a fade at the bottom instead of cutting an item.
 
 - Editor: redesigned like macOS System Settings (sidebar, grouped rows, switches, light and dark), suggests the closest symbol for a typo, and `capture` now uses WebKit snapshots that work with the screen locked (`TACTILE_APPARENCE=clair|sombre` forces the theme).
 - The bar follows a saved file in under 300 ms (was up to 1 s): the file is checked every 0.2 s, the new bar is applied right away, and warnings are computed after it.

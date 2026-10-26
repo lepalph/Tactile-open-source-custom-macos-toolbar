@@ -48,7 +48,7 @@ html, body { height: 100%; margin: 0; }
 body {
   font: 0.8125rem/1.38 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
   color: var(--texte); background: var(--fenetre);
-  display: grid; grid-template-rows: auto auto 1fr; grid-template-columns: minmax(0, 1fr);
+  display: grid; grid-template-rows: auto auto minmax(280px, 1fr); grid-template-columns: minmax(0, 1fr);
   -webkit-user-select: none; user-select: none; -webkit-font-smoothing: antialiased;
 }
 input, select, textarea, button { font: inherit; color: inherit; margin: 0; }
@@ -106,6 +106,13 @@ header { display: flex; flex-wrap: wrap; align-items: center; justify-content: s
 .aide { margin-top: 3px; color: var(--texte2); }
 .aide-clavier { margin-top: 8px; font-size: 0.75rem; color: var(--texte2); }
 .outils { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+/* « ⋯ » : les actions rares (importer, exporter, revenir) dans un menu, comme la barre d'outils d'une app Mac */
+button.plus { min-width: 32px; padding: 0 8px; font-size: 1rem; line-height: 1; }
+.menu { margin: 0; inset: auto; padding: 5px; min-width: 220px; border: 1px solid var(--encart-bord); border-radius: 8px; background: var(--encart); color: var(--texte); box-shadow: 0 8px 24px rgb(0 0 0 / 0.18); }
+.menu button { display: block; width: 100%; min-height: 26px; padding: 0 10px; border: 0; border-radius: 5px; background: transparent; text-align: left; }
+.menu button:hover:not(:disabled), .menu button:focus-visible { background: var(--accent); color: #fff; outline: none; }
+.menu button:disabled { color: var(--texte3); }
+.menu hr { margin: 5px 6px; border: 0; border-top: 1px solid var(--filet); }
 .modifie { display: inline-flex; align-items: center; gap: 6px; margin-left: 12px; font-size: 0.75rem; font-weight: 400; color: var(--texte2); letter-spacing: 0; }
 .modifie::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 .modifie[hidden] { display: none; }
@@ -181,6 +188,8 @@ h3 { font-size: 0.8125rem; font-weight: 600; margin: 0 0 8px 2px; }
 main { display: grid; grid-template-columns: minmax(180px, 228px) minmax(0, 1fr); min-height: 0; }
 .palette { background: var(--laterale); border-right: 1px solid var(--filet); padding: 10px 10px 16px; overflow: auto; }
 .palette h2 { padding: 10px 8px 4px; }
+/* Colonne plus haute que la fenêtre : le bas s'estompe tant qu'il reste à défiler, pour ne pas laisser un élément coupé net. */
+.palette.suite { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 36px), transparent); }
 .palette .liste { display: grid; gap: 1px; }
 .palette .liste button { display: flex; align-items: center; gap: 9px; min-height: 32px; padding: 0 8px; border: 0; background: transparent; text-align: left; justify-content: flex-start; border-radius: 6px; }
 .palette .liste button:hover:not(:disabled) { background: var(--survol); }
@@ -299,9 +308,13 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
       <button type="button" data-langue="fr" aria-pressed="true">FR</button>
       <button type="button" data-langue="en" aria-pressed="false">EN</button>
     </div>
-    <button type="button" id="importer" data-i18n="importer"></button>
-    <button type="button" id="exporter" data-i18n="exporter"></button>
-    <button type="button" id="revenir" data-i18n="revenir" disabled></button>
+    <button type="button" id="plus" class="plus" popovertarget="menu-plus" aria-haspopup="menu" data-i18n-label="plusActions">⋯</button>
+    <div id="menu-plus" class="menu" popover role="menu">
+      <button type="button" role="menuitem" id="importer" data-i18n="importer"></button>
+      <button type="button" role="menuitem" id="exporter" data-i18n="exporter"></button>
+      <hr>
+      <button type="button" role="menuitem" id="revenir" data-i18n="revenir" disabled></button>
+    </div>
     <button type="button" id="enregistrer" class="primaire" data-i18n="enregistrer"></button>
   </div>
 </header>
@@ -422,7 +435,7 @@ const T = {
     symboleUtiliser: 'Utiliser {s}', parDefaut: 'par défaut : {v}', largeurAide: 'La barre fait 1004 points de large.',
     soupleAide: 'Prend toute la place libre. Deux espaces souples centrent ce qui se trouve entre eux.',
     appIntrouvable: 'Aucune application « {a} » sur ce Mac.', appProche: 'La plus proche :', appUtiliser: 'Utiliser « {s} »', appConseil: 'Installe-la, ou choisis-en une autre avec Choisir…',
-    importer: 'Importer…', exporter: 'Exporter…',
+    importer: 'Importer…', exporter: 'Exporter…', plusActions: 'Importer, exporter, revenir à la version précédente',
     impTitre: 'Importer « {f} » ?', impTexte: 'Remplacer : elle prend la place de la tienne. Ajouter : ses éléments et ses sources vont à la fin de ta barre. Dans les deux cas, ta barre actuelle reste dans l’historique.',
     impElements: '{n} éléments', impElement: '1 élément', impApps: 'barres d’application : {a}', impApp: 'barre d’application : {a}', impLogos: '{n} logos', impLogo: '1 logo',
     impCmdTitre: 'Ce que cette barre fait sur ton Mac', impCmdAide: 'Lis chaque ligne avant d’accepter : une commande peut tout faire sur ton Mac, y compris effacer des fichiers.',
@@ -495,7 +508,7 @@ const T = {
     symboleUtiliser: 'Use {s}', parDefaut: 'default: {v}', largeurAide: 'The bar is 1004 points wide.',
     soupleAide: 'Takes all the free space. Two flexible spaces center whatever sits between them.',
     appIntrouvable: 'No app called “{a}” on this Mac.', appProche: 'Closest match:', appUtiliser: 'Use “{s}”', appConseil: 'Install it, or pick another one with Choose…',
-    importer: 'Import…', exporter: 'Export…',
+    importer: 'Import…', exporter: 'Export…', plusActions: 'Import, export, go back to the previous version',
     impTitre: 'Import “{f}”?', impTexte: 'Replace: it takes the place of yours. Add: its items and sources go at the end of your bar. Either way, your current bar stays in the history.',
     impElements: '{n} items', impElement: '1 item', impApps: 'app bars: {a}', impApp: 'app bar: {a}', impLogos: '{n} logos', impLogo: '1 logo',
     impCmdTitre: 'What this bar does on your Mac', impCmdAide: 'Read each line before you accept: a command can do anything on your Mac, including deleting files.',
@@ -1486,6 +1499,27 @@ document.addEventListener('drop', ev => {
 });
 
 /* ---------- Haut de page ---------- */
+const palette = document.querySelector('.palette');
+const suitePalette = () => palette.classList.toggle('suite', palette.scrollTop + palette.clientHeight < palette.scrollHeight - 1);
+palette.addEventListener('scroll', suitePalette, { passive: true });
+new ResizeObserver(suitePalette).observe(palette);
+/* Le menu « ⋯ » s'ouvre sous son bouton, aligné à droite ; flèches pour s'y déplacer, un choix le referme. */
+const menuPlus = $('menu-plus');
+menuPlus.addEventListener('toggle', ev => {
+  if (ev.newState !== 'open') return;
+  const r = $('plus').getBoundingClientRect();
+  menuPlus.style.top = (r.bottom + 4) + 'px';
+  menuPlus.style.right = (document.documentElement.clientWidth - r.right) + 'px';
+  menuPlus.querySelector('button:not(:disabled)')?.focus();
+});
+menuPlus.addEventListener('click', ev => { if (ev.target.closest('button')) menuPlus.hidePopover(); });
+menuPlus.addEventListener('keydown', ev => {
+  if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+  ev.preventDefault();
+  const items = [...menuPlus.querySelectorAll('button:not(:disabled)')];
+  const i = items.indexOf(document.activeElement);
+  items[(i + (ev.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length]?.focus();
+});
 $('importer').addEventListener('click', () => { partage = 'import'; envoyer({ type: 'importer' }); });
 $('exporter').addEventListener('click', () => { partage = 'export'; envoyer({ type: 'exporter', barre }); });
 $('masquer').addEventListener('change', ev => { barre.masquer_control_strip = ev.target.checked; changer(); });
@@ -1504,6 +1538,7 @@ document.querySelectorAll('[data-langue]').forEach(b => b.addEventListener('clic
 function traduire() {
   document.documentElement.lang = langue;
   document.querySelectorAll('[data-i18n]').forEach(n => { n.textContent = t(n.dataset.i18n); });
+  document.querySelectorAll('[data-i18n-label]').forEach(n => { n.setAttribute('aria-label', t(n.dataset.i18nLabel)); n.title = t(n.dataset.i18nLabel); });
   document.querySelectorAll('[data-langue]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.langue === langue)));
   envoyer({ type: 'titre', texte: t('titreFenetre') });
   tout();

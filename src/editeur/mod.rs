@@ -932,7 +932,15 @@ pub fn ouvrir() {
             let configuration: Id = msg_send![class!(WKWebViewConfiguration), new];
             let controleur: Id = msg_send![configuration, userContentController];
             let _: () = msg_send![controleur, addScriptMessageHandler: pont, name: &*texte("tactile")];
-            let cadre = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1180.0, 760.0));
+            // Plus haute si l'écran le permet (13 pouces : 1440 × 900 pt), pour que la colonne Ajouter tienne sans défiler.
+            let ecran: Id = msg_send![class!(NSScreen), mainScreen];
+            let libre = if ecran.is_null() {
+                0.0
+            } else {
+                let visible: NSRect = msg_send![ecran, visibleFrame];
+                visible.size.height
+            };
+            let cadre = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(1180.0, (libre - 70.0).clamp(760.0, 860.0)));
             let vue: Id = msg_send![class!(WKWebView), alloc];
             let vue: Id = msg_send![vue, initWithFrame: cadre, configuration: configuration];
             // Une origine `file:` plutôt qu'opaque : localStorage (langue choisie) y est permis.
