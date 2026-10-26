@@ -1,6 +1,7 @@
 mod actions;
 mod barre;
 mod config;
+mod editeur;
 mod menu;
 
 use std::path::PathBuf;
@@ -9,11 +10,11 @@ const AIDE: &str = "Tactile : ta Touch Bar, décrite dans ~/.config/tactile/barr
 
 Usage :
   tactile                        lance la barre (icône dans la barre des menus)
+  tactile --personnaliser        ouvre la fenêtre « Personnaliser ma barre », sans la Touch Bar
   tactile --verifier [fichier]   vérifie un fichier de barre sans toucher la Touch Bar
   tactile --version              affiche la version
   tactile --help                 affiche cette aide
-
-Variables : TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1 (voir CONTRIBUTING.md).
+Variables : TACTILE_CONFIG=fichier, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1 (voir CONTRIBUTING.md).
 Journal : ~/Library/Logs/Tactile.log";
 
 /// Ce que demande la ligne de commande.
@@ -23,6 +24,7 @@ enum Commande {
     Aide,
     Version,
     Verifier(Option<PathBuf>),
+    Personnaliser,
     Inconnue(String),
 }
 
@@ -32,6 +34,7 @@ fn commande(args: &[String]) -> Commande {
         [a] if a == "--help" || a == "-h" => Commande::Aide,
         [a] if a == "--version" => Commande::Version,
         [a] if a == "--verifier" => Commande::Verifier(None),
+        [a] if a == "--personnaliser" => Commande::Personnaliser,
         [a, fichier] if a == "--verifier" => Commande::Verifier(Some(PathBuf::from(fichier))),
         [a, ..] => Commande::Inconnue(a.clone()),
     }
@@ -73,6 +76,8 @@ fn main() {
                 std::process::exit(1);
             }
         },
+        // La fenêtre « Personnaliser ma barre » seule, sans toucher à la Touch Bar.
+        Commande::Personnaliser => return editeur::lancer_seul(),
         Commande::Inconnue(a) => {
             eprintln!("tactile : argument inconnu « {a} »\n\n{AIDE}");
             std::process::exit(2);
@@ -110,6 +115,7 @@ mod tests {
         assert_eq!(commande(&args(&["--version"])), Commande::Version);
         assert_eq!(commande(&args(&["--verifier"])), Commande::Verifier(None));
         assert_eq!(commande(&args(&["--verifier", "x.toml"])), Commande::Verifier(Some("x.toml".into())));
+        assert_eq!(commande(&args(&["--personnaliser"])), Commande::Personnaliser);
         assert_eq!(commande(&args(&["--truc"])), Commande::Inconnue("--truc".into()));
         assert_eq!(commande(&args(&["--help", "x"])), Commande::Inconnue("--help".into()));
     }

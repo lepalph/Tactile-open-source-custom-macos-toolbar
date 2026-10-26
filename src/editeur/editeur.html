@@ -1,0 +1,601 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Personnaliser ma barre</title>
+<style>
+:root {
+  --bg: #ececec; --panneau: #f7f7f7; --champ: #ffffff; --bord: #d2d2d4; --filet: #e3e3e5;
+  --texte: #1d1d1f; --texte2: #65656b; --accent: #0a60ff; --accent-texte: #ffffff;
+  --erreur: #b3261e; --erreur-fond: #fbeae8; --ok: #2f7a3a;
+  --tb-fond: #000; --tb-bouton: #363636; --tb-bouton-survol: #4a4a4a; --tb-texte: #fff;
+  --radius: 6px; --m: 20px;
+  color-scheme: light dark;
+}
+@supports (color: AccentColor) { :root { --accent: AccentColor; } }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #262628; --panneau: #1e1e20; --champ: #2c2c2e; --bord: #3c3c3f; --filet: #333336;
+    --texte: #f2f2f4; --texte2: #a4a4aa; --erreur: #ff6b5e; --erreur-fond: #3a1f1c; --ok: #5fcf72;
+  }
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body {
+  font: 13px/1.45 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
+  color: var(--texte); background: var(--bg);
+  display: grid; grid-template-rows: auto auto 1fr; min-width: 1060px;
+  -webkit-user-select: none; user-select: none;
+}
+input, select, textarea, button { font: inherit; color: inherit; }
+input, select, textarea { -webkit-user-select: text; user-select: text; }
+h1 { font-size: 20px; font-weight: 600; margin: 0; letter-spacing: -0.01em; }
+h2 { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--texte2); margin: 0 0 8px; }
+.aide { margin: 2px 0 0; color: var(--texte2); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+::selection { background: color-mix(in srgb, var(--accent) 30%, transparent); }
+
+/* Boutons de l'interface */
+button { cursor: default; border-radius: var(--radius); border: 1px solid var(--bord); background: var(--champ); min-height: 44px; padding: 0 14px; }
+button:hover { background: color-mix(in srgb, var(--champ) 85%, var(--texte) 15%); }
+button:active { background: color-mix(in srgb, var(--champ) 70%, var(--texte) 30%); }
+button:disabled { opacity: 0.45; }
+button.primaire { background: var(--accent); color: var(--accent-texte); border-color: transparent; font-weight: 600; }
+button.primaire:hover { filter: brightness(0.95); background: var(--accent); }
+button.secondaire { background: transparent; }
+button.lien { border: 0; background: none; color: var(--accent); padding: 0 4px; min-height: 44px; }
+button.lien:hover { background: none; text-decoration: underline; }
+
+/* En-tête */
+header { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--m); padding: 18px var(--m) 10px; }
+.outils { display: flex; gap: 8px; align-items: center; }
+.langues { display: inline-flex; border: 1px solid var(--bord); border-radius: var(--radius); overflow: hidden; }
+.langues button { border: 0; border-radius: 0; min-width: 44px; }
+.langues button + button { border-left: 1px solid var(--bord); }
+.langues button[aria-pressed="true"] { background: var(--texte); color: var(--bg); }
+
+/* Aperçu : la Touch Bar à l'échelle 1 */
+.apercu { padding: 6px var(--m) 14px; border-bottom: 1px solid var(--bord); }
+.scene { display: flex; justify-content: center; align-items: center; gap: 0; height: 60px; }
+.touchbar {
+  width: 1004px; height: 60px; background: var(--tb-fond); border-radius: 8px;
+  display: flex; align-items: center; gap: 8px; padding: 0 8px; position: relative; flex: none;
+  color: var(--tb-texte);
+}
+.touchbar.courte { width: 685px; border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.strip { width: 319px; height: 60px; flex: none; background: #141414; border-radius: 0 8px 8px 0; color: #7a7a7a; font-size: 12px;
+  display: none; align-items: center; justify-content: center; border-left: 1px solid #2a2a2a; }
+.touchbar.courte + .strip { display: flex; }
+.touchbar .vide { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #9a9a9a; font-size: 13px; pointer-events: none; }
+.el { height: 60px; display: flex; align-items: center; flex: none; position: relative; border-radius: 8px; cursor: grab; }
+.el[data-type="souple"] { flex: 1 1 24px; min-width: 24px; }
+.el:focus-visible { outline: none; }
+.el.sel .face, .el:focus-visible .face { outline: 2px solid var(--accent); outline-offset: 2px; }
+.el.avant::before, .el.apres::after { content: ""; position: absolute; top: 8px; bottom: 8px; width: 3px; border-radius: 2px; background: var(--accent); }
+.el.avant::before { left: -6px; } .el.apres::after { right: -6px; }
+.el.glisse { opacity: 0.4; }
+.face { height: 30px; min-width: 56px; padding: 0 14px; border-radius: 6px; background: var(--tb-bouton); color: var(--tb-texte);
+  display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 15px; white-space: nowrap; overflow: hidden; }
+.el:hover .face { background: var(--tb-bouton-survol); }
+.face.plat { background: transparent; }
+.el[data-type="souple"] .face { height: 30px; background: transparent; width: 100%; min-width: 0; padding: 0; }
+.el[data-type="souple"] .face::before { content: "⟷"; color: #5a5a5a; font-size: 14px; }
+.el[data-type="espace"] .face { background: transparent; border: 1px dashed #4a4a4a; min-width: 0; padding: 0; }
+.face.mono { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: #d0d0d0; }
+.sf { display: inline-block; width: 17px; height: 17px; background: currentColor; -webkit-mask: var(--m) center / contain no-repeat; mask: var(--m) center / contain no-repeat; flex: none; }
+.sf.inconnu { width: auto; height: auto; background: none; -webkit-mask: none; mask: none; font-size: 11px; color: #ff8a80; overflow: hidden; text-overflow: ellipsis; }
+.chevron { color: #9a9a9a; font-size: 13px; }
+.bas { display: flex; justify-content: space-between; align-items: center; gap: var(--m); margin-top: 10px; min-height: 44px; }
+.etat { margin: 0; min-height: 20px; flex: 1; }
+.etat.erreur { color: var(--erreur); background: var(--erreur-fond); border: 1px solid color-mix(in srgb, var(--erreur) 40%, transparent); border-radius: var(--radius); padding: 10px 12px; font-weight: 500; }
+.etat.ok { color: var(--ok); }
+.case { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 4px; }
+.case input { width: 16px; height: 16px; accent-color: var(--accent); margin: 0; }
+
+/* Corps : palette + propriétés */
+main { display: grid; grid-template-columns: 240px 1fr; min-height: 0; }
+.palette { background: var(--panneau); border-right: 1px solid var(--bord); padding: 16px; overflow: auto; }
+.palette .liste { display: grid; gap: 6px; margin-bottom: 22px; }
+.palette .liste button { display: flex; align-items: center; gap: 10px; text-align: left; justify-content: flex-start; padding: 0 12px; }
+.palette .liste button .ico { width: 22px; text-align: center; color: var(--texte2); font-size: 15px; flex: none; }
+.proprietes { padding: 16px var(--m) 24px; overflow: auto; }
+.proprietes .ligne { display: grid; grid-template-columns: 170px 1fr; gap: 12px; align-items: center; min-height: 44px; border-bottom: 1px solid var(--filet); padding: 4px 0; }
+.proprietes .ligne.haute { align-items: start; padding-top: 10px; }
+.proprietes label.nom, .proprietes .nom { color: var(--texte2); }
+.proprietes input[type="text"], .proprietes input[type="search"], .proprietes input[type="number"], .proprietes select, .proprietes textarea {
+  width: 100%; max-width: 480px; min-height: 36px; padding: 6px 10px; border: 1px solid var(--bord); border-radius: var(--radius); background: var(--champ);
+}
+.proprietes textarea { font-family: "SF Mono", Menlo, monospace; font-size: 12px; resize: vertical; min-height: 60px; }
+.proprietes input[type="color"] { width: 44px; height: 36px; padding: 2px; border: 1px solid var(--bord); border-radius: var(--radius); background: var(--champ); vertical-align: middle; }
+.proprietes input[type="range"] { width: 240px; accent-color: var(--accent); vertical-align: middle; }
+.cote { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cote .valeur { min-width: 48px; font-variant-numeric: tabular-nums; }
+.entete { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 6px; }
+.entete h2 { margin: 0; font-size: 15px; text-transform: none; letter-spacing: 0; color: var(--texte); }
+.entete .actions { display: flex; gap: 6px; }
+.entete .actions button { min-width: 44px; padding: 0 10px; }
+.grille { display: grid; grid-template-columns: repeat(auto-fill, 44px); gap: 6px; margin-top: 8px; max-width: 480px; }
+.grille button { width: 44px; height: 44px; padding: 0; display: flex; align-items: center; justify-content: center; }
+.grille button[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.grille .sf { width: 20px; height: 20px; }
+.exemple { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 36px; background: var(--tb-fond); color: #fff; border-radius: var(--radius); margin-right: 8px; vertical-align: middle; }
+.sous { margin: 6px 0 0; padding: 0; list-style: none; max-width: 480px; }
+.sous li { display: flex; align-items: center; gap: 8px; min-height: 44px; border-bottom: 1px solid var(--filet); }
+.sous li .quoi { flex: 1; }
+.sous li button { min-height: 36px; padding: 0 10px; }
+.vide-props { color: var(--texte2); max-width: 46ch; margin-top: 40px; }
+.explication { color: var(--texte2); font-size: 12px; margin: 4px 0 0; max-width: 480px; }
+@media (prefers-reduced-motion: no-preference) {
+  .face, button { transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1); }
+}
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1 data-i18n="titre">Personnaliser ma barre</h1>
+    <p class="aide" data-i18n="sousTitre"></p>
+  </div>
+  <div class="outils">
+    <div class="langues" role="group" aria-label="Langue / Language">
+      <button type="button" data-langue="fr" aria-pressed="true">FR</button>
+      <button type="button" data-langue="en" aria-pressed="false">EN</button>
+    </div>
+    <button type="button" id="revenir" class="secondaire" data-i18n="revenir" disabled></button>
+    <button type="button" id="enregistrer" class="primaire" data-i18n="enregistrer"></button>
+  </div>
+</header>
+
+<section class="apercu">
+  <div class="scene">
+    <div class="touchbar" id="barre" role="listbox" aria-label="Touch Bar"></div>
+    <div class="strip" aria-hidden="true" data-i18n="controlStrip"></div>
+  </div>
+  <div class="bas">
+    <p class="etat" id="etat" role="status" aria-live="polite"></p>
+    <label class="case"><input type="checkbox" id="masquer"> <span data-i18n="masquerCS"></span></label>
+  </div>
+</section>
+
+<main>
+  <aside class="palette">
+    <h2 data-i18n="ajouter"></h2>
+    <div class="liste" id="ajouts"></div>
+    <h2 data-i18n="preregles"></h2>
+    <div class="liste" id="preregles"></div>
+  </aside>
+  <section class="proprietes" id="proprietes" aria-live="polite"></section>
+</main>
+
+<script>
+'use strict';
+/* ---------- Textes FR / EN ---------- */
+const T = {
+  fr: {
+    titre: 'Personnaliser ma barre', sousTitre: 'Clique un élément pour le régler, glisse-le pour le déplacer. Enregistrer met ta Touch Bar à jour tout de suite.',
+    enregistrer: 'Enregistrer', revenir: 'Revenir à la version précédente', ajouter: 'Ajouter', preregles: 'Barres toutes faites',
+    simple: 'Simple', musique: 'Musique', developpeur: 'Développeur', controlStrip: 'Bande de boutons d’Apple',
+    masquerCS: 'Cacher la bande de boutons d’Apple, à droite',
+    bouton: 'Bouton', slider: 'Curseur', heure: 'Heure', en_cours: 'Musique en cours', script: 'Résultat d’une commande', espace: 'Espace fixe', souple: 'Espace souple', groupe: 'Groupe',
+    vide: 'Ta barre est vide. Ajoute un élément à gauche, ou pars d’une barre toute faite.',
+    rien: 'Choisis un élément dans la barre pour le régler, ou ajoutes-en un à gauche.',
+    texte: 'Texte', symbole: 'Symbole', couleur: 'Couleur', couleurAuto: 'gris de la barre', largeur: 'Largeur (points)', auto: 'automatique',
+    action: 'Au toucher', appuiLong: 'Appui long (0,5 s)', reglage: 'Réglage', luminosite: 'Luminosité', volume: 'Volume',
+    format: 'Format', formatAide: 'HH = heures, mm = minutes, ss = secondes. Par exemple HH:mm ou HH\'h\'mm.',
+    commande: 'Commande', commandeAide: 'Lancée avec zsh ; la première ligne de sa sortie s’affiche.', intervalle: 'Relancée toutes les (secondes)',
+    contenu: 'Contenu du groupe', ajouterDans: 'Ajouter dans le groupe…', retourGroupe: 'Retour au groupe', regler: 'Régler',
+    supprimer: 'Supprimer', gauche: 'Vers la gauche', droite: 'Vers la droite',
+    chercherSymbole: 'Chercher un symbole (en anglais : play, moon, sun…)', nomSymbole: 'Nom exact', symboleInconnu: 'Ce symbole n’existe pas.', aucunSymbole: 'Aucun symbole',
+    actAucune: 'Rien', actApp: 'Lancer une application…', actUrl: 'Ouvrir une adresse web', actShell: 'Commande shell',
+    actLuminositePlus: 'Luminosité +', actLuminositeMoins: 'Luminosité −', actLuminositeFixe: 'Luminosité fixée à…',
+    actVolumePlus: 'Volume +', actVolumeMoins: 'Volume −', actVolumeFixe: 'Volume fixé à…', actBasculerMuet: 'Couper / rétablir le son',
+    actLecturePause: 'Lecture / pause', actSuivant: 'Morceau suivant', actPrecedent: 'Morceau précédent', actVeille: 'Mettre en veille',
+    actEchap: 'Touche esc', actBarreApple: 'Afficher la barre d’Apple',
+    choisir: 'Choisir…', application: 'Application', adresse: 'Adresse', niveau: 'Niveau',
+    enregistre: 'Enregistré. Ta Touch Bar est à jour.', pasEnregistre: 'Pas enregistré : ', modifie: 'Modifications non enregistrées.', charge: 'Barre chargée, pas encore enregistrée.',
+    titreFenetre: 'Personnaliser ma barre',
+  },
+  en: {
+    titre: 'Customize my bar', sousTitre: 'Click an item to edit it, drag it to move it. Save updates your Touch Bar right away.',
+    enregistrer: 'Save', revenir: 'Go back to the previous version', ajouter: 'Add', preregles: 'Ready-made bars',
+    simple: 'Simple', musique: 'Music', developpeur: 'Developer', controlStrip: 'Apple’s Control Strip',
+    masquerCS: 'Hide Apple’s Control Strip on the right',
+    bouton: 'Button', slider: 'Slider', heure: 'Clock', en_cours: 'Now playing', script: 'Command output', espace: 'Fixed space', souple: 'Flexible space', groupe: 'Group',
+    vide: 'Your bar is empty. Add an item on the left, or start from a ready-made bar.',
+    rien: 'Pick an item in the bar to edit it, or add one on the left.',
+    texte: 'Text', symbole: 'Symbol', couleur: 'Color', couleurAuto: 'bar gray', largeur: 'Width (points)', auto: 'automatic',
+    action: 'On tap', appuiLong: 'Long press (0.5 s)', reglage: 'Setting', luminosite: 'Brightness', volume: 'Volume',
+    format: 'Format', formatAide: 'HH = hours, mm = minutes, ss = seconds. For example HH:mm or h:mm a.',
+    commande: 'Command', commandeAide: 'Run with zsh; the first line of its output is shown.', intervalle: 'Run every (seconds)',
+    contenu: 'Group contents', ajouterDans: 'Add to the group…', retourGroupe: 'Back to the group', regler: 'Edit',
+    supprimer: 'Delete', gauche: 'Move left', droite: 'Move right',
+    chercherSymbole: 'Search symbols (play, moon, sun…)', nomSymbole: 'Exact name', symboleInconnu: 'This symbol does not exist.', aucunSymbole: 'No symbol',
+    actAucune: 'Nothing', actApp: 'Open an app…', actUrl: 'Open a web address', actShell: 'Shell command',
+    actLuminositePlus: 'Brightness +', actLuminositeMoins: 'Brightness −', actLuminositeFixe: 'Set brightness to…',
+    actVolumePlus: 'Volume +', actVolumeMoins: 'Volume −', actVolumeFixe: 'Set volume to…', actBasculerMuet: 'Mute / unmute',
+    actLecturePause: 'Play / pause', actSuivant: 'Next track', actPrecedent: 'Previous track', actVeille: 'Sleep',
+    actEchap: 'Esc key', actBarreApple: 'Show Apple’s bar',
+    choisir: 'Choose…', application: 'App', adresse: 'Address', niveau: 'Level',
+    enregistre: 'Saved. Your Touch Bar is up to date.', pasEnregistre: 'Not saved: ', modifie: 'Unsaved changes.', charge: 'Bar loaded, not saved yet.',
+    titreFenetre: 'Customize my bar',
+  },
+};
+let langue = 'fr';
+try { langue = localStorage.getItem('langue') || (navigator.language.startsWith('fr') ? 'fr' : 'en'); } catch (e) { langue = navigator.language.startsWith('fr') ? 'fr' : 'en'; }
+const t = k => (T[langue][k] ?? T.fr[k] ?? k);
+
+/* ---------- Symboles SF courants (nom Apple) ---------- */
+const SYMBOLES = `apple.logo play.fill pause.fill playpause.fill stop.fill backward.fill forward.fill backward.end.fill forward.end.fill shuffle repeat
+speaker.fill speaker.slash.fill speaker.wave.1.fill speaker.wave.2.fill speaker.wave.3.fill speaker.minus.fill speaker.plus.fill music.note music.note.list headphones mic.fill mic.slash.fill
+sun.max.fill sun.min.fill moon.fill moon.stars.fill sunrise.fill sunset.fill sparkles bolt.fill bolt.slash.fill battery.100 battery.50 battery.25 power lock.fill lock.open.fill
+keyboard keyboard.chevron.compact.down command option control escape delete.left return globe magnifyingglass
+house.fill folder.fill doc.fill doc.text.fill doc.on.doc.fill tray.fill archivebox.fill trash.fill paperclip link
+safari terminal.fill terminal chevron.left.forwardslash.chevron.right curlybraces hammer.fill wrench.and.screwdriver.fill gearshape.fill gear slider.horizontal.3 switch.2
+envelope.fill message.fill bubble.left.fill phone.fill video.fill camera.fill photo.fill paintbrush.fill paintpalette.fill pencil pencil.tip scissors eyedropper
+calendar clock.fill alarm.fill timer stopwatch.fill hourglass bell.fill bell.slash.fill
+star.fill heart.fill bookmark.fill flag.fill tag.fill pin.fill mappin.and.ellipse map.fill location.fill
+person.fill person.2.fill person.crop.circle.fill face.smiling hand.raised.fill hand.thumbsup.fill
+display laptopcomputer desktopcomputer iphone ipad applewatch airpods wifi wifi.slash antenna.radiowaves.left.and.right airplayvideo airplayaudio rectangle.inset.filled
+arrow.left arrow.right arrow.up arrow.down arrow.clockwise arrow.counterclockwise arrow.up.arrow.down arrow.triangle.2.circlepath square.and.arrow.up square.and.arrow.down
+plus minus xmark checkmark checkmark.circle.fill xmark.circle.fill exclamationmark.triangle.fill questionmark.circle.fill info.circle.fill ellipsis ellipsis.circle.fill
+eye.fill eye.slash.fill flame.fill drop.fill leaf.fill snowflake cloud.fill cloud.sun.fill cloud.rain.fill wind thermometer
+cart.fill creditcard.fill bag.fill gift.fill cup.and.saucer.fill fork.knife gamecontroller.fill tv.fill book.fill newspaper.fill graduationcap.fill
+chart.bar.fill chart.pie.fill waveform waveform.path.ecg textformat textformat.size bold italic underline list.bullet text.alignleft
+square.grid.2x2.fill rectangle.grid.1x2.fill circle.fill square.fill triangle.fill hexagon.fill seal.fill shield.fill brain.head.profile`.split(/\s+/).filter(Boolean);
+const ACTIONS_SIMPLES = ['luminosite_plus', 'luminosite_moins', 'volume_plus', 'volume_moins', 'basculer_muet', 'lecture_pause', 'suivant', 'precedent', 'veille', 'echap', 'barre_apple'];
+const CLE_ACTION = { luminosite_plus: 'actLuminositePlus', luminosite_moins: 'actLuminositeMoins', volume_plus: 'actVolumePlus', volume_moins: 'actVolumeMoins',
+  basculer_muet: 'actBasculerMuet', lecture_pause: 'actLecturePause', suivant: 'actSuivant', precedent: 'actPrecedent', veille: 'actVeille', echap: 'actEchap', barre_apple: 'actBarreApple' };
+const ICONES = { bouton: '▢', slider: '⇆', heure: '◴', en_cours: '♪', script: '›_', espace: '⎵', souple: '⟷', groupe: '▣' };
+
+/* ---------- État ---------- */
+let barre = { masquer_control_strip: true, element: [] };
+let sel = null;            // { i } ou { i, j } (sous-élément d'un groupe)
+let modifie = false;
+let aPrecedent = false;
+const glyphes = {};        // nom → data URL, ou null si inconnu
+const demandes = new Set();
+const $ = id => document.getElementById(id);
+const envoyer = m => window.webkit?.messageHandlers?.tactile?.postMessage(JSON.stringify(m));
+window.onerror = (message, source, ligne) => envoyer({ type: 'journal', texte: `${message} (ligne ${ligne})` });
+
+function demanderGlyphes(noms) {
+  const nouveaux = noms.filter(n => n && !(n in glyphes) && !demandes.has(n));
+  if (!nouveaux.length) return;
+  nouveaux.forEach(n => demandes.add(n));
+  envoyer({ type: 'symboles', noms: nouveaux });
+}
+function symbolesDe(elements) {
+  return elements.flatMap(e => [e.symbole, ...(e.element ? symbolesDe(e.element) : [])]).filter(Boolean);
+}
+
+/* ---------- Appels venant de Rust ---------- */
+window.tactile = {
+  charger(b, precedent) {
+    barre = { masquer_control_strip: !!b.masquer_control_strip, element: b.element || [] };
+    aPrecedent = !!precedent; sel = null;
+    modifie = prereglageAttendu;
+    etat(prereglageAttendu ? t('charge') : '');
+    prereglageAttendu = false;
+    demanderGlyphes(symbolesDe(barre.element));
+    tout();
+  },
+  glyphes(map) { Object.assign(glyphes, map); dessinerBarre(); dessinerProprietes(false); },
+  enregistre() { modifie = false; aPrecedent = true; etat(t('enregistre'), 'ok'); boutons(); },
+  erreur(message) { etat(t('pasEnregistre') + message, 'erreur'); },
+  appChoisie(nom) {
+    const e = elem(); if (!e) return;
+    const cible = champActionEnCours || 'action';
+    e[cible] = { shell: `open -a '${nom.replace(/'/g, "'\\''")}'` };
+    changer(); dessinerProprietes(true);
+  },
+};
+let champActionEnCours = null;
+let prereglageAttendu = false;
+
+/* ---------- Modèle ---------- */
+function elem(s = sel) {
+  if (!s) return null;
+  const e = barre.element[s.i];
+  return s.j == null ? e : e?.element?.[s.j];
+}
+function liste(s = sel) { return s && s.j != null ? barre.element[s.i].element : barre.element; }
+function index(s = sel) { return s.j != null ? s.j : s.i; }
+function neuf(type) {
+  switch (type) {
+    case 'bouton': return { type, symbole: 'star.fill' };
+    case 'slider': return { type, reglage: 'volume', symbole: 'speaker.wave.2.fill' };
+    case 'heure': return { type, format: 'HH:mm' };
+    case 'en_cours': return { type, largeur: 250 };
+    case 'script': return { type, commande: 'date +%d/%m', intervalle: 60, largeur: 120 };
+    case 'espace': return { type, largeur: 32 };
+    case 'souple': return { type };
+    case 'groupe': return { type, symbole: 'square.grid.2x2.fill', element: [] };
+  }
+}
+function changer() { modifie = true; etat(t('modifie')); dessinerBarre(); boutons(); }
+function ajouter(type, dansGroupe) {
+  const e = neuf(type);
+  demanderGlyphes([e.symbole]);
+  if (dansGroupe) { const g = elem(); g.element.push(e); sel = { i: sel.i, j: g.element.length - 1 }; }
+  else { barre.element.push(e); sel = { i: barre.element.length - 1 }; }
+  changer(); dessinerProprietes(true);
+}
+function supprimer() {
+  if (!sel) return;
+  liste().splice(index(), 1);
+  sel = sel.j != null ? { i: sel.i } : null;
+  changer(); dessinerProprietes(true);
+}
+function deplacer(delta) {
+  if (!sel) return;
+  const l = liste(), de = index(), a = de + delta;
+  if (a < 0 || a >= l.length) return;
+  [l[de], l[a]] = [l[a], l[de]];
+  sel = sel.j != null ? { i: sel.i, j: a } : { i: a };
+  changer(); dessinerProprietes(true);
+  if (sel.j == null) $('barre').querySelector(`.el[data-i="${a}"]`)?.focus();
+}
+function selectionner(s) { sel = s; dessinerBarre(); dessinerProprietes(true); }
+
+/* ---------- Aperçu ---------- */
+function sf(nom) {
+  if (!nom) return '';
+  const g = glyphes[nom];
+  if (g === null) return `<span class="sf inconnu" title="${t('symboleInconnu')}">${esc(nom)}</span>`;
+  return `<span class="sf" style="--m:url(${g || ''})" role="img" aria-label="${esc(nom)}"></span>`;
+}
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+function heure(format) {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  const h12 = d.getHours() % 12 || 12;
+  let out = '', i = 0;
+  while (i < format.length) {
+    const c = format[i];
+    if (c === "'") { const fin = format.indexOf("'", i + 1); out += fin < 0 ? format.slice(i + 1) : format.slice(i + 1, fin); i = fin < 0 ? format.length : fin + 1; continue; }
+    let n = 1; while (format[i + n] === c) n++;
+    const seq = c.repeat(n);
+    out += { HH: p(d.getHours()), H: d.getHours(), hh: p(h12), h: h12, mm: p(d.getMinutes()), ss: p(d.getSeconds()), a: d.getHours() < 12 ? 'AM' : 'PM',
+      dd: p(d.getDate()), d: d.getDate(), MM: p(d.getMonth() + 1), EEE: d.toLocaleDateString(langue, { weekday: 'short' }), EEEE: d.toLocaleDateString(langue, { weekday: 'long' }),
+      MMM: d.toLocaleDateString(langue, { month: 'short' }), MMMM: d.toLocaleDateString(langue, { month: 'long' }), yyyy: d.getFullYear() }[seq] ?? seq;
+    i += n;
+  }
+  return out;
+}
+function face(e) {
+  const style = e.largeur ? ` style="width:${e.largeur}px;min-width:0"` : '';
+  switch (e.type) {
+    case 'bouton': return `<span class="face"${e.couleur || e.largeur ? ` style="${e.couleur ? `background:${esc(e.couleur)};` : ''}${e.largeur ? `width:${e.largeur}px;min-width:0` : ''}"` : ''}>${sf(e.symbole)}${e.texte ? `<span>${esc(e.texte)}</span>` : ''}${!e.symbole && !e.texte ? '&nbsp;' : ''}</span>`;
+    case 'slider': return `<span class="face" style="width:72px;min-width:0">${sf(e.symbole || (e.reglage === 'luminosite' ? 'sun.max.fill' : 'speaker.wave.2.fill'))}<span class="chevron">›</span></span>`;
+    case 'groupe': return `<span class="face" style="width:72px;min-width:0">${sf(e.symbole)}${e.texte ? `<span>${esc(e.texte)}</span>` : ''}<span class="chevron">›</span></span>`;
+    case 'heure': return `<span class="face plat" style="font-variant-numeric:tabular-nums">${esc(heure(e.format || 'HH:mm'))}</span>`;
+    case 'en_cours': return `<span class="face plat"${style}>▶&nbsp;&nbsp;${langue === 'fr' ? 'Titre' : 'Title'}&nbsp;&nbsp;·&nbsp;&nbsp;${langue === 'fr' ? 'Artiste' : 'Artist'}</span>`;
+    case 'script': return `<span class="face plat mono" style="width:${e.largeur || 120}px;min-width:0">${langue === 'fr' ? 'sortie…' : 'output…'}</span>`;
+    case 'espace': return `<span class="face"${style}></span>`;
+    case 'souple': return `<span class="face"></span>`;
+  }
+}
+function dessinerBarre() {
+  const b = $('barre');
+  b.classList.toggle('courte', !barre.masquer_control_strip);
+  $('masquer').checked = barre.masquer_control_strip;
+  if (!barre.element.length) { b.innerHTML = `<div class="vide">${esc(t('vide'))}</div>`; return; }
+  b.innerHTML = barre.element.map((e, i) => `<div class="el${sel && sel.i === i ? ' sel' : ''}" data-i="${i}" data-type="${e.type}" role="option" aria-selected="${sel && sel.i === i}" tabindex="${sel ? (sel.i === i ? 0 : -1) : (i === 0 ? 0 : -1)}" draggable="true" aria-label="${esc(t(e.type))}${e.texte ? ' ' + esc(e.texte) : ''}">${face(e)}</div>`).join('');
+}
+function tout() { dessinerBarre(); dessinerPalette(); dessinerProprietes(true); boutons(); }
+function boutons() { $('revenir').disabled = !aPrecedent; }
+function etat(texte, classe) { const e = $('etat'); e.textContent = texte || ''; e.className = 'etat' + (classe ? ' ' + classe : ''); }
+
+/* Souris : clic et glisser-déposer natif */
+let glisse = null;
+$('barre').addEventListener('click', ev => { const el = ev.target.closest('.el'); if (el) selectionner({ i: +el.dataset.i }); });
+$('barre').addEventListener('dragstart', ev => {
+  const el = ev.target.closest('.el'); if (!el) return;
+  glisse = +el.dataset.i; el.classList.add('glisse');
+  ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(glisse));
+});
+$('barre').addEventListener('dragend', () => { glisse = null; $('barre').querySelectorAll('.el').forEach(el => el.classList.remove('glisse', 'avant', 'apres')); });
+$('barre').addEventListener('dragover', ev => {
+  if (glisse == null) return;
+  ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
+  $('barre').querySelectorAll('.el').forEach(el => el.classList.remove('avant', 'apres'));
+  const el = ev.target.closest('.el'); if (!el || +el.dataset.i === glisse) return;
+  const r = el.getBoundingClientRect();
+  el.classList.add(ev.clientX < r.left + r.width / 2 ? 'avant' : 'apres');
+});
+$('barre').addEventListener('drop', ev => {
+  if (glisse == null) return;
+  ev.preventDefault();
+  const el = ev.target.closest('.el');
+  let a;
+  if (!el) a = barre.element.length - 1;
+  else { const r = el.getBoundingClientRect(); a = +el.dataset.i + (ev.clientX < r.left + r.width / 2 ? 0 : 1); if (a > glisse) a--; }
+  const [e] = barre.element.splice(glisse, 1);
+  barre.element.splice(a, 0, e);
+  sel = { i: a }; glisse = null;
+  changer(); dessinerProprietes(true);
+});
+/* Clavier dans l'aperçu : flèches pour parcourir, ⌥ flèches pour déplacer, suppr pour retirer */
+$('barre').addEventListener('keydown', ev => {
+  const el = ev.target.closest('.el'); if (!el) return;
+  const i = +el.dataset.i;
+  if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
+    ev.preventDefault();
+    const d = ev.key === 'ArrowLeft' ? -1 : 1;
+    if (ev.altKey) { sel = { i }; deplacer(d); return; }
+    const n = Math.max(0, Math.min(barre.element.length - 1, i + d));
+    selectionner({ i: n }); $('barre').querySelector(`.el[data-i="${n}"]`)?.focus();
+  } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectionner({ i }); }
+  else if (ev.key === 'Backspace' || ev.key === 'Delete') { ev.preventDefault(); sel = { i }; supprimer(); $('barre').querySelector('.el')?.focus(); }
+});
+
+/* ---------- Palette ---------- */
+function dessinerPalette() {
+  $('ajouts').innerHTML = Object.keys(ICONES).map(ty => `<button type="button" data-ajout="${ty}"><span class="ico" aria-hidden="true">${ICONES[ty]}</span>${esc(t(ty))}</button>`).join('');
+  $('preregles').innerHTML = ['simple', 'musique', 'developpeur'].map(n => `<button type="button" data-prereglage="${n}"><span class="ico" aria-hidden="true">★</span>${esc(t(n))}</button>`).join('');
+}
+$('ajouts').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) ajouter(b.dataset.ajout, false); });
+$('preregles').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  prereglageAttendu = true;
+  envoyer({ type: 'prereglage', nom: b.dataset.prereglage });
+});
+
+/* ---------- Propriétés ---------- */
+function actionUI(a) {
+  if (!a) return { mode: 'aucune' };
+  if (typeof a === 'string') return { mode: a };
+  if ('shell' in a) {
+    const m = /^open -a '((?:[^']|'\\'')*)'$/.exec(a.shell) || /^open -a (\S+)$/.exec(a.shell);
+    if (m) return { mode: 'app', valeur: m[1].replace(/'\\''/g, "'") };
+    const u = /^open '(https?:\/\/[^']+)'$/.exec(a.shell);
+    if (u) return { mode: 'url', valeur: u[1] };
+    return { mode: 'shell', valeur: a.shell };
+  }
+  if ('luminosite' in a) return { mode: 'luminosite_fixe', valeur: a.luminosite };
+  if ('volume' in a) return { mode: 'volume_fixe', valeur: a.volume };
+  return { mode: 'shell', valeur: '' };
+}
+function actionModele(mode, valeur) {
+  switch (mode) {
+    case 'aucune': return undefined;
+    case 'app': return valeur ? { shell: `open -a '${valeur.replace(/'/g, "'\\''")}'` } : { shell: 'open -a' };
+    case 'url': return { shell: `open '${(valeur || 'https://').replace(/'/g, '')}'` };
+    case 'shell': return { shell: valeur || '' };
+    case 'luminosite_fixe': return { luminosite: valeur ?? 0.5 };
+    case 'volume_fixe': return { volume: valeur ?? 0.5 };
+    default: return mode;
+  }
+}
+function champAction(cle, label) {
+  const e = elem(), ui = actionUI(e[cle]);
+  const options = [['aucune', t('actAucune')], ['app', t('actApp')], ['url', t('actUrl')], ['shell', t('actShell')],
+    ...ACTIONS_SIMPLES.map(a => [a, t(CLE_ACTION[a])]), ['luminosite_fixe', t('actLuminositeFixe')], ['volume_fixe', t('actVolumeFixe')]];
+  let detail = '';
+  if (ui.mode === 'app') detail = `<div class="cote"><input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div>`;
+  else if (ui.mode === 'url') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || 'https://')}" aria-label="${t('adresse')}" placeholder="https://">`;
+  else if (ui.mode === 'shell') detail = `<input type="text" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('actShell')}" placeholder="open -a Safari" spellcheck="false">`;
+  else if (ui.mode === 'luminosite_fixe' || ui.mode === 'volume_fixe') detail = `<div class="cote"><input type="range" min="0" max="100" step="5" data-action-valeur="${cle}" value="${Math.round((ui.valeur ?? 0.5) * 100)}" aria-label="${t('niveau')}"><span class="valeur">${Math.round((ui.valeur ?? 0.5) * 100)} %</span></div>`;
+  return `<div class="ligne${detail ? ' haute' : ''}"><label class="nom" for="act-${cle}">${label}</label><div><select id="act-${cle}" data-action-mode="${cle}">${options.map(([v, l]) => `<option value="${v}"${v === ui.mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>${detail ? `<div style="margin-top:8px">${detail}</div>` : ''}</div></div>`;
+}
+let rechercheSymbole = '';
+function champSymbole(e) {
+  const nom = e.symbole || '';
+  const q = rechercheSymbole.trim().toLowerCase();
+  const liste = (q ? SYMBOLES.filter(s => s.includes(q)) : SYMBOLES).slice(0, 48);
+  if (nom && !(nom in glyphes)) demanderGlyphes([nom]);
+  return `<div class="ligne haute"><span class="nom" id="lbl-symbole">${t('symbole')}</span><div>
+    <div class="cote"><span class="exemple" aria-hidden="true">${nom ? sf(nom) : '<span style="color:#777">—</span>'}</span>
+      <input type="text" id="symbole-nom" value="${esc(nom)}" aria-label="${t('nomSymbole')}" placeholder="play.fill" spellcheck="false" style="max-width:260px">
+      <button type="button" id="symbole-aucun" class="secondaire">${t('aucunSymbole')}</button></div>
+    ${nom && glyphes[nom] === null ? `<p class="explication" style="color:var(--erreur)">${t('symboleInconnu')}</p>` : ''}
+    <input type="search" id="symbole-recherche" value="${esc(rechercheSymbole)}" placeholder="${esc(t('chercherSymbole'))}" aria-label="${esc(t('chercherSymbole'))}" style="margin-top:10px">
+    <div class="grille" role="listbox" aria-labelledby="lbl-symbole">${liste.map(s => `<button type="button" role="option" data-symbole="${s}" title="${s}" aria-label="${s}" aria-pressed="${s === nom}">${sf(s)}</button>`).join('')}</div>
+  </div></div>`;
+}
+function ligne(label, html, id) { return `<div class="ligne"><label class="nom" for="${id}">${label}</label><div>${html}</div></div>`; }
+function texteChamp(id, cle, valeur, placeholder, aide) {
+  return ligne(t(cle), `<input type="text" id="${id}" data-champ="${cle}" value="${esc(valeur ?? '')}" placeholder="${esc(placeholder || '')}">${aide ? `<p class="explication">${esc(aide)}</p>` : ''}`, id);
+}
+function nombreChamp(cle, valeur, min, step, aide, optionnel) {
+  return ligne(t(cle), `<div class="cote"><input type="number" id="n-${cle}" data-champ="${cle}" data-nombre="${optionnel ? 'opt' : 'req'}" value="${valeur ?? ''}" min="${min}" step="${step}" placeholder="${optionnel ? esc(t('auto')) : ''}" style="max-width:140px">${aide ? `<span class="explication">${esc(aide)}</span>` : ''}</div>`, 'n-' + cle);
+}
+function dessinerProprietes(reconstruire) {
+  const p = $('proprietes');
+  const e = elem();
+  if (!e) { p.innerHTML = `<p class="vide-props">${esc(t('rien'))}</p>`; return; }
+  if (!reconstruire && !p.querySelector('.grille')) return; // seule la grille de symboles dépend des glyphes
+  const focus = document.activeElement?.id;
+  const l = liste(), k = index();
+  let html = `<div class="entete"><h2>${esc(t(e.type))}${sel.j != null ? ` <span class="nom">· ${esc(t('groupe'))}</span>` : ''}</h2>
+    <div class="actions"><button type="button" id="p-gauche" aria-label="${t('gauche')}" title="${t('gauche')}" ${k === 0 ? 'disabled' : ''}>◀</button><button type="button" id="p-droite" aria-label="${t('droite')}" title="${t('droite')}" ${k >= l.length - 1 ? 'disabled' : ''}>▶</button><button type="button" id="p-supprimer">${t('supprimer')}</button></div></div>`;
+  if (sel.j != null) html += `<button type="button" class="lien" id="p-retour">${t('retourGroupe')}</button>`;
+  switch (e.type) {
+    case 'bouton':
+      html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
+        + ligne(t('couleur'), `<div class="cote"><input type="color" id="f-couleur" value="${esc(e.couleur || '#363636')}" aria-label="${t('couleur')}"><label class="case"><input type="checkbox" id="f-couleur-auto" ${e.couleur ? '' : 'checked'}> ${t('couleurAuto')}</label></div>`, 'f-couleur')
+        + nombreChamp('largeur', e.largeur, 20, 4, langue === 'fr' ? 'la barre fait 1004 points' : 'the bar is 1004 points wide', true)
+        + champAction('action', t('action')) + champAction('appui_long', t('appuiLong'));
+      break;
+    case 'slider':
+      html += ligne(t('reglage'), `<select id="f-reglage" data-champ="reglage"><option value="luminosite"${e.reglage === 'luminosite' ? ' selected' : ''}>${t('luminosite')}</option><option value="volume"${e.reglage === 'volume' ? ' selected' : ''}>${t('volume')}</option></select>`, 'f-reglage') + champSymbole(e);
+      break;
+    case 'heure': html += texteChamp('f-format', 'format', e.format, 'HH:mm', t('formatAide')); break;
+    case 'en_cours': html += nombreChamp('largeur', e.largeur, 60, 10, '', true); break;
+    case 'script':
+      html += ligne(t('commande'), `<textarea id="f-commande" data-champ="commande" rows="2" spellcheck="false">${esc(e.commande)}</textarea><p class="explication">${esc(t('commandeAide'))}</p>`, 'f-commande')
+        + nombreChamp('intervalle', e.intervalle, 0.1, 1, '', false) + nombreChamp('largeur', e.largeur, 20, 4, '120', true) + champAction('action', t('action'));
+      break;
+    case 'espace': html += nombreChamp('largeur', e.largeur, 4, 4, '', false); break;
+    case 'souple': html += `<p class="explication">${langue === 'fr' ? 'Prend toute la place libre : deux espaces souples centrent ce qui est entre eux.' : 'Takes all the free space: two flexible spaces center what is between them.'}</p>`; break;
+    case 'groupe':
+      html += texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
+        + `<div class="ligne haute"><span class="nom">${t('contenu')}</span><div><ul class="sous">${e.element.map((s, j) => `<li><span class="ico" aria-hidden="true">${ICONES[s.type]}</span><span class="quoi">${esc(t(s.type))}${s.texte ? ' · ' + esc(s.texte) : s.symbole ? ' · ' + esc(s.symbole) : ''}</span><button type="button" data-sous="${j}">${t('regler')}</button></li>`).join('')}</ul>
+          <select id="f-ajout-groupe" aria-label="${t('ajouterDans')}" style="margin-top:8px"><option value="">${t('ajouterDans')}</option>${['bouton', 'slider', 'heure', 'en_cours', 'script', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select></div></div>`;
+      break;
+  }
+  p.innerHTML = html;
+  if (focus && $(focus)) { const f = $(focus); f.focus(); if (f.setSelectionRange && f.type !== 'number') { const n = f.value.length; try { f.setSelectionRange(n, n); } catch (_) {} } }
+}
+$('proprietes').addEventListener('input', ev => {
+  const e = elem(); if (!e) return;
+  const c = ev.target;
+  if (c.dataset.champ) {
+    if (c.dataset.nombre) { const v = parseFloat(c.value); if (c.dataset.nombre === 'opt' && c.value === '') delete e[c.dataset.champ]; else if (!isNaN(v)) e[c.dataset.champ] = v; }
+    else if (c.value === '' && c.dataset.champ !== 'commande') delete e[c.dataset.champ];
+    else e[c.dataset.champ] = c.value;
+    changer(); return;
+  }
+  if (c.id === 'f-couleur') { e.couleur = c.value; $('f-couleur-auto').checked = false; changer(); return; }
+  if (c.id === 'f-couleur-auto') { if (c.checked) delete e.couleur; else e.couleur = $('f-couleur').value; changer(); return; }
+  if (c.id === 'symbole-nom') { if (c.value.trim()) e.symbole = c.value.trim(); else delete e.symbole; demanderGlyphes([e.symbole]); changer(); dessinerProprietes(true); return; }
+  if (c.id === 'symbole-recherche') { rechercheSymbole = c.value; dessinerProprietes(true); return; }
+  if (c.dataset.actionMode) { e[c.dataset.actionMode] = actionModele(c.value, undefined); if (e[c.dataset.actionMode] === undefined) delete e[c.dataset.actionMode]; changer(); dessinerProprietes(true); return; }
+  if (c.dataset.actionValeur) {
+    const cle = c.dataset.actionValeur, mode = actionUI(e[cle]).mode;
+    const v = c.type === 'range' ? +c.value / 100 : c.value;
+    e[cle] = actionModele(mode, v);
+    if (c.type === 'range') c.parentElement.querySelector('.valeur').textContent = `${c.value} %`;
+    changer();
+  }
+});
+$('proprietes').addEventListener('click', ev => {
+  const e = elem(); if (!e) return;
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.id === 'p-supprimer') supprimer();
+  else if (b.id === 'p-gauche') deplacer(-1);
+  else if (b.id === 'p-droite') deplacer(1);
+  else if (b.id === 'p-retour') selectionner({ i: sel.i });
+  else if (b.id === 'symbole-aucun') { delete e.symbole; changer(); dessinerProprietes(true); }
+  else if (b.dataset.symbole) { e.symbole = b.dataset.symbole; changer(); dessinerProprietes(true); }
+  else if (b.dataset.sous != null) selectionner({ i: sel.i, j: +b.dataset.sous });
+  else if (b.dataset.choisirApp) { champActionEnCours = b.dataset.choisirApp; envoyer({ type: 'choisirApp' }); }
+});
+$('proprietes').addEventListener('change', ev => {
+  if (ev.target.id === 'f-ajout-groupe' && ev.target.value) ajouter(ev.target.value, true);
+});
+
+/* ---------- Haut de page ---------- */
+$('masquer').addEventListener('change', ev => { barre.masquer_control_strip = ev.target.checked; changer(); });
+$('enregistrer').addEventListener('click', () => envoyer({ type: 'enregistrer', barre }));
+$('revenir').addEventListener('click', () => envoyer({ type: 'revenir' }));
+document.addEventListener('keydown', ev => { if ((ev.metaKey || ev.ctrlKey) && ev.key === 's') { ev.preventDefault(); envoyer({ type: 'enregistrer', barre }); } });
+document.querySelectorAll('[data-langue]').forEach(b => b.addEventListener('click', () => { langue = b.dataset.langue; try { localStorage.setItem('langue', langue); } catch (_) {} traduire(); }));
+function traduire() {
+  document.documentElement.lang = langue;
+  document.querySelectorAll('[data-i18n]').forEach(n => { n.textContent = t(n.dataset.i18n); });
+  document.querySelectorAll('[data-langue]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.langue === langue)));
+  envoyer({ type: 'titre', texte: t('titreFenetre') });
+  tout();
+  if (modifie) etat(t('modifie'));
+}
+// L'heure vit sans redessiner la barre : un redessin ferait perdre le focus et le glisser en cours.
+setInterval(() => {
+  barre.element.forEach((e, i) => { if (e.type === 'heure') { const f = $('barre').querySelector(`.el[data-i="${i}"] .face`); if (f) f.textContent = heure(e.format || 'HH:mm'); } });
+}, 1000);
+
+traduire();
+demanderGlyphes(SYMBOLES);
+envoyer({ type: 'pret' });
+</script>
+</body>
+</html>

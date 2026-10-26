@@ -1,7 +1,7 @@
 //! Frappes clavier simulées : `echap`, `{ touche = "cmd+shift+4" }`, `{ keycode = 53 }`. Demande l'autorisation Accessibilité.
 
 use super::Resultat;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::ffi::c_void;
 
 #[link(name = "CoreGraphics", kind = "framework")]
@@ -57,8 +57,8 @@ const NOMMEES: &[(&str, u16)] = &[
 ];
 
 /// Un raccourci lu dans la config : `"cmd+shift+4"`, `"f5"`, `"esc"`. Vérifié à la lecture, résolu à l'appui.
-#[derive(Debug, Clone, PartialEq, Deserialize)]
-#[serde(try_from = "String")]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct Touche {
     /// Dernier mot du raccourci : touche nommée ou caractère seul.
     nom: String,
@@ -86,6 +86,22 @@ impl TryFrom<String> for Touche {
             }
         }
         Err("touche vide".into())
+    }
+}
+
+/// Réécrit le raccourci pour le TOML : `"cmd+shift+4"` (un seul nom par modificateur, dans l'ordre de `MODIFICATEURS`).
+impl From<Touche> for String {
+    fn from(t: Touche) -> String {
+        let mut vus = 0;
+        let mut mots = Vec::new();
+        for (nom, d) in MODIFICATEURS {
+            if t.drapeaux & d != 0 && vus & d == 0 {
+                vus |= d;
+                mots.push(*nom);
+            }
+        }
+        mots.push(&t.nom);
+        mots.join("+")
     }
 }
 

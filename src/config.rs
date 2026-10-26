@@ -1,7 +1,7 @@
-//! Description de la barre, lue depuis ~/.config/tactile/barre.toml.
+//! Description de la barre, lue depuis ~/.config/tactile/barre.toml (ou `TACTILE_CONFIG`).
 
 use crate::actions::Action;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::thread::JoinHandle;
 use std::time::{Duration, SystemTime};
@@ -9,7 +9,7 @@ use std::time::{Duration, SystemTime};
 /// Barre utilisée tant que l'utilisateur n'a pas écrit la sienne.
 const PAR_DEFAUT: &str = include_str!("../exemples/barre.toml");
 
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Barre {
     /// `true` par défaut : toute la largeur pour la barre, sans le Control Strip d'Apple.
@@ -21,7 +21,7 @@ pub struct Barre {
 
 /// Les clés françaises sont la forme canonique ; chaque clé, type, réglage et action accepte
 /// un alias anglais (glossaire dans le README, vérifié par le test `glossaire_du_readme`).
-#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case", tag = "type", deny_unknown_fields)]
 pub enum Element {
     #[serde(alias = "button")]
@@ -106,7 +106,7 @@ pub enum Element {
 }
 
 /// Ce qu'un bouton montre quand il a un symbole (ou une image) et un texte.
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Affichage {
     #[serde(alias = "icon")]
@@ -117,7 +117,7 @@ pub enum Affichage {
     LesDeux,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Reglage {
     #[serde(alias = "brightness")]
@@ -129,9 +129,23 @@ fn vrai() -> bool {
     true
 }
 
+/// `TACTILE_CONFIG=chemin` remplace ~/.config/tactile/barre.toml (essais sans toucher sa vraie barre).
 pub fn chemin() -> PathBuf {
+    if let Some(chemin) = std::env::var_os("TACTILE_CONFIG").filter(|c| !c.is_empty()) {
+        return PathBuf::from(chemin);
+    }
     let maison = std::env::var("HOME").unwrap_or_default();
     PathBuf::from(maison).join(".config/tactile/barre.toml")
+}
+
+/// Le fichier complet tel que l'éditeur l'écrit : un en-tête fixe, puis la barre en TOML.
+pub fn ecrire(barre: &Barre) -> Result<String, String> {
+    let corps = toml::to_string_pretty(barre).map_err(|e| format!("écriture TOML : {e}"))?;
+    Ok(format!(
+        "# Ta barre Tactile, de gauche à droite. Écrite par « Personnaliser ma barre ».\n\
+         # Tu peux aussi la modifier à la main : Tactile la recharge dès qu'elle est enregistrée.\n\
+         # Les types d'éléments et les actions sont décrits dans le README.\n\n{corps}"
+    ))
 }
 
 pub fn lire(texte: &str) -> Result<Barre, String> {
@@ -236,6 +250,68 @@ fn traduire(message: &str) -> String {
         })
         .collect()
 }
+
+/// Une barre qui exerce chaque nouveauté de la 0.2 (dont ce que l'éditeur ne sait pas éditer : image, keycode).
+#[cfg(test)]
+pub(crate) const BARRE_COMPLETE: &str = r##"
+[[element]]
+type = "bouton"
+texte = "Pr"
+image = "~/premiere.png"
+gabarit = true
+couleur = "#222222"
+couleur_texte = "#FFFFFF"
+taille = 13
+affichage = "les_deux"
+largeur = 90
+action = { touche = "cmd+shift+4" }
+appui_long = { keycode = 53 }
+
+[[element]]
+type = "bouton"
+symbole = "safari"
+action = { url = "https://example.org" }
+
+[[element]]
+type = "bouton"
+texte = "Figma"
+action = { app = "Figma" }
+
+[[element]]
+type = "bouton"
+texte = "Pause"
+action = { applescript = "tell application \"Music\" to playpause" }
+
+[[element]]
+type = "bouton"
+texte = "30 %"
+action = { luminosite = 0.3 }
+appui_long = { volume = 0.5 }
+
+[[element]]
+type = "script"
+commande = "uptime"
+intervalle = 2
+delai = 1.5
+largeur = 120
+action = "echap"
+
+[[element]]
+type = "groupe"
+texte = "Export"
+largeur = 100
+  [[element.element]]
+  type = "batterie"
+  symbole = false
+  largeur = 80
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "espace"
+largeur = 10
+"##;
 
 #[cfg(test)]
 mod tests {
@@ -709,6 +785,32 @@ symbole = "speaker.wave.2.fill"
         assert_eq!(barre.elements[0], Element::Groupe { texte: Some("Export".into()), symbole: None, largeur: Some(100.0), elements: vec![] });
         assert_eq!(barre.elements[1], Element::Batterie { symbole: None, largeur: None });
         assert_eq!(barre.elements[2], Element::Batterie { symbole: Some(false), largeur: Some(80.0) });
+    }
+
+    #[test]
+    fn aller_retour_toml() {
+        for texte in [
+            PAR_DEFAUT,
+            include_str!("../exemples/barre.en.toml"),
+            include_str!("../exemples/claude-vocal.toml"),
+            include_str!("../exemples/simple.toml"),
+            include_str!("../exemples/developpeur.toml"),
+            BARRE_COMPLETE,
+        ] {
+            let barre = lire(texte).unwrap();
+            let ecrit = ecrire(&barre).unwrap();
+            assert_eq!(lire(&ecrit), Ok(barre), "{ecrit}");
+        }
+    }
+
+    #[test]
+    fn chemin_suit_tactile_config() {
+        // Lue à chaque appel : posée puis retirée, sans effet sur les autres tests.
+        unsafe { std::env::set_var("TACTILE_CONFIG", "/tmp/essai-tactile/barre.toml") };
+        let essai = chemin();
+        unsafe { std::env::remove_var("TACTILE_CONFIG") };
+        assert_eq!(essai, PathBuf::from("/tmp/essai-tactile/barre.toml"));
+        assert!(chemin().ends_with(".config/tactile/barre.toml"));
     }
 
     #[test]

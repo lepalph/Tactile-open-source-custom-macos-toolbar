@@ -32,6 +32,7 @@ L'icône de la barre des menus donne accès à tout :
 
 | Entrée | Effet |
 |---|---|
+| Personnaliser ma barre… | Ouvre la fenêtre de réglage (ci-dessous) : pas besoin de toucher au fichier. |
 | Afficher ma barre | Remet ta barre (si elle a disparu, c'est ici). |
 | Barre d'Apple | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la tienne. |
 | Ouvrir la configuration | Ouvre ton fichier de barre (il est créé s'il n'existe pas). |
@@ -39,7 +40,21 @@ L'icône de la barre des menus donne accès à tout :
 | Lancer au démarrage | Tactile s'ouvre avec ta session. |
 | Quitter Tactile | Rend la barre d'Apple et ferme l'app. |
 
-## Personnaliser ta barre
+## Personnaliser ma barre
+
+Dans le menu, choisis **Personnaliser ma barre…**. La fenêtre montre ta Touch Bar en haut, à sa vraie taille.
+
+![La fenêtre Personnaliser ma barre, avec la barre Musique](docs/editeur-musique.png)
+
+- À gauche, **Ajouter** : un clic ajoute un bouton, un curseur, l'heure, la musique en cours, le résultat d'une commande, un espace ou un groupe. Les trois **barres toutes faites** (Simple, Musique, Développeur) remplacent ta barre par un modèle que tu peux ensuite retoucher.
+- Dans l'aperçu, clique un élément pour le régler, glisse-le pour le déplacer. Au clavier : flèches pour passer d'un élément à l'autre, ⌥ + flèches pour le déplacer, suppr pour le retirer.
+- À droite, les réglages de l'élément choisi : texte, symbole (cherche dans la liste, ou tape le nom exact d'un symbole SF), couleur, largeur, et ce qui se passe au toucher : lancer une application (le bouton **Choisir…** ouvre ton dossier Applications), ouvrir une adresse web, une commande, ou une action système (luminosité, volume, lecture…). Un appui long peut faire autre chose.
+- **Enregistrer** écrit le fichier et ta Touch Bar change dans la seconde. Si quelque chose cloche (un symbole qui n'existe pas, une couleur mal écrite), rien n'est écrit et la fenêtre te dit quoi corriger. **Revenir à la version précédente** restaure la barre d'avant le dernier enregistrement.
+- FR / EN en haut à droite ; la langue du Mac est prise par défaut.
+
+La fenêtre écrit le même fichier `~/.config/tactile/barre.toml` que ci-dessous, avec un bref en-tête : tu peux passer de l'une à l'autre. Pour l'ouvrir seule, sans la barre : `tactile --personnaliser`.
+
+## Personnaliser ta barre à la main
 
 Dans le menu, choisis **Ouvrir la configuration**. Le fichier `~/.config/tactile/barre.toml` s'ouvre ; chaque bloc `[[element]]` est un élément de la barre, de gauche à droite. Enregistre : la barre change dans la seconde.
 
@@ -166,7 +181,7 @@ Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La trans
 |---|---|
 | macOS refuse d'ouvrir Tactile | Clic droit sur l'app → Ouvrir, une fois. |
 | Ma barre a disparu, je vois celle d'Apple | Touche l'icône ✳ dans la barre d'Apple, ou menu → Afficher ma barre. |
-| Ma modification n'apparaît pas | Il y a une erreur dans le fichier : un élément rouge « ⚠ config ligne N » le dit dans la barre, et menu → Voir le journal donne le détail. `tactile --verifier` vérifie le fichier depuis un terminal. |
+| Ma modification n'apparaît pas | Il y a une erreur dans le fichier : un élément rouge « ⚠ config ligne N » le dit dans la barre, et menu → Voir le journal donne le détail. Ouvre **Personnaliser ma barre…** et enregistre : l'erreur s'affiche dans la fenêtre. `tactile --verifier` vérifie le fichier depuis un terminal. |
 | Un élément de la fin a disparu | La barre déborde : le journal dit combien d'éléments sont cachés. Réduis des `largeur` ou retire un élément. |
 | Un `script` reste vide | Son erreur est dans le journal (code de retour, stderr, « tué après 5 s »). Lancé depuis le Finder, le PATH ne contient pas `/opt/homebrew/bin` : écris le chemin complet des outils. |
 | La musique en cours reste vide | Installe `media-control` (`brew install media-control`) ; il faut aussi que quelque chose joue. |

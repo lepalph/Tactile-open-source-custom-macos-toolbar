@@ -6,6 +6,7 @@ Ce document sert à reprendre le code : où est quoi, comment ajouter quelque ch
 
 ```
 main.rs
+ ├─ --personnaliser → editeur::lancer_seul()   la fenêtre de réglage seule, sans Touch Bar (voir plus bas)
  ├─ config::charger()          lit ~/.config/tactile/barre.toml (ou la barre par défaut)
  ├─ config::surveiller()       fil qui relit le fichier quand sa date change, envoie la nouvelle barre par un canal
  └─ barre::lancer()            app AppKit sans icône dans le Dock
@@ -41,7 +42,10 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `src/barre/vues.rs` | Outils AppKit sans état (texte, symbole SF, image de fichier, couleur, style du titre, largeur, barre). |
 | `src/barre/plateau.rs` | Icône ✳ du Control Strip. |
 | `src/menu.rs` | Icône de la barre des menus, lancement au démarrage (`SMAppService`). |
-| `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire. `barre.en.toml` : la même avec les alias anglais (test `alias_anglais_donnent_la_meme_barre`). |
+| `src/editeur/mod.rs` | Fenêtre « Personnaliser ma barre » : NSWindow + WKWebView, pont JS ⇄ Rust, écriture et vérification du fichier. |
+| `src/editeur/editeur.html` | La page de l'éditeur (HTML, CSS et JS dans un seul fichier, embarqué par `include_str!`, sans réseau). |
+| `exemples/barre.toml` | Barre par défaut, embarquée dans le binaire ; préréglage « Musique » de l'éditeur. `barre.en.toml` : la même avec les alias anglais (test `alias_anglais_donnent_la_meme_barre`). |
+| `exemples/simple.toml`, `exemples/developpeur.toml` | Les deux autres préréglages de l'éditeur. |
 | `scripts/empaqueter.sh` | `Tactile.app` universelle signée ad hoc + `Tactile.zip`. |
 
 ## Recettes
@@ -63,6 +67,19 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 ### Ajouter une entrée au menu
 
 `src/menu.rs` : une méthode dans `TactileMenu` (`define_class!`), puis un `ajouter(menu, "Libellé", cible, Some(sel!(methode:)))` dans `installer`.
+
+## L'éditeur « Personnaliser ma barre »
+
+Une `NSWindow` dont la vue de contenu est une `WKWebView` ; la page est `src/editeur/editeur.html`, chargée par `loadHTMLString:baseURL:` (base `file:///`, pour que `localStorage` garde la langue choisie). Tout passe par deux canaux :
+
+- **JS → Rust** : `window.webkit.messageHandlers.tactile.postMessage(JSON)`, reçu par `TactileEditeur` (`userContentController:didReceiveScriptMessage:`). Messages : `pret` (la page est chargée), `enregistrer { barre }`, `revenir`, `prereglage { nom }`, `symboles { noms }`, `choisirApp`, `titre { texte }`, `journal { texte }`, `capture { chemin }`.
+- **Rust → JS** : `evaluateJavaScript:` sur `window.tactile` : `charger(barre, aPrecedent)`, `glyphes({ nom: dataURL | null })`, `enregistre()`, `erreur(texte)`, `appChoisie(nom)`.
+
+La barre circule en JSON avec les mêmes noms que le TOML (`serde_json` sur `config::Barre`, qui dérive `Serialize`). À l'enregistrement, Rust convertit le JSON en `Barre`, écrit le TOML (`config::ecrire`, en-tête fixe + `toml::to_string_pretty`), le **relit** avec `config::lire`, puis `verifier` refuse ce que la barre ne saurait pas afficher (symbole SF inconnu, couleur hors `#RRGGBB`, intervalle < 0,1 s). Seulement alors le fichier est écrit, l'ancien devenant `barre.toml.precedent` ; « Revenir à la version précédente » échange les deux. La barre se recharge par la surveillance habituelle du fichier : l'éditeur ne parle jamais à `barre::`.
+
+Les symboles SF n'existent pas dans le web : Rust les rend en PNG (`NSImage imageWithSystemSymbolName:` → `TIFFRepresentation` → `NSBitmapImageRep`), les envoie en data URL, et la page les affiche en `mask-image` sur `currentColor`. Un nom inconnu renvoie `null` : la page le signale et l'enregistrement le refuse (un symbole inconnu fait planter la barre, cf. SYNTHESE A1).
+
+La page suit le régime « Opérer » du skill ui-ux-director : police système, neutres macOS, un seul accent (`AccentColor`), aperçu à l'échelle 1 (1004 × 60 pt, 685 avec le Control Strip), cibles ≥ 44 px, tout faisable au clavier, clair et sombre selon le système.
 
 ## API privées utilisées
 
@@ -102,6 +119,8 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 - `scripts/verifier.sh` : la vérification complète. Lance Tactile avec `TACTILE_AUTOTEST=1`, qui actionne chaque contrôle par le même chemin qu'un doigt (`performClick:` sur le vrai bouton, message `glisse:` pour les sliders) et contrôle l'effet réel : sous-barres, luminosité et volume relus puis restaurés, barre d'Apple et retour par ✳, Claude vocal qui démarre et s'arrête, lecture/pause. Il capture la Touch Bar à chaque étape (`target/verification/`) et compare chaque capture à l'écran attendu (étapes 20-21 : l'élément rouge « ⚠ config ligne 6 » apparaît puis disparaît ; 22-25 : barre riche verte). Un écran noir (Touch Bar inactive) est signalé comme non vérifiable, jamais comme réussi : touche le trackpad pendant la vérification.
 - `cargo test` : config, ligne de commande, parsing des médias, symbole SF inconnu, débordement, scripts (délai avec `sleep 30`, stderr, barre remplacée), et luminosité / volume réels (valeur changée, relue, restaurée). Avec `CI` défini, les tests matériels sortent tout de suite.
 - `tactile --verifier [fichier]` : lit un fichier de barre et dit « OK : n éléments » ou l'erreur avec sa ligne, sans toucher la Touch Bar.
+- `TACTILE_CONFIG=chemin` remplace `~/.config/tactile/barre.toml` pour tout le programme (lecture, surveillance, éditeur) : indispensable pour essayer l'éditeur sans toucher à sa vraie barre, par exemple `TACTILE_CONFIG=/tmp/essai.toml target/release/tactile --personnaliser`. `--personnaliser` n'ouvre que la fenêtre : ni Touch Bar, ni icône de menu.
+- `TACTILE_EDITEUR_JS=fichier.js` : script évalué dans la page de l'éditeur une fois la config chargée ; avec le message `capture { chemin }` (PNG de la fenêtre, pris par l'app elle-même : `screencapture` demanderait l'autorisation d'enregistrement de l'écran), c'est ainsi que les captures `docs/editeur-*.png` sont faites. Écran verrouillé = capture blanche.
 - `TACTILE_OUVRIR=k target/release/tactile` présente directement la sous-barre `k` (1 = premier slider ou groupe) : utile pour la capturer.
 - `TACTILE_MASQUER=1` réduit la barre 2 s après le lancement ; `TACTILE_RETOUR=1` la ramène à 4 s comme un toucher sur ✳.
 - Après une réduction, l'icône ✳ doit être réaffichée (`plateau::montrer_icone`) : le système l'oublie quand une barre système est présentée.
