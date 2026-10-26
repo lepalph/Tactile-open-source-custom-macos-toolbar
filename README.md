@@ -1,124 +1,169 @@
-# Tactile
+<p align="center">
+  <img src="assets/icone-1024.png" width="96" alt="Tactile app icon">
+</p>
 
-**Une Touch Bar à ton goût, gratuite et open source.** Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : boutons, curseurs de luminosité et de volume, musique en cours, heure, commandes à toi. Tu passes de ta barre à celle d'Apple d'un toucher.
+<h1 align="center">Tactile</h1>
 
-![La barre par défaut de Tactile](docs/barre.png)
+<p align="center">
+  <strong>A free, open-source Touch Bar for your MacBook Pro, described in a small text file or set up in a window.</strong>
+</p>
 
-Au repos, Tactile consomme 0,5 % de CPU et 13 Mo de mémoire (mesuré). L'app est écrite en Rust et tourne nativement sur les Mac Intel comme Apple Silicon. Elle est sous licence MIT, sans compte, et n'envoie aucune donnée.
+<p align="center">
+  <a href="https://github.com/lepalph/tactile-touch-bar/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/lepalph/tactile-touch-bar/ci.yml?branch=main&label=CI" alt="CI status"></a>
+  <a href="https://github.com/lepalph/tactile-touch-bar/releases/latest"><img src="https://img.shields.io/github/v/release/lepalph/tactile-touch-bar?label=release" alt="Latest release"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/macOS-13%2B%20%C2%B7%20Intel%20%26%20Apple%20Silicon-lightgrey" alt="macOS 13 or later, Intel and Apple Silicon">
+</p>
 
-## Compatibilité
+<p align="center">🇫🇷 <a href="README.fr.md">Lire en français</a></p>
+
+Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, brightness and volume sliders, the track that's playing, a clock, your own commands. One tap switches between your bar and Apple's.
+
+![Tactile's default bar](docs/barre.png)
+
+![The "Customize my bar" window, with the Music bar loaded](docs/editeur-musique.png)
+
+## Why Tactile
+
+If you have used [BetterTouchTool](https://folivora.ai) or [MTMR](https://github.com/Toxblh/MTMR), you know the idea. Tactile does less, on purpose:
+
+- It's free and MIT licensed, with no license to renew and no account, and it sends nothing anywhere. BetterTouchTool is a paid app that also handles gestures, window snapping and more; Tactile only does the Touch Bar.
+- It's small. The bar is native Rust and runs no Electron or web runtime. With the default bar it idles at 0.0 to 0.2 % CPU and 14 MB of memory (measured with `top` on a 13-inch M1 running macOS 15.8). The v0.1.0 download is a 1 MB zip.
+- Your bar is a text file you can keep in version control: `~/.config/tactile/barre.toml`. Save it and the bar updates within a second. If you make a mistake, your current bar stays and the error tells you which line to fix.
+- If you'd rather not edit a file, the "Customize my bar" window shows your Touch Bar at real size, lets you drag items around, and writes the same file.
+- A group or a slider opens a real sub-bar with a ✕ to close it. MTMR uses popovers, which don't open in a system-wide bar ([why](docs/DECISIONS.md)).
+
+## Compatibility
 
 | | |
 |---|---|
-| Mac | MacBook Pro avec Touch Bar, Intel (2016 à 2020) ou Apple Silicon (M1 et M2, 13 pouces) |
-| macOS | 13 Ventura ou plus récent |
-| Vérifié sur | MacBook Pro M1 13 pouces, macOS 15.8. La version Intel a été testée sous Rosetta, pas encore sur un vrai Mac Intel : tes retours sont bienvenus. |
+| Mac | MacBook Pro with a Touch Bar: Intel (2016 to 2020) or Apple Silicon (M1 and M2, 13-inch) |
+| macOS | 13 Ventura or later |
+| Tested on | 13-inch M1 MacBook Pro, macOS 15.8. The Intel build has only been tested under Rosetta, not on a real Intel Mac yet; reports are welcome. |
 
-## Installation
+The app is a universal binary (Apple Silicon and Intel in one `Tactile.app`).
 
-1. Télécharge `Tactile.zip` dans les [Releases](../../releases/latest) et décompresse-le.
-2. Glisse `Tactile.app` dans **Applications**.
-3. Premier lancement : **clic droit sur Tactile.app → Ouvrir**, puis **Ouvrir**. L'app n'est pas notarisée par Apple ; un double-clic seul est refusé la première fois.
-4. Ta Touch Bar change, et une icône apparaît dans la barre des menus, en haut de l'écran.
+## Install
 
-Facultatif :
+1. Download `Tactile.zip` from the [latest release](https://github.com/lepalph/tactile-touch-bar/releases/latest) and unzip it.
+2. Drag `Tactile.app` into **Applications**.
+3. Open it once by hand. The app isn't notarized by Apple, so macOS blocks the first launch:
+   - **macOS 15 Sequoia and later:** double-click Tactile. macOS says it "could not verify" the app; click **Done** (not Move to Trash). Open **System Settings → Privacy & Security**, scroll to the bottom, click **Open Anyway** and confirm with Touch ID or your password. You only do this once.
+   - **macOS 13 and 14:** right-click `Tactile.app` → **Open**, then **Open** again.
+   - **Or, from Terminal, on any version:** `xattr -d com.apple.quarantine /Applications/Tactile.app`, then open the app normally.
+4. Your Touch Bar changes, and an icon appears in the menu bar at the top of the screen.
 
-- Pour la musique en cours : `brew install media-control` (voir [pourquoi](#pourquoi-media-control)).
-- Pour les touches simulées (actions `echap`, `touche`, `keycode`), autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité.
+Why not notarized: notarization needs a paid Apple developer account, which this project doesn't have. The app is signed ad hoc, and each new release lists the SHA-256 of the zip.
 
-## Le menu de Tactile
+Optional:
 
-L'icône de la barre des menus donne accès à tout :
+- To show the track that's playing: `brew install media-control` ([why](#why-media-control)).
+- For simulated keys (the `echap`, `touche` and `keycode` actions), allow Tactile in **System Settings → Privacy & Security → Accessibility**.
 
-| Entrée | Effet |
+Tactile asks for nothing else at launch. The microphone prompt only appears if you install the [Claude voice extra](#claude-voice-extra).
+
+## Quick start
+
+### The menu
+
+Everything starts from the menu bar icon. The menu is in French for now; here is what each item does:
+
+| Menu item | What it does |
 |---|---|
-| Personnaliser ma barre… | Ouvre la fenêtre de réglage (ci-dessous) : pas besoin de toucher au fichier. |
-| Afficher ma barre | Remet ta barre (si elle a disparu, c'est ici). |
-| Barre d'Apple | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la tienne. |
-| Ouvrir la configuration | Ouvre ton fichier de barre (il est créé s'il n'existe pas). |
-| Voir le journal | Ouvre `~/Library/Logs/Tactile.log` : erreurs de config, scripts en échec. |
-| Lancer au démarrage | Tactile s'ouvre avec ta session. |
-| Quitter Tactile | Rend la barre d'Apple et ferme l'app. |
+| Personnaliser ma barre… (*Customize my bar*) | Opens the editor window below. No need to touch the file. |
+| Afficher ma barre (*Show my bar*) | Brings your bar back if it went away. |
+| Barre d'Apple (*Apple's bar*) | Shows Apple's bar; the ✳ icon in the Control Strip brings yours back. |
+| Ouvrir la configuration (*Open the configuration*) | Opens your bar file (created if it doesn't exist). |
+| Voir le journal (*View the log*) | Opens `~/Library/Logs/Tactile.log`: config errors, failing scripts. |
+| Lancer au démarrage (*Launch at login*) | Starts Tactile with your session. |
+| Quitter Tactile (*Quit Tactile*) | Gives the Touch Bar back to Apple and quits. |
 
-## Personnaliser ma barre
+### Customize my bar
 
-Dans le menu, choisis **Personnaliser ma barre…**. La fenêtre montre ta Touch Bar en haut, à sa vraie taille.
+Choose **Personnaliser ma barre…** in the menu. The window shows your Touch Bar at the top, at its real size. Its language follows your Mac; the FR / EN switch is at the top right.
 
-![La fenêtre Personnaliser ma barre, avec la barre Musique](docs/editeur-musique.png)
+- **Add** (left column): one click adds a button, a slider, the clock, now playing, a command's output, the battery, a space or a group. The three **ready-made bars** (Simple, Music, Developer) replace your bar with a template you can then adjust.
+- **In the preview**, click an item to edit it and drag it to move it. With the keyboard: arrows move the selection, ⌥ + arrows move the item, delete removes it.
+- **On the right**, the selected item's settings: text, symbol (search the list or type an exact SF Symbol name), background and text colors, text size, symbol only or text only, width, and what a tap does: open an app (**Choose…** opens your Applications folder), open a web address, send a keyboard shortcut (`cmd+shift+4`), run a shell command or an AppleScript, or a system action (brightness, volume, playback…). A long press can do something else. Settings the window can't edit yet (an `image`, a `keycode`) are kept as they are when you save.
+- **Save** writes the file and the Touch Bar changes within a second. If something is wrong (a symbol that doesn't exist, a malformed color), nothing is written and the window tells you what to fix. **Go back to the previous version** restores the bar from before your last save.
 
-- À gauche, **Ajouter** : un clic ajoute un bouton, un curseur, l'heure, la musique en cours, le résultat d'une commande, la batterie, un espace ou un groupe. Les trois **barres toutes faites** (Simple, Musique, Développeur) remplacent ta barre par un modèle que tu peux ensuite retoucher.
-- Dans l'aperçu, clique un élément pour le régler, glisse-le pour le déplacer. Au clavier : flèches pour passer d'un élément à l'autre, ⌥ + flèches pour le déplacer, suppr pour le retirer.
-- À droite, les réglages de l'élément choisi : texte, symbole (cherche dans la liste, ou tape le nom exact d'un symbole SF), couleurs du fond et du texte, taille du texte, symbole seul ou texte seul, largeur, et ce qui se passe au toucher : lancer une application (le bouton **Choisir…** ouvre ton dossier Applications), ouvrir une adresse web, envoyer un raccourci clavier (`cmd+shift+4`), une commande shell ou AppleScript, ou une action système (luminosité, volume, lecture…). Un appui long peut faire autre chose. Ce que la fenêtre ne sait pas régler (une `image`, un `keycode`) est gardé tel quel à l'enregistrement.
-- **Enregistrer** écrit le fichier et ta Touch Bar change dans la seconde. Si quelque chose cloche (un symbole qui n'existe pas, une couleur mal écrite), rien n'est écrit et la fenêtre te dit quoi corriger. **Revenir à la version précédente** restaure la barre d'avant le dernier enregistrement.
-- FR / EN en haut à droite ; la langue du Mac est prise par défaut.
+To open the window on its own, without taking over the Touch Bar: `tactile --personnaliser`.
 
-La fenêtre écrit le même fichier `~/.config/tactile/barre.toml` que ci-dessous, avec un bref en-tête : tu peux passer de l'une à l'autre. Pour l'ouvrir seule, sans la barre : `tactile --personnaliser`.
+### Edit the file by hand
 
-## Personnaliser ta barre à la main
+The window writes `~/.config/tactile/barre.toml`, with a short header. You can switch between the window and the file whenever you like. Choose **Ouvrir la configuration** in the menu to open it. Each `[[element]]` block (or `[[item]]`, in English) is one item on the bar, left to right. Save, and the bar changes within a second.
 
-Dans le menu, choisis **Ouvrir la configuration**. Le fichier `~/.config/tactile/barre.toml` s'ouvre ; chaque bloc `[[element]]` est un élément de la barre, de gauche à droite. Enregistre : la barre change dans la seconde.
-
-Par exemple, pour ajouter un bouton qui met le Mac en veille, et ouvre le Moniteur d'activité si tu le tiens appuyé :
+For example, a button that puts the Mac to sleep, and opens Activity Monitor if you hold it:
 
 ```toml
-[[element]]
-type = "bouton"
-symbole = "moon.fill"
-texte = "Veille"
-couleur = "#3A3A3C"
-action = "veille"
-appui_long = { shell = "open -a 'Activity Monitor'" }
+[[item]]
+type = "button"
+symbol = "moon.fill"
+text = "Sleep"
+color = "#3A3A3C"
+action = "sleep"
+long_press = { shell = "open -a 'Activity Monitor'" }
 ```
 
-Les symboles sont ceux d'Apple ([SF Symbols](https://developer.apple.com/sf-symbols/)) : `moon.fill`, `play.fill`, `bolt.fill`… Un symbole mal orthographié s'affiche en texte. Si le fichier contient une erreur, ta barre actuelle reste en place, un élément rouge « ⚠ config ligne N » apparaît en tête de barre jusqu'à la correction, et l'erreur s'écrit dans le journal (menu → Voir le journal). Pour vérifier un fichier sans toucher la barre : `tactile --verifier` (ou `tactile --verifier autre.toml`).
+Symbols are Apple's [SF Symbols](https://developer.apple.com/sf-symbols/): `moon.fill`, `play.fill`, `bolt.fill`… A misspelled symbol shows its name as text.
 
-### Les éléments
+If the file has an error, your current bar stays, a red "⚠ config ligne N" item (*config line N*) appears at the start of the bar until you fix it, and the error goes to the log (menu → Voir le journal). To check a file without touching the bar: `tactile --verifier` (or `tactile --verifier other.toml`).
 
-| `type` | Champs | Ce que ça affiche |
+## Configuration reference
+
+The French keys are the canonical form, the one the editor writes and the error messages use. Every key, type, setting and action also has an English alias, and you can mix both in one file. Below, each name is given as `french` / `english`; see the [glossary](#english-aliases) for the full list.
+
+### Top-level setting
+
+`masquer_control_strip` / `hide_control_strip`, at the top of the file, `true` by default. `true` gives your bar the full width (1004 points). `false` keeps Apple's Control Strip on the right, which leaves 685 points and adds a system ✕ on the left.
+
+A button, the clock or now playing without a `largeur` / `width` is capped at 200 points (the text is cut with …). Whatever doesn't fit in the bar is not shown, and the log says so ("la barre déborde … n élément(s) seront cachés": *the bar overflows, n items will be hidden*).
+
+### Elements
+
+| `type` | Fields | What it shows |
 |---|---|---|
-| `bouton` | `texte`, `symbole` (nom d'un symbole SF) ou `image` (chemin d'un PNG, PDF, icns… ; `~` accepté ; `gabarit = true` pour une image monochrome teintée comme un symbole), `couleur` (fond, `"#RRGGBB"`), `couleur_texte`, `taille` (police, en points), `affichage` (`"icone"`, `"texte"` ou `"les_deux"`, défaut), `largeur` (points), `action`, `appui_long` (action, après 0,5 s) | Un bouton. Tous les champs sont facultatifs. Une image introuvable s'affiche en texte, comme un symbole inconnu. |
-| `slider` | `reglage` (`"luminosite"` ou `"volume"`), `symbole` | Un bouton qui ouvre une sous-barre avec un curseur ; ✕ la referme. |
-| `heure` | `format` (format de date Apple, `"HH:mm"` par défaut) | L'heure, mise à jour en continu. |
-| `en_cours` | `largeur` | Le titre et l'artiste en cours de lecture (44 caractères au plus, rafraîchi toutes les 2 s) ; un appui met en pause ou relance. Demande `media-control`. |
-| `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire, 0,1 au minimum), `delai` (secondes, 5 par défaut), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle et tuée au-delà de `delai`. Un texte plus large que l’élément est coupé. Code de retour non nul ou texte sur stderr : une ligne dans le journal. Si la sortie commence par `{`, elle est lue comme du JSON : `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/pluie.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, chaque clé facultative ; le script règle ainsi son icône et ses couleurs. |
-| `batterie` | `symbole` (`true` par défaut : une pile à côté du pourcentage, avec un éclair en charge ; `false` : texte seul, `⚡ 85 %` en charge), `largeur` (96 par défaut) | Le niveau de la batterie, relu toutes les 30 s (`pmset -g batt`). |
-| `espace` | `largeur` (obligatoire) | Un vide de largeur fixe. |
-| `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
-| `groupe` | `texte`, `symbole`, `largeur` (72 par défaut), puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
+| `bouton` / `button` | `texte` / `text`; `symbole` / `symbol` (an SF Symbol name) or `image` (path to a PNG, PDF, icns…; `~` works; `gabarit` / `template` = `true` for a monochrome image tinted like a symbol); `couleur` / `color` (background, `"#RRGGBB"`); `couleur_texte` / `text_color`; `taille` / `size` (font size in points); `affichage` / `display`: `"icone"` / `"icon"`, `"texte"` / `"text"` or `"les_deux"` / `"both"` (default); `largeur` / `width` (points); `action`; `appui_long` / `long_press` (an action, after 0.5 s) | A button. Every field is optional. An image that can't be found shows as text, like an unknown symbol. |
+| `slider` | `reglage` / `setting` (required): `"luminosite"` / `"brightness"` or `"volume"`; `symbole` / `symbol` | A button that opens a sub-bar with a slider; ✕ closes it. |
+| `heure` / `clock` | `format` (an Apple date format, `"HH:mm"` by default) | The time, kept up to date. |
+| `en_cours` / `now_playing` | `largeur` / `width` | Title and artist of what's playing (44 characters at most, refreshed every 2 s); a tap pauses or resumes. Needs `media-control`. |
+| `script` | `commande` / `command` (required); `intervalle` / `interval` (seconds, required; values below 0.1 are raised to 0.1); `delai` / `timeout` (seconds, 5 by default); `largeur` / `width` (120 by default); `action` | The output of the command, run with `zsh -c` at every interval and killed after `delai`. Text wider than the item is cut. A non-zero exit code or anything on stderr writes a line to the log. If the output starts with `{`, it is read as JSON: `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/rain.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, every key optional (English keys work too: `text`, `symbol`, `color`, `text_color`). That's how a script sets its own icon and colors. |
+| `batterie` / `battery` | `symbole` / `symbol` (`true` by default: a battery icon next to the percentage, with a bolt while charging; `false`: text only, `⚡ 85 %` while charging); `largeur` / `width` (96 by default) | The battery level, read every 30 s (`pmset -g batt`). |
+| `espace` / `space` | `largeur` / `width` (required) | Empty space of a fixed width. |
+| `souple` / `flexible` | none | Empty space that takes all the room left: two `souple` center what's between them. |
+| `groupe` / `group` | `texte` / `text`, `symbole` / `symbol`, `largeur` / `width` (72 by default), then sub-items `[[element.element]]` / `[[item.item]]` | A button that opens a sub-bar with its items; ✕ closes it. |
 
-En tête de fichier, `masquer_control_strip = true` (par défaut) donne toute la largeur à ta barre (1004 points) ; `false` garde le Control Strip d'Apple à droite (il reste 685 points, et une ✕ système à gauche). Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 points (le texte est coupé avec …). Ce qui ne tient pas dans la barre n'est pas affiché : le journal le dit (« la barre déborde … n élément(s) seront cachés »).
+### Actions
 
-### Les actions
+An action is either a word (`action = "next"`) or a table (`action = { volume = 0.3 }`).
 
-Une action s'écrit soit comme un mot (`action = "suivant"`), soit comme une table (`action = { volume = 0.3 }`).
-
-| Action | Effet |
+| Action | What it does |
 |---|---|
-| `"luminosite_plus"`, `"luminosite_moins"` | Luminosité de l'écran intégré, d'un cran (1/16). |
-| `{ luminosite = 0.5 }` | Luminosité fixée, de 0 à 1. |
-| `"volume_plus"`, `"volume_moins"` | Volume de la sortie audio, d'un cran (1/16). |
-| `{ volume = 0.3 }` | Volume fixé, de 0 à 1. |
-| `"basculer_muet"` | Coupe ou rétablit le son. |
-| `"lecture_pause"`, `"suivant"`, `"precedent"` | Commande la lecture en cours, quelle que soit l'app (demande `media-control`). |
-| `"veille"` | Met le Mac en veille (`pmset sleepnow`). |
-| `"echap"` | Simule la touche esc (demande l'autorisation Accessibilité). |
-| `{ touche = "cmd+shift+4" }` | Simule un raccourci clavier (Accessibilité). Modificateurs : `cmd`, `shift`, `ctrl`, `alt` (ou `option`), `fn`. Touche : une lettre, un chiffre ou un signe du clavier (résolu sur ta disposition, AZERTY compris), `f1` à `f20`, `esc`, `tab`, `espace`, `entree`, `suppr`, `gauche`, `droite`, `haut`, `bas`, `debut`, `fin`, `pageup`, `pagedown` (noms anglais acceptés : `space`, `enter`, `delete`, `left`…). |
-| `{ keycode = 53 }` | Simule une touche par son code macOS, pour celles qui n'ont pas de nom. |
-| `{ app = "Figma" }` | Ouvre une app par son nom ou son identifiant (`com.figma.Desktop`), comme `open -a`. Voir [trouver le nom d'une app](#trouver-le-nom-dune-app). |
-| `{ url = "https://…" }` | Ouvre l'adresse dans le navigateur par défaut (ou un fichier, un dossier). |
-| `{ applescript = 'tell application "Music" to playpause' }` | Lance l'AppleScript avec `osascript`. Avec des apostrophes autour, les guillemets du script restent lisibles. Son erreur éventuelle va au journal. |
-| `"barre_apple"` | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène celle de Tactile. |
-| `{ shell = "commande" }` | Lance la commande avec `zsh -c`, sans attendre sa fin. `~` est accepté. |
+| `"luminosite_plus"` / `"brightness_up"`, `"luminosite_moins"` / `"brightness_down"` | Built-in display brightness, one step (1/16). |
+| `{ luminosite = 0.5 }` / `{ brightness = 0.5 }` | Sets the brightness, from 0 to 1. |
+| `"volume_plus"` / `"volume_up"`, `"volume_moins"` / `"volume_down"` | Output volume, one step (1/16). |
+| `{ volume = 0.3 }` | Sets the volume, from 0 to 1. |
+| `"basculer_muet"` / `"toggle_mute"` | Mutes or unmutes. |
+| `"lecture_pause"` / `"play_pause"`, `"suivant"` / `"next"`, `"precedent"` / `"previous"` | Controls whatever is playing, in any app (needs `media-control`). |
+| `"veille"` / `"sleep"` | Puts the Mac to sleep (`pmset sleepnow`). |
+| `"echap"` / `"esc"` | Sends the esc key (needs the Accessibility permission). |
+| `{ touche = "cmd+shift+4" }` / `{ key = "cmd+shift+4" }` | Sends a keyboard shortcut (Accessibility). Modifiers: `cmd`, `shift`, `ctrl`, `alt` (or `option`), `fn`. Key: a letter, digit or symbol from your keyboard (resolved on your current layout, AZERTY included), `f1` to `f20`, `esc`, `tab`, `space`, `enter`, `delete`, `left`, `right`, `up`, `down`, `home`, `end`, `pageup`, `pagedown` (French names work too: `espace`, `entree`, `suppr`, `gauche`…). |
+| `{ keycode = 53 }` | Sends a key by its macOS key code, for keys that have no name. |
+| `{ app = "Figma" }` | Opens an app by name or bundle identifier (`com.figma.Desktop`), like `open -a`. See [finding an app's name](#finding-an-apps-name). |
+| `{ url = "https://…" }` | Opens the address in the default browser (or a file, or a folder). |
+| `{ applescript = 'tell application "Music" to playpause' }` | Runs the AppleScript with `osascript`. With single quotes around it, the script's double quotes stay readable. Errors go to the log. |
+| `"barre_apple"` / `"apple_bar"` | Shows Apple's bar; the ✳ icon in the Control Strip brings Tactile's back. |
+| `{ shell = "command" }` | Runs the command with `zsh -c`, without waiting for it to finish. `~` works. |
 
-#### Trouver le nom d'une app
+#### Finding an app's name
 
-`app` prend le nom du dossier `.app` dans Applications, sans l'extension, en anglais quand l'app en a un : `"TextEdit"`, `"Activity Monitor"`, `"DaVinci Resolve"`. Pour le lire : clic droit sur l'app dans le Finder → Lire les informations ; le nom en haut est celui à écrire. Si deux apps portent le même nom, l'identifiant est plus sûr : `osascript -e 'id of app "Figma"'` l'affiche (`com.figma.Desktop`). Une app introuvable est signalée dans le journal (menu → Voir le journal).
+`app` takes the name of the `.app` folder in Applications, without the extension, in English when the app has an English name: `"TextEdit"`, `"Activity Monitor"`, `"DaVinci Resolve"`. To read it, right-click the app in Finder → Get Info; the name at the top is the one to use. If two apps share a name, the bundle identifier is safer: `osascript -e 'id of app "Figma"'` prints it (`com.figma.Desktop`). An app that can't be found is reported in the log.
 
-### Glossaire : les clés en anglais
+### English aliases
 
-Le fichier s'écrit en français (c'est la forme de référence, celle de l'éditeur à venir), mais chaque clé, type, réglage et action a un alias anglais, pour partager une barre avec qui ne lit pas le français : [exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut en anglais. Les deux formes peuvent se mélanger ; les messages d'erreur restent en français.
+French is the reference form, but you can write the whole file in English, which helps when you share a bar with someone who doesn't read French. Both forms can be mixed in one file. Error messages stay in French for now (see [Troubleshooting](#troubleshooting)).
 
-| Français | Anglais |
+| French | English |
 |---|---|
 | `masquer_control_strip` | `hide_control_strip` |
 | `element` | `item` |
@@ -169,85 +214,152 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | `url` | `url` |
 | `applescript` | `applescript` |
 
-Dans la sortie JSON d'un `script` aussi : `text`, `symbol`, `color`, `text_color`.
+In a `script`'s JSON output too: `text`, `symbol`, `color`, `text_color`.
 
-### Extra : Claude vocal
+### A complete example in English
 
-Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La transcription (whisper.cpp) et la voix (Piper) tournent sur ton Mac. Installation : [extras/claude-voix](extras/claude-voix/README.md) ; éléments à ajouter à ta barre : [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
+This is Tactile's default bar written with English keys, from [exemples/barre.en.toml](exemples/barre.en.toml). Copy it to `~/.config/tactile/barre.toml` to start from it.
 
-## Dépannage
+```toml
+# Hide Apple's strip of system buttons, on the right.
+hide_control_strip = true
 
-| Problème | Solution |
+# Show Apple's bar (per-app buttons); the ✳ icon in the Control Strip brings this one back.
+[[item]]
+type = "button"
+symbol = "apple.logo"
+width = 56
+action = "apple_bar"
+
+# Screen brightness slider.
+[[item]]
+type = "slider"
+setting = "brightness"
+symbol = "sun.max.fill"
+
+# Volume slider.
+[[item]]
+type = "slider"
+setting = "volume"
+symbol = "speaker.wave.2.fill"
+
+# Flexible space: pushes what follows towards the centre.
+[[item]]
+type = "flexible"
+
+# ⏪ Previous track.
+[[item]]
+type = "button"
+symbol = "backward.fill"
+action = "previous"
+
+# Now playing (width in points).
+[[item]]
+type = "now_playing"
+width = 330
+
+# ⏩ Next track.
+[[item]]
+type = "button"
+symbol = "forward.fill"
+action = "next"
+
+# Flexible space: pushes what follows to the right.
+[[item]]
+type = "flexible"
+
+# Clock (HH = hours, mm = minutes).
+[[item]]
+type = "clock"
+format = "HH:mm"
+```
+
+The other examples in [exemples/](exemples/) are in French: [simple.toml](exemples/simple.toml) and [developpeur.toml](exemples/developpeur.toml) are the editor's Simple and Developer bars.
+
+## Claude voice extra
+
+A ✳ Claude button: you talk, and Claude Code answers out loud. Transcription (whisper.cpp) and the voice (Piper) run on your Mac; only the answer goes through Claude Code and your Claude account. The first time, macOS asks to give Tactile the microphone. Setup is in [extras/claude-voix](extras/claude-voix/README.md) (in French), and the items to add to your bar are in [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
+
+## Command line
+
+The binary inside the app is `/Applications/Tactile.app/Contents/MacOS/tactile`.
+
+| Command | What it does |
 |---|---|
-| macOS refuse d'ouvrir Tactile | Clic droit sur l'app → Ouvrir, une fois. |
-| Ma barre a disparu, je vois celle d'Apple | Touche l'icône ✳ dans la barre d'Apple, ou menu → Afficher ma barre. |
-| Ma modification n'apparaît pas | Il y a une erreur dans le fichier : un élément rouge « ⚠ config ligne N » le dit dans la barre, et menu → Voir le journal donne le détail. Ouvre **Personnaliser ma barre…** et enregistre : l'erreur s'affiche dans la fenêtre. `tactile --verifier` vérifie le fichier depuis un terminal. |
-| Un élément de la fin a disparu | La barre déborde : le journal dit combien d'éléments sont cachés. Réduis des `largeur` ou retire un élément. |
-| Un `script` reste vide | Son erreur est dans le journal (code de retour, stderr, « tué après 5 s »). Lancé depuis le Finder, le PATH ne contient pas `/opt/homebrew/bin` : écris le chemin complet des outils. |
-| La musique en cours reste vide | Installe `media-control` (`brew install media-control`) ; il faut aussi que quelque chose joue. |
-| La touche esc ou un raccourci ne fait rien | Autorise Tactile dans Réglages Système → Confidentialité et sécurité → Accessibilité. |
-| `{ app = "…" }` n'ouvre rien | Le nom est celui du dossier `.app` ([trouver le nom d'une app](#trouver-le-nom-dune-app)) ; le journal dit « Unable to find application ». |
+| `tactile` | Starts the bar (menu bar icon). |
+| `tactile --personnaliser` | Opens the "Customize my bar" window on its own, without taking over the Touch Bar. |
+| `tactile --verifier [file]` | Checks a bar file without touching the Touch Bar. Prints `OK : n éléments` (*n items*) or the error with its line, and exits with code 1 on error. Without a file, checks your `barre.toml`. |
+| `tactile --version` | Prints the version. |
+| `tactile --help` | Prints the help (in French). |
 
-### Pourquoi media-control
+An unknown argument prints the help and exits with code 2. `TACTILE_CONFIG=/path/to/file.toml` replaces `~/.config/tactile/barre.toml` everywhere (bar, file watching, editor), which is handy to try things without touching your real bar. The other `TACTILE_*` variables are for development; see [CONTRIBUTING.md](CONTRIBUTING.md).
 
-Depuis macOS 15.4, Apple empêche les apps de lire ce qui joue (le framework MediaRemote répond sans rien faire). [media-control](https://github.com/ungive/media-control) passe par un programme qu'Apple autorise encore. Sans lui, le titre reste vide et ⏪ ⏯ ⏩ ne font rien ; le reste de la barre marche.
+## Troubleshooting
 
-## Désinstaller
+Errors are written to `~/Library/Logs/Tactile.log` (menu → **Voir le journal**). They are in French for now. The common ones:
 
-1. Menu de Tactile → décoche **Lancer au démarrage**, puis **Quitter Tactile**.
-2. Mets `Tactile.app` à la corbeille.
-3. Supprime ta config et le journal : `rm -r ~/.config/tactile ~/Library/Logs/Tactile.log`.
+| In the log | Meaning |
+|---|---|
+| `ligne N : …` | line N: … |
+| `valeur inconnue «x», attendu parmi …` | unknown value `x`, expected one of … |
+| `champ inconnu «x»` | unknown field `x` |
+| `champ manquant «x»` | missing field `x` |
+| `type invalide` / `valeur invalide` | invalid type / invalid value |
+| `symbole SF inconnu` / `image introuvable` | unknown SF Symbol / image not found (the item shows its name as text) |
+| `la barre déborde … n élément(s) seront cachés` | the bar overflows, n items will be hidden |
+| `tué après 5 s` | (script) killed after 5 s |
 
-## Contribuer
+| Problem | Fix |
+|---|---|
+| macOS won't open Tactile | See step 3 of [Install](#install): on macOS 15, **System Settings → Privacy & Security → Open Anyway**; or `xattr -d com.apple.quarantine /Applications/Tactile.app`. |
+| My bar is gone and I see Apple's | Tap the ✳ icon in Apple's bar, or menu → Afficher ma barre. |
+| My change doesn't show up | The file has an error. A red "⚠ config ligne N" item in the bar says so, and the log has the details. Open **Personnaliser ma barre…** and save: the error shows in the window. `tactile --verifier` checks the file from a terminal. |
+| An item at the end disappeared | The bar overflows; the log says how many items are hidden. Reduce some `largeur` / `width` values or remove an item. |
+| A `script` stays empty | Its error is in the log (exit code, stderr, "tué après 5 s": *killed after 5 s*). When Tactile is started from Finder, `PATH` doesn't include `/opt/homebrew/bin`: write full paths to your tools. |
+| Now playing stays empty | Install `media-control` (`brew install media-control`); something also has to be playing. |
+| Esc or a shortcut does nothing | Allow Tactile in **System Settings → Privacy & Security → Accessibility**. |
+| `{ app = "…" }` opens nothing | Use the `.app` folder's name ([finding an app's name](#finding-an-apps-name)); the log says "Unable to find application". |
 
-Le code est fait pour être repris :
+![An error shown in the editor window](docs/editeur-erreur.png)
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) : où est quoi, comment ajouter une action ou un élément en quatre étapes, les API privées utilisées et les pièges déjà rencontrés.
-- [docs/DECISIONS.md](docs/DECISIONS.md) : pourquoi les choix qui surprennent ont été faits.
-- [CONTRIBUTING.md](CONTRIBUTING.md) : style, tests, captures, commits.
+### Why media-control
 
-Compiler depuis les sources (Rust stable ; le dépôt fournit un `mise.toml`) :
+Since macOS 15.4, Apple stops apps from reading what's playing (the MediaRemote framework answers without doing anything). [media-control](https://github.com/ungive/media-control) goes through a program Apple still allows. Without it, the title stays empty and ⏪ ⏯ ⏩ do nothing; the rest of the bar works.
+
+## Uninstall
+
+1. Tactile menu → uncheck **Lancer au démarrage** (*Launch at login*), then **Quitter Tactile** (*Quit Tactile*).
+2. Move `Tactile.app` to the Trash.
+3. Remove your config and the log: `rm -r ~/.config/tactile ~/Library/Logs/Tactile.log`.
+
+## Known limitations
+
+- Tactile uses private Apple APIs (system-wide bar, Control Strip, brightness). A macOS update can break them; they are listed in [ARCHITECTURE.md](docs/ARCHITECTURE.md#api-privées-utilisées).
+- The brightness slider only controls the built-in display.
+- The menu, error messages and `--help` are in French. The editor window speaks both.
+- Not notarized (see [Install](#install)).
+- Touch Bar gestures and trackpad gestures will come later (see [SPEC.md](SPEC.md), in French).
+
+## Contributing
+
+Contributions are welcome, in English or French. Identifiers and comments in the code are in French by project choice; [CONTRIBUTING.md](CONTRIBUTING.md) explains what that means for a pull request and has a short glossary of the identifiers you'll meet first.
+
+Build from source (stable Rust; the repo ships a `mise.toml`):
 
 ```
-cargo build --release      # target/release/tactile, pour essayer (--help, --version, --verifier)
-cargo test                 # attention : règle puis restaure vraiment luminosité et volume
-scripts/empaqueter.sh      # target/Tactile.app universelle et target/Tactile.zip
-scripts/verifier.sh        # actionne chaque contrôle sur la vraie Touch Bar et vérifie l'effet (écran allumé)
+cargo build --release      # target/release/tactile, to try it (--help, --version, --verifier)
+CI=1 cargo test            # without CI=1, tests really change brightness and volume, then restore them
+scripts/empaqueter.sh      # universal target/Tactile.app and target/Tactile.zip
+scripts/verifier.sh        # drives every control on a real Touch Bar and checks the effect (screen on)
 ```
 
-## Limites connues
+More in [CONTRIBUTING.md](CONTRIBUTING.md), [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and [docs/DECISIONS.md](docs/DECISIONS.md) (both in French). Changes are listed in [CHANGELOG.md](CHANGELOG.md).
 
-- Tactile utilise des API privées d'Apple (barre système, Control Strip, luminosité). Une mise à jour de macOS peut les casser ; elles sont listées dans [ARCHITECTURE.md](docs/ARCHITECTURE.md#api-privées-utilisées).
-- Pas encore d'éditeur visuel : la barre se règle dans le fichier TOML.
-- Le curseur de luminosité règle l'écran intégré seulement.
-- Gestes sur la Touch Bar et gestes trackpad viendront ensuite (voir [SPEC.md](SPEC.md)).
+## Credits
 
-## Remerciements
+- [MTMR](https://github.com/Toxblh/MTMR) (MIT), whose approach to the Touch Bar's private APIs served as the reference.
+- [media-control](https://github.com/ungive/media-control), which makes now playing work again on recent macOS.
 
-[MTMR](https://github.com/Toxblh/MTMR) (licence MIT), dont l'approche des API privées de la Touch Bar a servi de référence.
+## License
 
-## Licence
-
-[MIT](LICENSE). Fais-en ce que tu veux.
-
----
-
-## English
-
-**Your own Touch Bar, free and open source.** Tactile replaces your MacBook Pro Touch Bar with the bar you describe: buttons, brightness and volume sliders, now playing, a clock, your own commands. One tap switches between your bar and Apple's.
-
-At rest it uses 0.5 % CPU and 13 MB of memory (measured). It is written in Rust and runs natively on Intel and Apple Silicon Macs. MIT licensed, no account, no data sent anywhere.
-
-**Compatibility.** MacBook Pro with a Touch Bar (Intel 2016 to 2020, or Apple Silicon), macOS 13 or later. Tested on an M1 13-inch running macOS 15.8; the Intel build was tested under Rosetta only.
-
-**Install.** Download `Tactile.zip` from [Releases](../../releases/latest), move `Tactile.app` to Applications, and open it the first time with right-click → Open (the app is not notarized). For now playing, `brew install media-control`: since macOS 15.4, Apple no longer lets apps read what is playing.
-
-**Menu.** The menu bar icon offers: show my bar, Apple's bar, open the configuration, launch at login, quit.
-
-**Customize.** Menu → *Ouvrir la configuration* opens `~/.config/tactile/barre.toml`; save it and the bar updates within a second. Every key has an English alias (`[[item]]`, `button`, `clock`, `now_playing`, `width`, `long_press`, `brightness_up`, `key`, `battery`…): see the glossary above and [exemples/barre.en.toml](exemples/barre.en.toml), the default bar in English. Error messages are in French for now and go to `~/Library/Logs/Tactile.log`.
-
-**Contribute.** Start with [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (code map, step-by-step recipes, private APIs, known pitfalls) and [docs/DECISIONS.md](docs/DECISIONS.md). Build with `cargo build --release`; `scripts/empaqueter.sh` produces the universal app.
-
-**Limits.** Relies on private Apple APIs that a macOS update may break; no visual editor yet; not notarized.
-
-Thanks to [MTMR](https://github.com/Toxblh/MTMR) (MIT). MIT licensed.
+[MIT](LICENSE). Do what you like with it.
