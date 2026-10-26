@@ -40,8 +40,8 @@ enum Commande {
 struct Etat {
     /// La config affichée, pour la reconstruire (autotest).
     config: Barre,
-    /// Bouton rouge « ⚠ config ligne N » ajouté à la barre principale après une config refusée.
-    erreur: Option<Id>,
+    /// Boutons rouges « ⚠ config ligne N » ajoutés à la principale et à chaque barre d'application après une config refusée.
+    erreur: Vec<Id>,
     commandes: Vec<(Option<Commande>, Option<Commande>)>,
     barres: Vec<Id>,
     /// Une barre par `[[application]]` de la config, dans le même ordre.
@@ -54,6 +54,18 @@ struct Etat {
     reception: Receiver<(usize, Sortie)>,
     /// Contrôles nommés (« ouvrir sun.max.fill », « fermer », « slider luminosite »…), pour l'autotest.
     controles: Vec<(String, Id)>,
+}
+
+/// Les barres et formateurs créés à +1 sont à `Etat` : les remplacer libère toute l'ancienne barre (items, boutons, images).
+impl Drop for Etat {
+    fn drop(&mut self) {
+        self.barres.iter().chain(&self.applis).for_each(|&b| vues::lacher(b));
+        for r in &self.rafraichis {
+            if let Rafraichi::Heure { formateur, .. } = r {
+                vues::lacher(*formateur);
+            }
+        }
+    }
 }
 
 thread_local! {
@@ -110,6 +122,12 @@ define_class!(
             autotest::etape();
         }
 
+        /// `NSWorkspaceDidActivateApplicationNotification` : une autre app passe au premier plan.
+        #[unsafe(method(appActivee:))]
+        fn app_activee(&self, _notification: Id) {
+            suivre_app();
+        }
+
         #[unsafe(method(tic:))]
         fn tic(&self, _minuteur: Id) {
             let recharge = RECHARGES.with_borrow(|r| r.as_ref().and_then(|r| r.try_recv().ok()));
@@ -121,7 +139,6 @@ define_class!(
                 }
                 None => {}
             }
-            suivre_app();
             rafraichir();
         }
     }
@@ -197,8 +214,8 @@ pub fn afficher() {
     }
 }
 
-/// Bundle id et nom affiché de l'app au premier plan. Sondé au `tic` plutôt qu'observé
-/// (`NSWorkspaceDidActivateApplicationNotification`) : le sondage attend aussi sans effort qu'une sous-barre se ferme.
+/// Bundle id et nom affiché de l'app au premier plan, lu quand la base est demandée : au changement d'app
+/// (`appActivee:`), à la fermeture d'une sous-barre, à l'installation.
 pub(super) fn app_active() -> (String, String) {
     if let Some(app) = APP_SIMULEE.with_borrow(Clone::clone) {
         return app;
@@ -226,9 +243,9 @@ fn base() -> Option<Id> {
     })
 }
 
-/// Montre la barre de l'app au premier plan. Une sous-barre ouverte reste jusqu'à son ✕, qui ramène alors la bonne base ;
+/// Montre la barre de l'app au premier plan (appelée par l'observateur de `NSWorkspace`, et par l'autotest quand il simule l'app). Une sous-barre ouverte reste jusqu'à son ✕, qui ramène alors la bonne base ;
 /// sous la barre d'Apple, seul le contenu change, sans nouvelle présentation.
-fn suivre_app() {
+pub(super) fn suivre_app() {
     let Some(voulue) = base() else { return };
     let courante = COURANTE.get();
     let sur_une_base = ETAT.with_borrow(|e| e.as_ref().is_some_and(|e| courante == e.barres[0] || e.applis.contains(&courante)));
@@ -246,49 +263,74 @@ pub fn masquer() {
 }
 
 
-/// Libellé court de l'élément d'erreur : « ⚠ config ligne 6 ».
+/// Message d'un fichier sans élément (vide, `>` au lieu de `>>`) : la barre par défaut est montrée à la place.
+const CONFIG_VIDE: &str = "config vide : aucun élément, barre par défaut affichée";
+
+/// La barre par défaut, embarquée.
+const PAR_DEFAUT: &str = include_str!("../../exemples/barre.toml");
+
+/// Libellé court de l'élément d'erreur : « ⚠ config ligne 6 », « ⚠ config vide ».
 fn libelle_erreur(message: &str) -> String {
     match message.find("ligne ") {
         Some(debut) => format!("⚠ config {}", message[debut..].split(" :").next().unwrap_or("").trim()),
+        None if message == CONFIG_VIDE => "⚠ config vide".into(),
         None => "⚠ config invalide".into(),
     }
 }
 
-/// Montre l'erreur dans la barre principale elle-même : depuis le Finder, le journal est invisible
-/// et les notifications macOS demandent une app notarisée. L'élément disparaît à la config valide
-/// suivante, qui reconstruit la barre.
+/// Une barre principale sans élément laisserait la Touch Bar noire, sans esc : la barre par défaut la remplace
+/// (le reste de la config est gardé). `true` : à signaler par le badge.
+fn config_affichee(config: &Barre) -> (Barre, bool) {
+    if !config.elements.is_empty() {
+        return (config.clone(), false);
+    }
+    let defaut = crate::config::lire(PAR_DEFAUT).expect("barre par défaut invalide");
+    (Barre { elements: defaut.elements, ..config.clone() }, true)
+}
+
+/// Montre l'erreur dans la barre elle-même, principale et barres d'application (on édite souvent sa config dans
+/// l'app qui a sa propre barre) : depuis le Finder, le journal est invisible et les notifications macOS demandent
+/// une app notarisée. L'élément disparaît à la config valide suivante, qui reconstruit les barres.
 fn afficher_erreur(message: &str) {
     let libelle = libelle_erreur(message);
     ETAT.with_borrow_mut(|etat| {
         let Some(etat) = etat.as_mut() else { return };
-        if let Some(b) = etat.erreur {
-            return vues::titre(b, &libelle);
+        if !etat.erreur.is_empty() {
+            return etat.erreur.iter().for_each(|&b| vues::titre(b, &libelle));
         }
-        let index = elements::enregistrer(etat, None, None);
-        let b = elements::bouton(Some(&libelle), None, index, false, "");
-        etat.controles.push(("erreur".into(), b));
-        etat.erreur = Some(b);
-        let principale = etat.barres[0];
         let ident = format!("{PREFIXE}.erreur");
-        unsafe {
-            if let Some(rouge) = vues::couleur("#B00020") {
-                let _: () = msg_send![b, setBezelColor: rouge];
+        let bases: Vec<Id> = std::iter::once(etat.barres[0]).chain(etat.applis.iter().copied()).collect();
+        for &barre in &bases {
+            // Une vue n'a qu'un parent : un bouton par barre.
+            let index = elements::enregistrer(etat, None, None);
+            let b = elements::bouton(Some(&libelle), None, index, false, "");
+            etat.controles.push(("erreur".into(), b));
+            etat.erreur.push(b);
+            unsafe {
+                if let Some(rouge) = vues::couleur("#B00020") {
+                    let _: () = msg_send![b, setBezelColor: rouge];
+                }
+                let item = vues::item_vue(&ident, b);
+                let items: Id = msg_send![barre, templateItems];
+                let items: Id = msg_send![items, setByAddingObject: item];
+                vues::lacher(item);
+                let _: () = msg_send![barre, setTemplateItems: items];
+                let idents: Id = msg_send![barre, defaultItemIdentifiers];
+                let idents: Id = msg_send![idents, mutableCopy];
+                let _: () = msg_send![idents, insertObject: &*texte(&ident), atIndex: 0usize];
+                let _: () = msg_send![barre, setDefaultItemIdentifiers: idents];
+                vues::lacher(idents);
             }
-            let items: Id = msg_send![principale, templateItems];
-            let items: Id = msg_send![items, setByAddingObject: vues::item_vue(&ident, b)];
-            let _: () = msg_send![principale, setTemplateItems: items];
-            let idents: Id = msg_send![principale, defaultItemIdentifiers];
-            let idents: Id = msg_send![idents, mutableCopy];
-            let _: () = msg_send![idents, insertObject: &*texte(&ident), atIndex: 0usize];
-            let _: () = msg_send![principale, setDefaultItemIdentifiers: idents];
         }
-        if COURANTE.get() == principale {
-            montrer(principale);
+        if bases.contains(&COURANTE.get()) {
+            montrer(COURANTE.get());
         }
     });
 }
 
 fn installer(config: &Barre) {
+    let (config, vide) = config_affichee(config);
+    let config = &config;
     // Le placement n'est lu qu'à une nouvelle présentation : s'il change, on retire la barre d'abord.
     if PLEIN_ECRAN.get() != config.masquer_control_strip && !MODALE.get().is_null() {
         unsafe { let _: () = msg_send![class!(NSTouchBar), minimizeSystemModalTouchBar: MODALE.get()]; }
@@ -297,7 +339,7 @@ fn installer(config: &Barre) {
     let (envoi, reception) = channel();
     let mut etat = Etat {
         config: config.clone(),
-        erreur: None,
+        erreur: Vec::new(),
         commandes: Vec::new(),
         controles: Vec::new(),
         barres: vec![std::ptr::null_mut()],
@@ -328,6 +370,10 @@ fn installer(config: &Barre) {
         *place = Some(etat);
     });
     presenter(a_presenter.or(base()).unwrap_or(principale));
+    if vide {
+        eprintln!("tactile : {CONFIG_VIDE}");
+        afficher_erreur(CONFIG_VIDE);
+    }
 }
 
 /// Crée la cible des contrôles (une fois) ; les tests construisent des boutons sans lancer l'app.
@@ -339,12 +385,21 @@ fn preparer_cible() {
     });
 }
 
+#[link(name = "AppKit", kind = "framework")]
+unsafe extern "C" {
+    static NSWorkspaceDidActivateApplicationNotification: Id;
+}
+
 pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
     unsafe {
         let app: Id = msg_send![class!(NSApplication), sharedApplication];
         let _: Bool = msg_send![app, setActivationPolicy: 1isize];
 
         preparer_cible();
+        // L'app au premier plan est observée, pas sondée au `tic` (0,5 % de CPU avec une `[[application]]`).
+        let espace: Id = msg_send![class!(NSWorkspace), sharedWorkspace];
+        let centre: Id = msg_send![espace, notificationCenter];
+        let _: () = msg_send![centre, addObserver: cible(), selector: sel!(appActivee:), name: NSWorkspaceDidActivateApplicationNotification, object: std::ptr::null_mut::<AnyObject>()];
         RECHARGES.with_borrow_mut(|place| *place = Some(recharges));
         installer_plateau();
         crate::menu::installer();
@@ -373,5 +428,17 @@ mod tests {
     fn libelle_d_erreur_garde_la_ligne() {
         assert_eq!(libelle_erreur("/x/barre.toml, ligne 6 : valeur inconnue «truc»"), "⚠ config ligne 6");
         assert_eq!(libelle_erreur("impossible de lire /x"), "⚠ config invalide");
+        assert_eq!(libelle_erreur(CONFIG_VIDE), "⚠ config vide");
+    }
+
+    #[test]
+    fn config_sans_element_donne_la_barre_par_defaut() {
+        let defaut = crate::config::lire(PAR_DEFAUT).unwrap();
+        let vide = Barre { elements: Vec::new(), masquer_control_strip: false, ..defaut.clone() };
+        let (affichee, signalee) = config_affichee(&vide);
+        assert!(signalee);
+        assert_eq!(affichee.elements, defaut.elements);
+        assert!(!affichee.masquer_control_strip, "le reste de la config est gardé");
+        assert_eq!(config_affichee(&defaut), (defaut, false));
     }
 }

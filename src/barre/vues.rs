@@ -3,9 +3,20 @@
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send};
-use objc2_foundation::NSString;
+use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::time::SystemTime;
 
 use super::Id;
+
+/// Relâche un objet reçu à +1 (`alloc`/`init`, `new`, `mutableCopy`) une fois confié à son propriétaire.
+/// Sans ça, chaque rechargement gardait l'ancienne barre entière (14 → 32 Mo en 20 rechargements).
+pub(super) fn lacher(objet: Id) {
+    if !objet.is_null() {
+        drop(unsafe { Retained::from_raw(objet) });
+    }
+}
 
 pub(super) fn texte(s: &str) -> Retained<NSString> {
     NSString::from_str(s)
@@ -20,23 +31,71 @@ pub(super) fn symbole(nom: &str) -> Option<Id> {
 /// Hauteur des images personnalisées, celle des symboles SF dans la barre.
 const HAUTEUR_IMAGE: f64 = 20.0;
 
+/// Densité de l'écran de la Touch Bar : une image est gardée à 2 pixels par point.
+const ECHELLE: f64 = 2.0;
+
+/// Chemin et gabarit → date du fichier et image réduite.
+type Cache = HashMap<(String, bool), (Option<SystemTime>, Retained<AnyObject>)>;
+
+thread_local! {
+    /// Images de fichier déjà lues et réduites, par chemin et gabarit, avec la date du fichier : un script qui renvoie
+    /// la même image à chaque sortie ne la relit pas (20 → 141 Mo en 60 s avant) ; un fichier modifié est relu.
+    static IMAGES: RefCell<Cache> = RefCell::new(HashMap::new());
+}
+
 /// `None` si le fichier n'existe pas ou n'est pas une image. `~` est étendu ; `gabarit` teinte l'image comme un symbole.
+/// L'image est réduite à 20 pt de haut (40 px) dès la lecture : un PNG de 10 000 px gardait 400 Mo par bouton.
 pub(super) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
     let chemin = match chemin.strip_prefix("~/") {
         Some(suite) => format!("{}/{suite}", std::env::var("HOME").unwrap_or_default()),
         None => chemin.to_string(),
     };
+    let date = std::fs::metadata(&chemin).ok()?.modified().ok();
+    let cle = (chemin, gabarit);
+    IMAGES.with_borrow_mut(|cache| {
+        if let Some((_, i)) = cache.get(&cle).filter(|(d, _)| *d == date) {
+            return Some(Retained::as_ptr(i) as Id);
+        }
+        let image = reduire(&cle.0, gabarit)?;
+        let id = Retained::as_ptr(&image) as Id;
+        cache.insert(cle, (date, image));
+        Some(id)
+    })
+}
+
+/// Lit le fichier et le redessine à `HAUTEUR_IMAGE` × `ECHELLE` ; l'original est relâché aussitôt.
+fn reduire(chemin: &str, gabarit: bool) -> Option<Retained<AnyObject>> {
     unsafe {
-        let image: Id = msg_send![class!(NSImage), alloc];
-        let image: Id = msg_send![image, initWithContentsOfFile: &*texte(&chemin)];
-        if image.is_null() {
+        let source: Id = msg_send![class!(NSImage), alloc];
+        let source: Retained<AnyObject> = Retained::from_raw(msg_send![source, initWithContentsOfFile: &*texte(chemin)])?;
+        let taille: NSSize = msg_send![&*source, size];
+        if taille.height <= 0.0 || taille.width <= 0.0 {
             return None;
         }
-        let taille: objc2_foundation::NSSize = msg_send![image, size];
-        if taille.height > 0.0 {
-            let _: () = msg_send![image, setSize: objc2_foundation::NSSize::new(taille.width * HAUTEUR_IMAGE / taille.height, HAUTEUR_IMAGE)];
-        }
-        let _: () = msg_send![image, setTemplate: Bool::new(gabarit)];
+        let points = NSSize::new(taille.width * HAUTEUR_IMAGE / taille.height, HAUTEUR_IMAGE);
+        let rep: Id = msg_send![class!(NSBitmapImageRep), alloc];
+        let rep: Retained<AnyObject> = Retained::from_raw(msg_send![rep,
+            initWithBitmapDataPlanes: std::ptr::null_mut::<*mut u8>(),
+            pixelsWide: (points.width * ECHELLE).ceil().max(1.0) as isize,
+            pixelsHigh: (HAUTEUR_IMAGE * ECHELLE) as isize,
+            bitsPerSample: 8isize,
+            samplesPerPixel: 4isize,
+            hasAlpha: Bool::YES,
+            isPlanar: Bool::NO,
+            colorSpaceName: &*texte("NSCalibratedRGBColorSpace"),
+            bytesPerRow: 0isize,
+            bitsPerPixel: 0isize])?;
+        let _: () = msg_send![&*rep, setSize: points];
+        let contexte: Id = msg_send![class!(NSGraphicsContext), graphicsContextWithBitmapImageRep: &*rep];
+        let _: () = msg_send![class!(NSGraphicsContext), saveGraphicsState];
+        let _: () = msg_send![class!(NSGraphicsContext), setCurrentContext: contexte];
+        // 2 = NSCompositingOperationSourceOver.
+        let _: () = msg_send![&*source, drawInRect: NSRect::new(NSPoint::new(0.0, 0.0), points), fromRect: NSRect::ZERO, operation: 2usize, fraction: 1.0f64];
+        let _: () = msg_send![class!(NSGraphicsContext), restoreGraphicsState];
+        let image: Id = msg_send![class!(NSImage), alloc];
+        let image: Retained<AnyObject> = Retained::from_raw(msg_send![image, initWithSize: points])?;
+        let _: () = msg_send![&*image, addRepresentation: &*rep];
+        let _: () = msg_send![&*image, setTemplate: Bool::new(gabarit)];
         Some(image)
     }
 }
@@ -61,6 +120,8 @@ pub(super) fn styler(bouton: Id, couleur_texte: Option<&str>, taille: Option<f64
         let titre: Id = msg_send![class!(NSAttributedString), alloc];
         let titre: Id = msg_send![titre, initWithString: actuel, attributes: attributs];
         let _: () = msg_send![bouton, setAttributedTitle: titre];
+        lacher(titre);
+        lacher(paragraphe);
     }
 }
 
@@ -88,6 +149,7 @@ pub(super) fn largeur_max(vue: Id, largeur: f64) {
     }
 }
 
+/// Item à +1, à confier à `barre_touch` (ou à relâcher avec `lacher`).
 pub(super) fn item_vue(identifiant: &str, vue: Id) -> Id {
     unsafe {
         let item: Id = msg_send![class!(NSCustomTouchBarItem), alloc];
@@ -97,6 +159,7 @@ pub(super) fn item_vue(identifiant: &str, vue: Id) -> Id {
     }
 }
 
+/// Une `NSTouchBar` (à +1, relâchée avec `Etat`) qui prend possession des `items` (reçus à +1 : `item_vue`, slider).
 pub(super) fn barre_touch(identifiant: &str, items: Vec<Id>) -> Id {
     unsafe {
         let barre: Id = msg_send![class!(NSTouchBar), new];
@@ -111,6 +174,7 @@ pub(super) fn barre_touch(identifiant: &str, items: Vec<Id>) -> Id {
             let id: Id = msg_send![item, identifier];
             let _: () = msg_send![idents, addObject: id];
             let _: () = msg_send![ensemble, addObject: item];
+            lacher(item);
         }
         let _: () = msg_send![barre, setDefaultItemIdentifiers: idents];
         let _: () = msg_send![barre, setTemplateItems: ensemble];
@@ -140,9 +204,17 @@ mod tests {
     #[test]
     fn image_redimensionnee_ou_absente() {
         let i = image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", true).unwrap();
-        let taille: objc2_foundation::NSSize = unsafe { msg_send![i, size] };
+        let taille: NSSize = unsafe { msg_send![i, size] };
         assert_eq!((taille.width, taille.height), (HAUTEUR_IMAGE, HAUTEUR_IMAGE));
         assert!(unsafe { msg_send![i, isTemplate] });
+        // Gardée réduite (40 px de haut, une seule représentation), et lue une seule fois par chemin et gabarit.
+        let reps: Id = unsafe { msg_send![i, representations] };
+        let n: usize = unsafe { msg_send![reps, count] };
+        let rep: Id = unsafe { msg_send![reps, firstObject] };
+        let pixels: isize = unsafe { msg_send![rep, pixelsHigh] };
+        assert_eq!((n, pixels), (1, 40));
+        assert_eq!(image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", true), Some(i));
+        assert_ne!(image("/System/Library/CoreServices/CoreTypes.bundle/Contents/Resources/GenericApplicationIcon.icns", false), Some(i));
         assert!(image("~/image-qui-nexiste-pas.png", false).is_none());
         assert!(image("/etc/hosts", false).is_none());
     }

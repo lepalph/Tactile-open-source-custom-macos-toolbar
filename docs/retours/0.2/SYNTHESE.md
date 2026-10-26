@@ -8,12 +8,22 @@ Verdicts : Lise lance une semaine d'essai (ses deux bloquants, barre par app et 
 
 | # | Problème | Source | Gravité | Preuve attendue |
 |---|---|---|---|---|
-| R1 | AZERTY : un chiffre se résout sur le pavé numérique (`4` → 86 au lieu de 21), `cmd+shift+4` ne lance pas la capture ; `cmd+\` introuvable ; `keycode` sans modificateur | Marc, Lise | majeur | test : sur la disposition courante, chaque chiffre donne le keycode de la rangée du haut ; `{ keycode = 21, modificateurs = "cmd+shift" }` ou `"cmd+shift+keycode:21"` |
-| R2 | Fuites : chaque rechargement garde l'ancienne barre (14 → 32 Mo / 20 rechargements), image géante gardée (831 Mo), script JSON avec `image` (20 → 141 Mo en 60 s) | Marc | majeur | mesure avant/après dans le rapport ; images bornées (lecture redimensionnée), cache par chemin |
-| R3 | Badge « ⚠ config » invisible sur une barre `[[application]]` | Marc | majeur | étape d'autotest |
-| R4 | Fichier vide → Touch Bar noire sans esc ni message | Marc | majeur | barre par défaut + badge ; test |
-| R5 | `[[application]]` : 0,5–0,7 % CPU (sondage 0,1 s) | Marc | mineur | observateur `NSWorkspaceDidActivateApplicationNotification` ou sondage à 0,5 s ; mesure |
-| R6 | Boutons à texte court qui débordent sans message (B3) | Marc | mineur | avertissement aussi pour eux |
+| R1 | AZERTY : un chiffre se résout sur le pavé numérique (`4` → 86 au lieu de 21), `cmd+shift+4` ne lance pas la capture ; `cmd+\` introuvable ; `keycode` sans modificateur | Marc, Lise | majeur | **Fait.** Tests `un_chiffre_vise_la_rangee_du_haut` (table fixe : `cmd+shift+4` → 21 + cmd + shift, sur toute disposition), `azerty_chiffres_antislash_et_caracteres_a_option` (disposition French chargée explicitement : `4` → 21 + Maj, `cmd+4` → 21 sans Maj, `\` → 47 + ⌥⇧, `[` → 23 + ⌥⇧, `/` → 47 + Maj et non 75), `keycode_avec_modificateurs` (`"cmd+shift+keycode:21"`, aller-retour) |
+| R2 | Fuites : chaque rechargement garde l'ancienne barre (14 → 32 Mo / 20 rechargements), image géante gardée (831 Mo), script JSON avec `image` (20 → 141 Mo en 60 s) | Marc | majeur | **Fait.** Mesures `footprint` ci-dessous ; test `image_redimensionnee_ou_absente` (40 px de haut, même objet au 2e appel) |
+| R3 | Badge « ⚠ config » invisible sur une barre `[[application]]` | Marc | majeur | **Fait.** Autotest 28 : « ⚠ config ligne 9 » aussi sur la barre de TextEdit (vu en capture) |
+| R4 | Fichier vide → Touch Bar noire sans esc ni message | Marc | majeur | **Fait.** Test `config_sans_element_donne_la_barre_par_defaut` ; fichier vide lancé en vrai : barre par défaut + « ⚠ config vide » (capture) |
+| R5 | `[[application]]` : 0,5–0,7 % CPU (sondage 0,1 s) | Marc | mineur | **Fait** (observateur). CPU avec une `[[application]]` : 0,5–0,7 % → 0,1–0,2 % |
+| R6 | Boutons à texte court qui débordent sans message (B3) | Marc | mineur | **Fait.** Test `debordement_compte_les_elements_caches` : 15 boutons « B1 »… → 2 cachés annoncés (3 réels), aucun avant |
+
+Mesures R2 et R5 (`footprint -p`, `top -stats cpu`, processus neuf, `TACTILE_CONFIG` dans un dossier temporaire, écran verrouillé) :
+
+| Cas | Avant | Après |
+|---|---|---|
+| Barre par défaut, 20 rechargements (`touch`) | 14 → 32 Mo | 14 → 17 Mo (18 Mo après 40, 60 et 80 : palier) |
+| Bouton `image` PNG 10 000 × 10 000, 2 constructions, puis barre par défaut | 400 → 790 → 792 Mo | 20 → 20 → 22 Mo |
+| Script JSON avec `image` (PNG 1024²), `intervalle = 0.3`, 60 s | 59 → 429 → 796 Mo | 12 → 12 → 12 Mo |
+| CPU, barre par défaut + une `[[application]]` | 0,5–0,7 % | 0,1–0,2 % |
+| CPU, barre par défaut (témoin) | 0,1–0,2 % | — |
 
 ## Lot C — config, `--verifier`, ligne de commande
 

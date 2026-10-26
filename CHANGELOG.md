@@ -25,6 +25,12 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - Scripts: 5 s timeout (`delai`), stderr and exit code logged, no orphan processes when the bar is reloaded.
 - `masquer_control_strip` defaults to `true` as documented, and changing it reloads the bar placement.
 - `cargo doc` without warnings.
+- AZERTY: digits target the top row by position (`cmd+shift+4` sends key 21, never the keypad); characters that need Shift or Option (`\`, `[`) get it added; `{ touche = "cmd+shift+keycode:21" }` gives modifiers to a key code.
+- Memory leaks: a reload frees the previous bar, file images are downscaled to 20 pt (2×) and cached by path and date (a 10,000 px PNG went from 790 MB to 20 MB; a JSON script with `image` no longer grows).
+- The "⚠ config" badge also shows on per-app bars.
+- An empty config file (or one without items) shows the default bar with a "⚠ config vide" badge instead of a black Touch Bar.
+- The frontmost app is observed (`NSWorkspaceDidActivateApplicationNotification`) instead of polled every 0.1 s: idle CPU with an `[[application]]` drops from ~0.6 % to ~0.15 %.
+- The overflow warning also counts short-text buttons (at least 72 pt each).
 
 ## [0.1.0] - 2026-10-25
 

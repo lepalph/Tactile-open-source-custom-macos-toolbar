@@ -13,7 +13,8 @@ main.rs
      ├─ plateau                icône ✳ dans le Control Strip d'Apple
      ├─ menu                   icône de la barre des menus
      ├─ installer(config)      construit les items de la principale et d'une barre par [[application]], présente la base
-     └─ minuteur 0,1 s → tic   applique une config rechargée, suit l'app active, rafraîchit heure / musique / scripts
+     ├─ observateur NSWorkspace → appActivee:   suit l'app active (aucun sondage)
+     └─ minuteur 0,1 s → tic   applique une config rechargée, rafraîchit heure / musique / scripts
 
 appui sur un bouton
  → TactileCible::appui (le tag du bouton = index dans Etat::commandes)
@@ -22,7 +23,7 @@ appui sur un bouton
                 dans l'unique barre système
 
 changement d'app au premier plan (Safari passe devant)
- → tic → suivre_app : base() lit NSWorkspace.frontmostApplication (bundle id, nom affiché),
+ → NSWorkspaceDidActivateApplicationNotification → TactileCible::appActivee: → suivre_app : base() lit NSWorkspace.frontmostApplication (bundle id, nom affiché),
    Barre::application_pour trouve la [[application]] → Etat::applis[k], sinon la principale
  → si la barre montrée est une base (principale ou barre d'app) : montrer(barre de l'app)
    si c'est une sous-barre : rien ; son ✕ (Commande::Fermer) montrera base()
@@ -41,12 +42,12 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `src/actions/luminosite.rs` | Luminosité de l'écran intégré (DisplayServices, privé). |
 | `src/actions/volume.rs` | Volume et muet de la sortie par défaut (CoreAudio). |
 | `src/actions/media.rs` | Titre en cours et commandes de lecture (via `media-control`). |
-| `src/actions/clavier.rs` | Frappes simulées : `echap`, `{ touche = "cmd+shift+4" }` (type `Touche`, vérifié à la lecture de la config), `{ keycode = n }`. Les caractères sont résolus sur la disposition clavier courante (`UCKeyTranslate`) : « a » donne le bon code en AZERTY. |
+| `src/actions/clavier.rs` | Frappes simulées : `echap`, `{ touche = "cmd+shift+4" }` (type `Touche`, vérifié à la lecture de la config), `{ touche = "cmd+shift+keycode:21" }` (un code avec modificateurs), `{ keycode = n }`. Les caractères sont résolus sur la disposition clavier courante (`UCKeyTranslate`) : « a » donne le bon code en AZERTY, `\` y ajoute ⌥⇧, et un chiffre vise toujours la rangée du haut. |
 | `src/barre/mod.rs` | État de la barre, classe `TactileCible` (reçoit appuis, sliders, minuteur), présentation, `afficher` / `masquer`. |
 | `src/barre/elements.rs` | Transforme chaque `Element` en item de Touch Bar ; sous-barres (`depliable`). |
 | `src/barre/rafraichi.rs` | Éléments vivants : heure, titre en cours, scripts (texte brut ou JSON `Riche`), batterie. |
 | `src/barre/batterie.rs` | Lecture et analyse de `pmset -g batt`, symbole de pile selon le niveau. |
-| `src/barre/vues.rs` | Outils AppKit sans état (texte, symbole SF, image de fichier, couleur, style du titre, largeur, barre). |
+| `src/barre/vues.rs` | Outils AppKit (texte, symbole SF, image de fichier réduite et gardée en cache par chemin, couleur, style du titre, largeur, barre, `lacher`). |
 | `src/barre/plateau.rs` | Icône ✳ du Control Strip. |
 | `src/menu.rs` | Icône de la barre des menus, lancement au démarrage (`SMAppService`). |
 | `src/editeur/mod.rs` | Fenêtre « Personnaliser ma barre » : NSWindow + WKWebView, pont JS ⇄ Rust, écriture et vérification du fichier. |
@@ -105,7 +106,8 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 
 ## Pièges déjà rencontrés
 
-- Les keycodes macOS sont physiques : `0` est la touche « a » en QWERTY et « q » en AZERTY. `clavier.rs` cherche le code d'un caractère avec `UCKeyTranslate` sur la disposition courante ; seules les touches sans caractère (f1-f20, flèches, esc…) ont un code fixe.
+- Les keycodes macOS sont physiques : `0` est la touche « a » en QWERTY et « q » en AZERTY. `clavier.rs` cherche le code d'un caractère avec `UCKeyTranslate` sur la disposition courante : zone principale sans modificateur, puis avec Maj, Option, Option+Maj (ajoutés à l'envoi : `cmd+\` devient ⌘⌥⇧: en AZERTY), le pavé numérique (65-92) en dernier. Seules les touches sans caractère (f1-f20, flèches, esc…) ont un code fixe.
+- Choix : **un chiffre = la position de la rangée du haut** (keycodes ANSI 18-29), quelle que soit la disposition. Les raccourcis d'Apple sont liés au keycode (⌘⇧4 = touche 21 + cmd + shift) ; en AZERTY, le premier code qui donne « 4 » sans Maj était celui du pavé (86), que la capture ignore. Avec cmd ou ctrl, Tactile envoie exactement les modificateurs écrits (`cmd+4` reste ⌘4, il ne devient pas ⌘⇧4) ; sans eux, il ajoute Maj si la disposition l'exige (« 4 » seul en AZERTY). Les fonctions TIS ne supportent pas deux fils à la fois : les tests qui les appellent prennent un verrou.
 - Un bouton de `script` est sans bordure (`setBordered: NO`) : une couleur de fond venue du JSON ne se voit pas sans remettre la bordure (`appliquer`).
 - `setTitle:` efface la couleur d'un titre attribué : `vues::styler` est rappelé après chaque `titre` d'un script riche.
 - Avec des alias serde, « attendu parmi » liste aussi les mots anglais (`«icon», «icone», …`) ; les tests comparent le début du message.
@@ -117,20 +119,22 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 - objc2 vérifie les signatures à l'exécution. Un `msg_send!` qui annonce le mauvais type de retour panique (ex. `setActivationPolicy:` renvoie un `Bool`, pas `()`). La fonctionnalité `catch-all` d'objc2 transforme les exceptions Objective-C en panique lisible au lieu d'un arrêt muet.
 - MediaRemote ne répond plus aux apps tierces depuis macOS 15.4 : `MRMediaRemoteSendCommand` renvoie vrai sans rien faire. On passe par `media-control`, qui doit tourner en arm64 natif sur Apple Silicon (`arch -arm64`).
 - `screencapture -b` rend une image noire quand l'écran est en veille ou verrouillé, et la partie dessinée par Apple (Control Strip, barre d'une app) ne s'y voit pas non plus. Seule une barre présentée par une app réveille la Touch Bar.
-- Au rechargement de la config, les anciens objets AppKit ne sont pas libérés. C'est assumé : un rechargement est rare et l'app reste sous 20 Mo.
+- Propriété des objets AppKit (les `Id` sont des pointeurs bruts) : ce qui est reçu à +1 (`alloc`/`init`, `new`, `mutableCopy`) est relâché par `vues::lacher` dès que son propriétaire le retient. Les items vont à `barre_touch`, qui les relâche une fois mis dans la barre ; les `NSTouchBar` et formateurs appartiennent à `Etat`, dont le `Drop` les relâche au rechargement. Avant, chaque rechargement gardait l'ancienne barre (14 → 32 Mo en 20 rechargements), une image de 10 000 px gardait 400 Mo, un script JSON avec `image` prenait 12 Mo/s. Les images de fichier sont réduites à 20 pt × 2 (40 px de haut) à la lecture et gardées par chemin et gabarit, relues seulement si la date du fichier change. Mesures avant/après : `docs/retours/0.2/SYNTHESE.md`, lot R.
 - `NSImage imageWithSystemSymbolName:` renvoie `nil` pour un symbole inconnu, et `buttonWithImage: nil` lève `NSInternalInconsistencyException` : Tactile mourait sur une faute de frappe et replantait à chaque relancement. `vues::symbole` renvoie `Option`, et `elements::bouton` retombe sur le nom en texte.
 - Un `script` tourne dans son propre groupe de processus (`process_group(0)`) : tuer `zsh -c` seul laisse son enfant (`sleep`, `curl`…) orphelin. Le groupe est tué au-delà de `delai` et quand la barre est remplacée (`Etat::processus`, mis à `None` pour que le script qui démarre pendant le remplacement soit tué aussi). Quitter Tactile pendant un script laisse encore ce script finir seul.
 - Le `placement` d'une barre système n'est lu qu'à sa présentation : changer `masquer_control_strip` à chaud impose `minimizeSystemModalTouchBar:` avant de représenter. Une présentation en placement 0 (Control Strip visible) ne réveille pas la Touch Bar : sans toucher humain, `screencapture -b` rend une image noire.
 - Les notifications macOS (`UNUserNotificationCenter`, et même `NSUserNotificationCenter`) exigent un bundle : depuis `target/release/tactile` elles plantent ou ne font rien. L'erreur de config s'affiche donc dans la barre elle-même (`afficher_erreur`).
-- L'app active est **sondée** au `tic` (`frontmostApplication`), pas observée par `NSWorkspaceDidActivateApplicationNotification` : même coût (rien quand la config n'a pas d'`[[application]]`), et le sondage rattrape tout seul le changement d'app survenu pendant qu'une sous-barre était ouverte. Écran verrouillé, `frontmostApplication` reste `com.apple.loginwindow` même après `open -a TextEdit` : l'autotest le détecte et simule l'app active (`APP_SIMULEE`), en le disant au journal ; le passage réel au premier plan ne se vérifie qu'écran déverrouillé.
+- L'app active est **observée** (`NSWorkspaceDidActivateApplicationNotification` sur le centre de notifications de `NSWorkspace`, méthode `appActivee:` de `TactileCible`), plus sondée toutes les 0,1 s : avec une `[[application]]`, le sondage coûtait 0,5-0,7 % de CPU, l'observateur 0,1-0,2 % (comme sans). Un changement d'app pendant qu'une sous-barre est ouverte est rattrapé par son ✕ (`Commande::Fermer` relit `base()`). Écran verrouillé, `frontmostApplication` reste `com.apple.loginwindow` même après `open -a TextEdit` : l'autotest le détecte et simule l'app active (`APP_SIMULEE`, puis `suivre_app()` à la main, faute de notification), en le disant au journal ; le passage réel au premier plan ne se vérifie qu'écran déverrouillé.
 - `scripts/verifier.sh` n'affiche pas les lignes du journal qui contiennent « pas » entre deux espaces (c'est son filtre des lignes `AUTOTEST n pas attendu=…`) : un message d'étape ne doit pas contenir ce mot.
 - Une barre par application est construite entière à chaque rechargement, comme la principale : ses scripts tournent même quand elle n'est pas montrée, et avec `herite` les éléments repris de la principale existent deux fois (deux scripts, deux horloges).
+- Une config sans élément dans la barre principale (fichier vide, `>` au lieu de `>>`) laissait la Touch Bar noire, sans esc : `installer` montre la barre par défaut (`exemples/barre.toml`, embarquée) avec le badge « ⚠ config vide » (`config_affichee`).
+- Le badge « ⚠ config » est ajouté à la principale **et** à chaque barre d'application (un bouton par barre : une vue n'a qu'un parent) : on édite souvent sa config dans l'app qui a sa propre barre.
 - Un avertissement `NSLayoutConstraint … exceeds internal limits` apparaît au lancement. Il est inoffensif ; sa source n'est pas encore identifiée.
 
 ## Vérifier un changement
 
-- `scripts/verifier.sh` : la vérification complète. Lance Tactile avec `TACTILE_AUTOTEST=1`, qui actionne chaque contrôle par le même chemin qu'un doigt (`performClick:` sur le vrai bouton, message `glisse:` pour les sliders) et contrôle l'effet réel : sous-barres, luminosité et volume relus puis restaurés, barre d'Apple et retour par ✳, Claude vocal qui démarre et s'arrête, lecture/pause. Il capture la Touch Bar à chaque étape (`target/verification/`) et compare chaque capture à l'écran attendu (étapes 20-21 : l'élément rouge « ⚠ config ligne 6 » apparaît puis disparaît ; 22-25 : barre riche verte ; 26-29 : barre de TextEdit, bouton bleu, après `open -a TextEdit`, puis retour à la principale quand TextEdit quitte). Un écran noir (Touch Bar inactive) est signalé comme non vérifiable, jamais comme réussi : touche le trackpad pendant la vérification.
-- `cargo test` : config, ligne de commande, parsing des médias, symbole SF inconnu, débordement, scripts (délai avec `sleep 30`, stderr, barre remplacée), et luminosité / volume réels (valeur changée, relue, restaurée). Avec `CI` défini, les tests matériels sortent tout de suite.
+- `scripts/verifier.sh` : la vérification complète. Lance Tactile avec `TACTILE_AUTOTEST=1`, qui actionne chaque contrôle par le même chemin qu'un doigt (`performClick:` sur le vrai bouton, message `glisse:` pour les sliders) et contrôle l'effet réel : sous-barres, luminosité et volume relus puis restaurés, barre d'Apple et retour par ✳, Claude vocal qui démarre et s'arrête, lecture/pause. Il capture la Touch Bar à chaque étape (`target/verification/`) et compare chaque capture à l'écran attendu (étapes 20-21 : l'élément rouge « ⚠ config ligne 6 » apparaît puis disparaît ; 22-25 : barre riche verte ; 26-27 : barre de TextEdit, bouton bleu, après `open -a TextEdit` ; 28-29 : badge « ⚠ config ligne 9 » sur la barre de TextEdit, puis sur la principale quand TextEdit quitte ; 30 : barre de l'utilisateur rétablie). Un écran noir (Touch Bar inactive) est signalé comme non vérifiable, jamais comme réussi : touche le trackpad pendant la vérification.
+- `cargo test` : config, ligne de commande, parsing des médias, symbole SF inconnu, débordement, résolution des touches (chiffres, AZERTY chargée explicitement, `keycode:n`), image réduite et en cache, config vide, scripts (délai avec `sleep 30`, stderr, barre remplacée), et luminosité / volume réels (valeur changée, relue, restaurée). Avec `CI` défini, les tests matériels sortent tout de suite.
 - `tactile --verifier [fichier]` : lit un fichier de barre et dit « OK : n éléments » ou l'erreur avec sa ligne, sans toucher la Touch Bar.
 - `TACTILE_CONFIG=chemin` remplace `~/.config/tactile/barre.toml` pour tout le programme (lecture, surveillance, éditeur) : indispensable pour essayer l'éditeur sans toucher à sa vraie barre, par exemple `TACTILE_CONFIG=/tmp/essai.toml target/release/tactile --personnaliser`. `--personnaliser` n'ouvre que la fenêtre : ni Touch Bar, ni icône de menu.
 - `TACTILE_EDITEUR_JS=fichier.js` : script évalué dans la page de l'éditeur une fois la config chargée ; avec le message `capture { chemin }` (PNG de la fenêtre, pris par l'app elle-même : `screencapture` demanderait l'autorisation d'enregistrement de l'écran), c'est ainsi que les captures `docs/editeur-*.png` sont faites. Écran verrouillé = capture blanche.
@@ -138,4 +142,4 @@ Elles peuvent changer avec une mise à jour de macOS. Les fonctions C sont charg
 - `TACTILE_MASQUER=1` réduit la barre 2 s après le lancement ; `TACTILE_RETOUR=1` la ramène à 4 s comme un toucher sur ✳.
 - Après une réduction, l'icône ✳ doit être réaffichée (`plateau::montrer_icone`) : le système l'oublie quand une barre système est présentée.
 - `screencapture -b barre.png` capture la Touch Bar.
-- `top -l 3 -s 3 -pid $(pgrep -x tactile) -stats cpu,mem` mesure la consommation au repos (cible : moins de 1 % de CPU).
+- `top -l 3 -s 3 -pid $(pgrep -x tactile) -stats cpu,mem` mesure la consommation au repos (cible : moins de 1 % de CPU) ; `footprint -p $(pgrep -x tactile)` donne l'empreinte mémoire, à surveiller après des rechargements (`touch` du fichier de config).

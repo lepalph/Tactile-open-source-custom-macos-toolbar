@@ -5,7 +5,7 @@ use objc2::{class, msg_send, sel};
 use std::time::{Duration, Instant};
 
 use super::rafraichi::Rafraichi;
-use super::vues::{barre_touch, couleur, image, item_vue, largeur_fixe, largeur_max, styler, symbole, texte};
+use super::vues::{barre_touch, couleur, image, item_vue, lacher, largeur_fixe, largeur_max, styler, symbole, texte};
 use super::{cible, Commande, Etat, Id, PREFIXE};
 use crate::actions::{self, Action};
 use crate::config::{Affichage, Element, Reglage};
@@ -73,6 +73,7 @@ pub(super) fn bouton(titre: Option<&str>, icone: Option<Icone>, index: usize, av
             let _: () = msg_send![r, setMinimumPressDuration: 0.5f64];
             let _: () = msg_send![r, setAllowedTouchTypes: 1usize];
             let _: () = msg_send![b, addGestureRecognizer: r];
+            lacher(r);
         }
         b
     }
@@ -207,7 +208,9 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
             Element::Espace { largeur } => {
                 let vue: Id = unsafe { msg_send![class!(NSView), new] };
                 largeur_fixe(vue, *largeur);
-                item_vue(&ident, vue)
+                let item = item_vue(&ident, vue);
+                lacher(vue);
+                item
             }
             Element::Souple => std::ptr::null_mut(),
             Element::Groupe { texte: t, symbole: s, largeur, elements: enfants } => {
@@ -246,11 +249,12 @@ pub(super) fn largeur_barre(masquer_control_strip: bool) -> f64 {
 }
 
 /// Largeur approximative d'un élément (texte : ~9 pt par caractère plus les marges ; symbole seul : 72, mesuré).
+/// Un bouton n'est jamais plus étroit qu'un bouton à symbole : 15 boutons « B1 »… en cachaient 3 sans message.
 fn largeur_estimee(element: &Element) -> f64 {
     let texte = |t: &str| (t.chars().count() as f64 * 9.0 + 24.0).min(LARGEUR_MAX_TEXTE);
     match element {
         Element::Bouton { largeur: Some(l), .. } | Element::EnCours { largeur: Some(l) } | Element::Espace { largeur: l } | Element::Groupe { largeur: Some(l), .. } => *l,
-        Element::Bouton { texte: t, symbole: s, image: i, .. } => t.as_deref().map_or(LARGEUR_GROUPE, texte) + if t.is_some() && (s.is_some() || i.is_some()) { 24.0 } else { 0.0 },
+        Element::Bouton { texte: t, symbole: s, image: i, .. } => t.as_deref().map_or(LARGEUR_GROUPE, |t| texte(t).max(LARGEUR_GROUPE)) + if t.is_some() && (s.is_some() || i.is_some()) { 24.0 } else { 0.0 },
         Element::Heure { format } => texte(format.as_deref().unwrap_or("HH:mm")),
         Element::EnCours { largeur: None } => LARGEUR_MAX_TEXTE,
         Element::Script { largeur, .. } => largeur_script(*largeur),
@@ -332,6 +336,13 @@ mod tests {
         let (total, caches) = debordement(&vingt_cinq, 1004.0).unwrap();
         assert_eq!(total, 25.0 * 80.0);
         assert_eq!(caches, 25 - 13); // la vraie barre en cache 13 : l'estimation est à un élément près
+        // 15 boutons à texte court : la vraie barre en cache 3 ; l'estimation en annonce 2 (avant : aucun message).
+        let courts: Vec<Element> = (1..=15).map(|n| match bouton(Some(&format!("B{n}")), None) {
+            Element::Bouton { symbole: _, texte, image, gabarit, couleur, couleur_texte, taille, affichage, largeur, action, appui_long } =>
+                Element::Bouton { symbole: None, texte, image, gabarit, couleur, couleur_texte, taille, affichage, largeur, action, appui_long },
+            autre => autre,
+        }).collect();
+        assert_eq!(debordement(&courts, 1004.0).map(|d| d.1), Some(2));
         // Un texte long sans largeur est plafonné, il ne cache pas tout seul ses voisins.
         let long = "x".repeat(200);
         assert_eq!(debordement(&[bouton(Some(&long), None), bouton(None, None)], 1004.0), None);

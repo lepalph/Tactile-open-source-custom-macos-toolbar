@@ -6,7 +6,7 @@ use objc2::runtime::AnyObject;
 use objc2::{msg_send, sel};
 use std::cell::Cell;
 
-use super::{cible, Id, APP_SIMULEE, COURANTE, ETAT};
+use super::{cible, modale, vues, Id, APP_SIMULEE, COURANTE, ETAT, PREFIXE};
 use crate::actions::{self, luminosite, media, volume, Action};
 
 thread_local! {
@@ -58,7 +58,7 @@ texte = "Quit"
 action = { applescript = 'tell application "TextEdit" to quit' }
 "##;
 
-/// Barre d'application des étapes 26-29 : un bouton bleu en tête (ce que verifier.sh reconnaît). Le nom
+/// Barre d'application des étapes 26-30 : un bouton bleu en tête (ce que verifier.sh reconnaît). Le nom
 /// affiché en minuscules : la casse ne compte pas.
 const BARRE_APPLI: &str = r##"
 [[application]]
@@ -128,6 +128,14 @@ fn a_une_image(nom: &str) -> bool {
     controle(nom).is_some_and(|b| { let i: Id = unsafe { msg_send![b, image] }; !i.is_null() })
 }
 
+/// Le badge « ⚠ config » est-il dans ce que montre la barre système ?
+fn badge_montre() -> bool {
+    unsafe {
+        let idents: Id = msg_send![modale(), defaultItemIdentifiers];
+        msg_send![idents, containsObject: &*vues::texte(&format!("{PREFIXE}.erreur"))]
+    }
+}
+
 fn textedit_ouvert() -> bool {
     std::process::Command::new("/usr/bin/pgrep").args(["-x", "TextEdit"]).output().is_ok_and(|s| s.status.success())
 }
@@ -186,6 +194,7 @@ fn attendu(n: usize) -> &'static str {
         22..=25 => "riche",
         26 => "sous",
         27 => "application",
+        28 | 29 => "erreur",
         _ => "principale",
     }
 }
@@ -281,12 +290,19 @@ pub(super) fn etape() {
         }
         28 => {
             noter(n, COURANTE.get() == appli(), "✕ ramène la barre de TextEdit (et non la principale)");
-            let quitte = std::process::Command::new("/usr/bin/osascript").args(["-e", "quit app \"TextEdit\""]).status().is_ok_and(|s| s.success());
-            noter(n, quitte, "osascript : quit app \"TextEdit\"");
-            APP_SIMULEE.set(None);
+            super::afficher_erreur("essai, ligne 9 : valeur inconnue «batteri»");
+            noter(n, COURANTE.get() == appli() && badge_montre(), "config refusée : « ⚠ config ligne 9 » aussi sur la barre de TextEdit");
             true
         }
         29 => {
+            let quitte = std::process::Command::new("/usr/bin/osascript").args(["-e", "quit app \"TextEdit\""]).status().is_ok_and(|s| s.success());
+            noter(n, quitte, "osascript : quit app \"TextEdit\"");
+            APP_SIMULEE.set(None);
+            // Sans changement d'app réel (écran verrouillé), aucune notification : on suit l'app comme elle.
+            super::suivre_app();
+            true
+        }
+        30 => {
             noter(n, !textedit_ouvert() && COURANTE.get() == principale(), "TextEdit fermé : retour à la barre principale");
             let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
             super::installer(&crate::config::charger().unwrap_or_else(|_| config.unwrap()));
