@@ -36,7 +36,10 @@ pub(crate) fn url_permise(url: &str) -> bool {
         return true;
     }
     let Some(reste) = url.strip_prefix("http://") else { return false };
-    ["localhost", "127.0.0.1", "[::1]"].iter().any(|hote| reste.strip_prefix(hote).is_some_and(|r| r.is_empty() || r.starts_with([':', '/', '?'])))
+    // Toute l'autorité, jusqu'au chemin : `localhost:80@example.org` est l'hôte example.org pour curl.
+    let autorite = reste.split(['/', '?', '#']).next().unwrap_or_default();
+    let port = |p: &str| !p.is_empty() && p.bytes().all(|o| o.is_ascii_digit());
+    ["localhost", "127.0.0.1", "[::1]"].iter().any(|hote| autorite.strip_prefix(hote).is_some_and(|r| r.is_empty() || r.strip_prefix(':').is_some_and(port)))
 }
 
 /// Une longue suite de caractères de clé (20 ou plus) sans `trousseau:` : sans doute une clé écrite en clair.
@@ -324,6 +327,14 @@ mod tests {
             ("http://localhost.example.org/x", false),
             ("file:///etc/passwd", false),
             ("ftp://x", false),
+            ("http://[::1]:9/x", true),
+            ("http://localhost?x=1", true),
+            // `localhost:80` lu comme identifiant par curl : l'hôte est example.org, en clair.
+            ("http://localhost:80@example.org/", false),
+            ("http://127.0.0.1:x@example.org", false),
+            ("http://localhost:8080:9@example.org/", false),
+            ("http://localhost:/x", false),
+            ("http://localhost:80a/x", false),
         ] {
             assert_eq!(url_permise(url), permise, "{url}");
         }
