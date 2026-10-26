@@ -19,3 +19,5 @@ Tactile doit devenir un outil libre qui permet de tout personnaliser sur la Touc
 ## Priorités (décidé le 2026-10-26)
 
 L'outil est fait d'abord pour son auteur ; l'open source sert au partage du code, pas à la course à l'adoption. Priorité à la puissance de personnalisation, à la fluidité et à la solidité. Pas d'effort dédié à la notarisation, à un site vitrine ou au marketing ; la galerie communautaire passe après les briques.
+
+Exception voulue : la page GitHub doit donner envie à un développeur de contribuer (visuel en tête, points forts, feuille de route, « good first issues », première contribution en 10 minutes).
