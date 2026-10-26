@@ -294,9 +294,13 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
     if let Some((debut, nombre)) = non_fini(&racine) {
         return Err(situer(Some(debut), format!("« {nombre} » n'est pas un nombre fini : écris une valeur comme 0.5 ou 60")));
     }
-    let barre = Barre::deserialize(ValueDeserializer::from(racine.clone())).map_err(|e| match premiere_erreur::<Barre>(&racine) {
-        Some((debut, message)) => situer(Some(debut), traduire(&message)),
-        None => situer(e.span().map(|s| s.start), traduire(e.message())),
+    let barre = Barre::deserialize(ValueDeserializer::from(racine.clone())).map_err(|e| match (premiere_erreur::<Barre>(&racine), gabarit_de_bouton(&racine)) {
+        (Some((_, message)), Some((debut, cle))) if message.contains("expected a boolean") => situer(
+            Some(debut),
+            format!("« {cle} » : sur un bouton, le texte lié à une source s'écrit texte / text ; gabarit / template est l'interrupteur monochrome de l'image (true ou false)"),
+        ),
+        (Some((debut, message)), _) => situer(Some(debut), traduire(&message)),
+        (None, _) => situer(e.span().map(|s| s.start), traduire(e.message())),
     })?;
     if let Some(k) = barre.applications.iter().position(|a| a.elements.is_empty()) {
         let debut = position(&document, &[("application", k)]);
@@ -306,8 +310,17 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
         let sortes = [source.http.is_some(), source.commande.is_some(), source.mcp.is_some()].iter().filter(|&&s| s).count();
         let mcp = source.mcp.as_ref().is_none_or(|m| m.commande.is_some() != m.url.is_some());
         if sortes != 1 || !mcp {
-            let message = if sortes != 1 { "écris un seul de http, commande ou mcp" } else { "mcp demande commande ou url, pas les deux" };
-            return Err(situer(position(&document, &[("source", k)]), format!("[[source]] « {} » : {message}", source.nom)));
+            let table = valeur_au(&document, &[("source", k)]);
+            let message = if sortes != 1 {
+                format!("écris un seul de http, {} ou mcp", ecrite(table, &["commande", "command"]))
+            } else {
+                let mcp = match table.map(Spanned::get_ref) {
+                    Some(DeValue::Table(t)) => t.get("mcp"),
+                    _ => None,
+                };
+                format!("mcp demande {} ou url, pas les deux", ecrite(mcp, &["commande", "command"]))
+            };
+            return Err(situer(table.map(|t| t.span().start), format!("[[source]] « {} » : {message}", source.nom)));
         }
     }
     Ok(barre)
@@ -320,6 +333,21 @@ fn non_fini(valeur: &Spanned<DeValue>) -> Option<(usize, String)> {
         DeValue::Float(f) if !f.as_str().parse::<f64>().is_ok_and(f64::is_finite) => Some((valeur.span().start, f.as_str().to_string())),
         DeValue::Array(liste) => liste.iter().filter_map(non_fini).min_by_key(|n| n.0),
         DeValue::Table(table) => table.values().filter_map(non_fini).min_by_key(|n| n.0),
+        _ => None,
+    }
+}
+
+/// Le premier `gabarit` / `template` écrit en texte sur un bouton (position, clé écrite) : serde dirait seulement
+/// « attendu true ou false », alors que l'auteur voulait le gabarit d'un élément `texte`.
+fn gabarit_de_bouton(valeur: &Spanned<DeValue>) -> Option<(usize, String)> {
+    match valeur.get_ref() {
+        DeValue::Array(liste) => liste.iter().filter_map(gabarit_de_bouton).min_by_key(|g| g.0),
+        DeValue::Table(table) => {
+            let bouton = matches!(table.get("type").map(Spanned::get_ref), Some(DeValue::String(t)) if t == "bouton" || t == "button");
+            let texte = |cle: &&str| table.get(*cle).filter(|v| matches!(v.get_ref(), DeValue::String(_))).map(|v| (v.span().start, cle.to_string()));
+            let ici = if bouton { ["gabarit", "template"].iter().find_map(texte) } else { None };
+            ici.or_else(|| table.values().filter_map(gabarit_de_bouton).min_by_key(|g| g.0))
+        }
         _ => None,
     }
 }
@@ -371,15 +399,26 @@ fn tables<'a, 'i>(table: &'a DeTable<'i>, cle: &str) -> &'a [Spanned<DeValue<'i>
     }
 }
 
-/// Début de la table au bout de `chemin` : `[("application", 1), ("element", 0)]` = premier élément de la deuxième app.
-fn position(table: &DeTable, chemin: &[(&str, usize)]) -> Option<usize> {
+/// La table au bout de `chemin` : `[("application", 1), ("element", 0)]` = premier élément de la deuxième app.
+fn valeur_au<'a, 'i>(table: &'a DeTable<'i>, chemin: &[(&str, usize)]) -> Option<&'a Spanned<DeValue<'i>>> {
     let ((cle, k), reste) = chemin.split_first()?;
     let valeur = tables(table, cle).get(*k)?;
     match valeur.get_ref() {
-        _ if reste.is_empty() => Some(valeur.span().start),
-        DeValue::Table(t) => position(t, reste),
+        _ if reste.is_empty() => Some(valeur),
+        DeValue::Table(t) => valeur_au(t, reste),
         _ => None,
     }
+}
+
+/// Début de la table au bout de `chemin`.
+fn position(table: &DeTable, chemin: &[(&str, usize)]) -> Option<usize> {
+    valeur_au(table, chemin).map(|v| v.span().start)
+}
+
+/// La clé telle que l'utilisateur l'a écrite dans `table` (`every` ou `toutes_les`) ; la française sans fichier.
+fn ecrite<'a>(table: Option<&Spanned<DeValue>>, noms: &[&'a str]) -> &'a str {
+    let present = |n: &&&str| matches!(table.map(Spanned::get_ref), Some(DeValue::Table(t)) if t.contains_key(**n));
+    noms.iter().find(present).unwrap_or(&noms[0])
 }
 
 /// Première erreur dans l'ordre du fichier, avec sa position. serde s'arrête à la première dans l'ordre
@@ -473,7 +512,7 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
             }
         }
         if source.toutes_les.is_some_and(|t| t < crate::sources::MINIMUM) {
-            c.signaler(false, &ici, &lieu, format!("toutes_les est ramené à {} secondes, le minimum", crate::sources::MINIMUM));
+            c.signaler(false, &ici, &lieu, format!("{} est ramené à {} secondes, le minimum", c.cle(&ici, &["toutes_les", "every"]), crate::sources::MINIMUM));
         }
         for nom in source.entetes.iter().filter(|(_, v)| crate::sources::cle_en_clair(v)).map(|(n, _)| n) {
             c.signaler(false, &ici, &lieu, format!("l'en-tête « {nom} » semble contenir une clé en clair : range-la dans le trousseau et écris trousseau:service"));
@@ -482,15 +521,21 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
     if barre.elements.is_empty() {
         c.signaler(true, &[], "", "aucun élément : la barre principale serait vide, ajoute au moins un [[element]]".into());
     }
-    let egares: Vec<usize> = match &c.document {
-        Some((_, d)) => match tables(d, "application").first() {
-            Some(app) => (0..tables(d, "element").len()).filter(|&i| tables(d, "element")[i].span().start > app.span().start).collect(),
+    // Avec l'en-tête tel qu'écrit : `[[item]]` et `[[element]]` peuvent se mêler dans la même liste.
+    let egares: Vec<(usize, &str)> = match &c.document {
+        Some((t, d)) => match tables(d, "application").first() {
+            Some(app) => tables(d, "element")
+                .iter()
+                .enumerate()
+                .filter(|(_, e)| e.span().start > app.span().start)
+                .map(|(i, e)| (i, if t.get(e.span().start..).is_some_and(|l| l.starts_with("[[item]]")) { "item" } else { "element" }))
+                .collect(),
             None => vec![],
         },
         None => vec![],
     };
-    for i in egares {
-        c.signaler(false, &[("element", i)], "", "cet [[element]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.element]] ?".into());
+    for (i, entete) in egares {
+        c.signaler(false, &[("element", i)], "", format!("cet [[{entete}]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.{entete}]] ?"));
     }
     c.elements(&barre.elements, &mut Vec::new(), "");
     let largeur = crate::barre::largeur_barre(barre.masquer_control_strip);
@@ -519,6 +564,11 @@ struct Controle<'a> {
 }
 
 impl Controle<'_> {
+    /// La clé telle qu'écrite dans la table au bout de `chemin` (la française sans le fichier).
+    fn cle<'n>(&self, chemin: &[(&str, usize)], noms: &[&'n str]) -> &'n str {
+        ecrite(self.document.as_ref().and_then(|(_, d)| valeur_au(d, chemin)), noms)
+    }
+
     fn ligne(&self, chemin: &[(&str, usize)]) -> Option<usize> {
         let (texte, document) = self.document.as_ref()?;
         position(document, chemin).map(|p| ligne(texte, p))
@@ -591,7 +641,7 @@ impl Controle<'_> {
             }
             if let Element::Texte { source, gabarit, symbole_selon, couleur_selon, .. } = element {
                 if source.is_none() && gabarit.is_some() {
-                    self.signaler(false, chemin, &ici, "un gabarit sans source n'affiche rien : ajoute source = \"…\"".into());
+                    self.signaler(false, chemin, &ici, format!("un {} sans source n'affiche rien : ajoute source = \"…\"", self.cle(chemin, &["gabarit", "template"])));
                 }
                 let symboles = symbole_selon.iter().flat_map(|s| s.valeurs.values().chain(&s.defaut));
                 for s in symboles.filter(|s| crate::barre::symbole(s).is_none()) {
@@ -602,7 +652,7 @@ impl Controle<'_> {
                         self.signaler(false, chemin, &ici, format!("la couleur « {couleur} » doit s'écrire #RRGGBB : elle sera ignorée"));
                     }
                     if c.couleurs.len() != c.seuils.len() + 1 {
-                        self.signaler(false, chemin, &ici, format!("couleur_selon : {} pour {} : il faut une couleur de plus que de seuils", nombre(c.couleurs.len(), "couleur"), nombre(c.seuils.len(), "seuil")));
+                        self.signaler(false, chemin, &ici, format!("{} : {} pour {} : il faut une couleur de plus que de seuils", self.cle(chemin, &["couleur_selon", "color_by"]), nombre(c.couleurs.len(), "couleur"), nombre(c.seuils.len(), "seuil")));
                     }
                 }
             }
@@ -689,7 +739,7 @@ fn traduire(message: &str) -> String {
     }
     texte = texte.replace("expected", "attendu");
     let mut ouvert = false;
-    texte
+    let texte: String = texte
         .chars()
         .map(|c| match c {
             '`' => {
@@ -698,7 +748,20 @@ fn traduire(message: &str) -> String {
             }
             c => c,
         })
-        .collect()
+        .collect();
+    // Un champ manquant n'a pas d'écriture à reprendre : ses deux noms (les champs obligatoires qui ont un alias).
+    const REQUIS: [(&str, &str); 9] = [
+        ("nom", "name"),
+        ("outil", "tool"),
+        ("reglage", "setting"),
+        ("commande", "command"),
+        ("intervalle", "interval"),
+        ("largeur", "width"),
+        ("champ", "field"),
+        ("seuils", "thresholds"),
+        ("couleurs", "colors"),
+    ];
+    REQUIS.iter().fold(texte, |t, (fr, en)| t.replace(&format!("champ manquant «{fr}»"), &format!("champ manquant «{fr}» (ou «{en}»)")))
 }
 
 /// Une barre qui exerce chaque nouveauté de la 0.2 (dont ce que l'éditeur ne sait pas éditer : image, keycode).
@@ -1382,6 +1445,32 @@ command = "uptime"
         let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
         let possibles = "variables possibles : {texte} ou {text} (sortie qui n'est pas du JSON), sinon le chemin d'un champ du JSON, comme {current.temperature_2m}";
         assert_eq!(avis, [format!("ligne 1 : {{Text}} n'existe pas ; {possibles}"), format!("ligne 6 : {{a..b}} n'existe pas ; {possibles}")]);
+    }
+
+    /// Les messages citent la clé telle qu'écrite, alias anglais compris (Sam, B3 et B4).
+    #[test]
+    fn messages_avec_la_cle_ecrite() {
+        let texte = "[[item]]\ntype = \"text\"\ntemplate = \"{a}\"\n\n[[item]]\ntype = \"text\"\nsource = \"s\"\ncolor_by = { field = \"t\", thresholds = [1], colors = [\"#000000\"] }\n\n[[application]]\napp = \"Safari\"\n[[application.item]]\ntype = \"flexible\"\n\n[[item]]\ntype = \"clock\"\n\n[[source]]\nname = \"s\"\ncommand = \"echo\"\nevery = 1\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(
+            avis,
+            [
+                "ligne 1 : un template sans source n'affiche rien : ajoute source = \"…\"",
+                "ligne 5 : color_by : 1 couleur pour 1 seuil : il faut une couleur de plus que de seuils",
+                "ligne 15 : cet [[item]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.item]] ?",
+                "ligne 18 : every est ramené à 5 secondes, le minimum",
+            ]
+        );
+        let erreur = lire("[[source]]\nname = \"x\"\nhttp = \"https://a\"\ncommand = \"b\"\n").unwrap_err();
+        assert_eq!(erreur, "ligne 1 : [[source]] « x » : écris un seul de http, command ou mcp");
+        let erreur = lire("[[source]]\nname = \"x\"\nmcp = { command = \"a\", url = \"https://b\", tool = \"t\" }\n").unwrap_err();
+        assert_eq!(erreur, "ligne 1 : [[source]] « x » : mcp demande command ou url, pas les deux");
+        // Un champ manquant n'a pas été écrit : ses deux noms.
+        let erreur = lire("[[source]]\nname = \"x\"\nmcp = { command = \"a\" }\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 3 : champ manquant «outil» (ou «tool»)"), "{erreur}");
+        // `template` texte sur un bouton : ce qu'il faut écrire, pas « attendu true ou false ».
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[item]]\ntype = \"button\"\nsource = \"s\"\ntemplate = \"{texte}\"\n").unwrap_err();
+        assert_eq!(erreur, "ligne 7 : « template » : sur un bouton, le texte lié à une source s'écrit texte / text ; gabarit / template est l'interrupteur monochrome de l'image (true ou false)");
     }
 
     #[test]
