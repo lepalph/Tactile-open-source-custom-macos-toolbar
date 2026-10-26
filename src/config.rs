@@ -291,6 +291,9 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
     };
     let document = document(texte).map_err(|e| situer(e.span().map(|s| s.start), traduire(e.message())))?;
     let racine = Spanned::new(0..texte.len(), DeValue::Table(document.clone()));
+    if let Some((debut, nombre)) = non_fini(&racine) {
+        return Err(situer(Some(debut), format!("« {nombre} » n'est pas un nombre fini : écris une valeur comme 0.5 ou 60")));
+    }
     let barre = Barre::deserialize(ValueDeserializer::from(racine.clone())).map_err(|e| match premiere_erreur::<Barre>(&racine) {
         Some((debut, message)) => situer(Some(debut), traduire(&message)),
         None => situer(e.span().map(|s| s.start), traduire(e.message())),
@@ -308,6 +311,17 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
         }
     }
     Ok(barre)
+}
+
+/// Le premier `nan` ou `inf` du fichier (position, texte) : valides en TOML, mais ni une largeur ni une durée,
+/// et le JSON de l'éditeur n'a pas de quoi les écrire.
+fn non_fini(valeur: &Spanned<DeValue>) -> Option<(usize, String)> {
+    match valeur.get_ref() {
+        DeValue::Float(f) if !f.as_str().parse::<f64>().is_ok_and(f64::is_finite) => Some((valeur.span().start, f.as_str().to_string())),
+        DeValue::Array(liste) => liste.iter().filter_map(non_fini).min_by_key(|n| n.0),
+        DeValue::Table(table) => table.values().filter_map(non_fini).min_by_key(|n| n.0),
+        _ => None,
+    }
 }
 
 /// Numéro de ligne (à partir de 1) d'une position dans le texte.
@@ -1719,6 +1733,23 @@ mod proprietes {
             let json = serde_json::to_string(&barre).unwrap();
             assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre, "graine {graine}, JSON : {json}");
         }
+    }
+
+    /// `nan` et `inf` sont du TOML valide mais pas une largeur ni une durée : la page de l'éditeur les recevrait en
+    /// `null` (JSON) et ne pourrait plus enregistrer, la barre ferait une durée infinie. Refusés à la lecture, situés.
+    #[test]
+    fn nombres_non_finis_refuses() {
+        for (texte, ligne) in [
+            ("[[element]]\ntype = \"espace\"\nlargeur = nan\n", 3),
+            ("[[element]]\ntype = \"script\"\ncommande = \"date\"\nintervalle = inf\n", 4),
+            ("[[element]]\ntype = \"souple\"\n\n[[element]]\ntype = \"bouton\"\naction = { volume = -inf }\n", 6),
+            ("[[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"batterie\"\n  largeur = +nan\n", 5),
+        ] {
+            let erreur = lire(texte).unwrap_err();
+            assert!(erreur.starts_with(&format!("ligne {ligne} : ")) && erreur.contains("nombre fini"), "{erreur}\n{texte}");
+        }
+        assert!(lire("[[element]]\ntype = \"espace\"\nlargeur = 1e3\n").is_ok());
+        assert!(lire("[[element]]\ntype = \"bouton\"\ntexte = \"nan\"\n").is_ok(), "un texte « nan » n'est pas un nombre");
     }
 
     /// Un fichier tronqué, une ligne en double, un caractère en trop ou en moins : `lire` répond par une erreur située,
