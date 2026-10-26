@@ -5,6 +5,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 ## [Unreleased]
 
 - Editor: redesigned like macOS System Settings (sidebar, grouped rows, switches, light and dark), suggests the closest symbol for a typo, and `capture` now uses WebKit snapshots that work with the screen locked (`TACTILE_APPARENCE=clair|sombre` forces the theme).
+- Editor: add your own logo to a button with Choose an image… or by dropping a file from the Finder; it is copied to `~/.config/tactile/icones/` (SVG, PDF and icns converted to PNG), with a monochrome switch. A button with both an image and a symbol now shows the image.
 
 ## [0.2.0] - 2026-10-26
 

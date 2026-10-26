@@ -140,7 +140,8 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
         let item = match element {
             Element::Bouton { texte: t, symbole: s, image: i, gabarit, couleur: c, couleur_texte, taille, affichage, largeur, action, appui_long } => {
                 let index = enregistrer(etat, action.clone().map(Commande::Systeme), appui_long.clone().map(Commande::Systeme));
-                let icone = s.as_deref().map(Icone::Symbole).or(i.as_deref().map(|chemin| Icone::Image(chemin, *gabarit)));
+                // Une image posée passe avant le symbole (l'éditeur le dit à côté du choix d'image).
+                let icone = i.as_deref().map(|chemin| Icone::Image(chemin, *gabarit)).or(s.as_deref().map(Icone::Symbole));
                 let (titre, icone) = match affichage {
                     Some(Affichage::Texte) if t.is_some() => (t.as_deref(), None),
                     Some(Affichage::Icone) if icone.is_some() => (None, icone),

@@ -202,6 +202,15 @@ input.moyen { width: 240px; }
 .message-symbole .sf { color: var(--erreur); width: 14px; height: 14px; }
 .message-symbole button.lien { min-height: 22px; font-size: 12px; }
 
+/* Image de l'utilisateur : 20 pt de haut comme sur la barre ; monochrome = blanc d'après la transparence, comme un gabarit AppKit */
+.face img.logo { height: 20px; width: auto; flex: none; display: block; }
+img.gabarit { filter: brightness(0) invert(1); }
+.exemple.vignette { width: auto; min-width: 40px; padding: 0 6px; }
+.exemple.vignette img { height: 20px; max-width: 120px; display: block; }
+.legende.chemin { word-break: break-all; }
+.ligne.depot { outline: 2px dashed var(--accent); outline-offset: -3px; border-radius: var(--r-encart); }
+.el.depot .face { outline: 2px dashed #3b9bff; outline-offset: 2px; }
+
 /* Contenu d'un groupe */
 .sous { margin: 0; padding: 0; list-style: none; }
 .sous li { display: flex; align-items: center; gap: 10px; min-height: 40px; padding: 6px 12px; position: relative; }
@@ -296,7 +305,10 @@ const T = {
     rien: 'Choisis un élément dans la barre pour le régler, ou ajoutes-en un à gauche.',
     texte: 'Texte', symbole: 'Symbole', couleur: 'Couleur', couleurAuto: 'gris de la barre', largeur: 'Largeur (points)', auto: 'automatique',
     couleur_texte: 'Couleur du texte', couleurTexteAuto: 'blanc', taille: 'Taille du texte (points)', affichage: 'Afficher', affIcone: 'le symbole seul', affTexte: 'le texte seul', affLesDeux: 'les deux',
-    symbolePile: 'Symbole de pile à côté du pourcentage', delai: 'Tuée après (secondes)', image: 'Image (réglée dans le fichier)',
+    symbolePile: 'Symbole de pile à côté du pourcentage', delai: 'Tuée après (secondes)', image: 'Image',
+    imageChoisir: 'Choisir une image…', imageRetirer: 'Retirer', imageAide: 'PNG, JPEG, SVG, PDF… Tu peux aussi glisser un fichier ici ou sur le bouton dans la barre.',
+    imageAvantSymbole: 'L’image s’affiche à la place du symbole.', gabarit: 'Monochrome, comme les symboles Apple', gabaritAide: 'Les couleurs disparaissent : la barre teinte la forme en blanc.',
+    imageIntrouvable: 'Image introuvable : {f}. La barre affichera son nom à la place.', imageAutre: 'Choisir une autre image', imageRefusee: 'Image refusée : {m}',
     action: 'Au toucher', appuiLong: 'Appui long (0,5 s)', reglage: 'Réglage', luminosite: 'Luminosité', volume: 'Volume',
     format: 'Format', formatAide: 'HH = heures, mm = minutes, ss = secondes. Par exemple HH:mm ou HH\'h\'mm.',
     commande: 'Commande', commandeAide: 'Lancée avec zsh ; la première ligne de sa sortie s’affiche.', intervalle: 'Relancée toutes les (secondes)',
@@ -337,7 +349,10 @@ const T = {
     rien: 'Pick an item in the bar to edit it, or add one on the left.',
     texte: 'Text', symbole: 'Symbol', couleur: 'Color', couleurAuto: 'bar gray', largeur: 'Width (points)', auto: 'automatic',
     couleur_texte: 'Text color', couleurTexteAuto: 'white', taille: 'Text size (points)', affichage: 'Show', affIcone: 'symbol only', affTexte: 'text only', affLesDeux: 'both',
-    symbolePile: 'Battery symbol next to the percentage', delai: 'Killed after (seconds)', image: 'Image (set in the file)',
+    symbolePile: 'Battery symbol next to the percentage', delai: 'Killed after (seconds)', image: 'Image',
+    imageChoisir: 'Choose an image…', imageRetirer: 'Remove', imageAide: 'PNG, JPEG, SVG, PDF… You can also drop a file here or on the button in the bar.',
+    imageAvantSymbole: 'The image shows instead of the symbol.', gabarit: 'Monochrome, like Apple’s symbols', gabaritAide: 'Colors are dropped and the bar tints the shape white.',
+    imageIntrouvable: 'Image not found: {f}. The bar will show its name instead.', imageAutre: 'Choose another image', imageRefusee: 'Image refused: {m}',
     action: 'On tap', appuiLong: 'Long press (0.5 s)', reglage: 'Setting', luminosite: 'Brightness', volume: 'Volume',
     format: 'Format', formatAide: 'HH = hours, mm = minutes, ss = seconds. For example HH:mm or h:mm a.',
     commande: 'Command', commandeAide: 'Run with zsh; the first line of its output is shown.', intervalle: 'Run every (seconds)',
@@ -409,6 +424,9 @@ let illisible = null;      // { message, extrait } : le fichier ne se lit pas, r
 const apps = {};           // nom tapé → { trouvee, suggestion }, réponse de Rust
 const glyphes = {};        // nom → data URL, ou null si inconnu
 const demandes = new Set();
+const images = {};         // chemin d'image → data URL (telle que la barre l'affiche), ou null si introuvable
+const demandesImages = new Set();
+let imageCible = null;     // l'élément qui recevra l'image choisie ou déposée
 const $ = id => document.getElementById(id);
 const envoyer = m => window.webkit?.messageHandlers?.tactile?.postMessage(JSON.stringify(m));
 window.onerror = (message, source, ligne) => envoyer({ type: 'journal', texte: `${message} (ligne ${ligne})` });
@@ -418,6 +436,15 @@ function demanderGlyphes(noms) {
   if (!nouveaux.length) return;
   nouveaux.forEach(n => demandes.add(n));
   envoyer({ type: 'symboles', noms: nouveaux });
+}
+function demanderImages(chemins) {
+  const nouveaux = chemins.filter(c => c && !(c in images) && !demandesImages.has(c));
+  if (!nouveaux.length) return;
+  nouveaux.forEach(c => demandesImages.add(c));
+  envoyer({ type: 'images', chemins: nouveaux });
+}
+function imagesDe(elements) {
+  return elements.flatMap(e => [e.image, ...(e.element ? imagesDe(e.element) : [])]).filter(c => typeof c === 'string');
 }
 function symbolesDe(elements) {
   return elements.flatMap(e => [e.symbole, ...(e.element ? symbolesDe(e.element) : [])]).filter(n => typeof n === 'string');
@@ -433,7 +460,25 @@ window.tactile = {
     etat(prereglageAttendu ? t('charge') : '');
     prereglageAttendu = false;
     demanderGlyphes(symbolesDe(barre.element));
+    demanderImages(imagesDe(barre.element));
     tout();
+  },
+  images(map) {
+    Object.assign(images, map); dessinerBarre();
+    if (elem()?.image in map) dessinerProprietes(true);
+  },
+  /* La copie est faite dans icones/ : `chemin` est celui de la copie (avec ~). */
+  imageChoisie(chemin, url) {
+    images[chemin] = url; demandesImages.add(chemin);
+    const e = elem(imageCible || sel); imageCible = null;
+    if (!e) return;
+    e.image = chemin;
+    changer(); dessinerProprietes(true);
+  },
+  imageRefusee(message) {
+    imageCible = null;
+    const m = String(message);
+    etat(t('imageRefusee').replace('{m}', m) + (/[.!?]$/.test(m) ? '' : '.'), 'erreur');
   },
   /* Le fichier ne se lit pas : pas de barre vide à enregistrer par-dessus, seulement l'erreur et deux issues. */
   illisible(message, extrait, precedent) {
@@ -552,6 +597,14 @@ function sf(nom) {
   if (g === null) return `<span class="sf alerte${alerte ? '' : ' texte'}" style="--m:url(${alerte || ''})" role="img" aria-label="${esc(t('symboleInconnu'))}" title="${esc(nom)} : ${esc(t('symboleInconnu'))}">${alerte ? '' : '?'}</span>`;
   return `<span class="sf" style="--m:url(${g || ''})" role="img" aria-label="${esc(nom)}"></span>`;
 }
+/* L'image posée, à la taille de la barre ; ⚠ si le fichier n'existe plus (la barre affichera son nom). */
+function logo(e) {
+  const u = images[e.image];
+  if (u === undefined) { demanderImages([e.image]); return ''; }
+  if (u === null) return `<span class="sf alerte" style="--m:url(${glyphes['exclamationmark.triangle.fill'] || ''})" role="img" aria-label="${esc(t('imageIntrouvable').replace('{f}', nomFichier(e.image)))}"></span>`;
+  return `<img class="logo${e.gabarit ? ' gabarit' : ''}" src="${u}" alt="">`;
+}
+function nomFichier(chemin) { return String(chemin).split('/').pop(); }
 function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 function heure(format) {
   const d = new Date(), p = n => String(n).padStart(2, '0');
@@ -574,7 +627,7 @@ function face(e) {
   switch (e.type) {
     case 'bouton': {
       const css = [e.couleur && `background:${esc(e.couleur)}`, e.couleur_texte && `color:${esc(e.couleur_texte)}`, e.taille && `font-size:${+e.taille}px`, e.largeur && `width:${+e.largeur}px;min-width:0`].filter(Boolean).join(';');
-      const icone = e.affichage !== 'texte' && (e.symbole ? sf(e.symbole) : e.image ? '<span class="sf inconnu" style="color:#9a9a9a">▦</span>' : '');
+      const icone = e.affichage !== 'texte' && (e.image ? logo(e) : e.symbole ? sf(e.symbole) : '');
       const texte = e.affichage !== 'icone' && e.texte ? `<span>${esc(e.texte)}</span>` : '';
       return `<span class="face"${css ? ` style="${css}"` : ''}>${icone || ''}${texte}${!icone && !texte ? '&nbsp;' : ''}</span>`;
     }
@@ -697,9 +750,9 @@ function actionModele(mode, valeur) {
 }
 const encart = html => `<div class="encart">${html}</div>`;
 /* Une ligne d'encart : libellé (et sa légende) à gauche, contrôle à droite. */
-function ligne(label, html, id, { aide, haute } = {}) {
+function ligne(label, html, id, { aide, haute, classe } = {}) {
   const ouvre = id ? `<label class="nom" for="${id}">` : '<span class="nom">', ferme = id ? '</label>' : '</span>';
-  return `<div class="ligne${haute ? ' haute' : ''}">${ouvre}${label}${aide ? `<span class="legende">${esc(aide)}</span>` : ''}${ferme}<div class="ctrl">${html}</div></div>`;
+  return `<div class="ligne${haute ? ' haute' : ''}${classe ? ' ' + classe : ''}">${ouvre}${label}${aide ? `<span class="legende">${esc(aide)}</span>` : ''}${ferme}<div class="ctrl">${html}</div></div>`;
 }
 function champAction(cle, label) {
   const e = elem(), ui = actionUI(e[cle]);
@@ -767,6 +820,19 @@ function champSymbole(e) {
     <div class="grille" role="listbox" aria-label="${t('symbole')}">${liste.map(s => `<button type="button" role="option" data-symbole="${s}" title="${s}" aria-label="${s}" aria-pressed="${s === nom}">${sf(s)}</button>`).join('')}</div>
   </div></div>`;
 }
+/* Image : aperçu, Choisir (NSOpenPanel côté Rust) et Retirer ; la ligne reçoit aussi un fichier glissé depuis le Finder. */
+function champImage(e) {
+  const u = e.image ? images[e.image] : undefined;
+  if (e.image && u === undefined) demanderImages([e.image]);
+  const vignette = u ? `<img class="${e.gabarit ? 'gabarit' : ''}" src="${u}" alt="">` : '<span style="color:#8e8e93">—</span>';
+  const introuvable = e.image && u === null
+    ? `<p class="message-symbole" role="alert">${ico('exclamationmark.triangle.fill', '')}<span>${esc(t('imageIntrouvable').replace('{f}', nomFichier(e.image)))}</span><button type="button" class="lien" id="image-autre">${esc(t('imageAutre'))}</button></p>` : '';
+  const nom = esc(t('image')) + (e.image ? `<span class="legende chemin">${esc(e.image)}</span>` : '');
+  const aide = e.image ? (e.symbole ? t('imageAvantSymbole') : '') : t('imageAide');
+  return ligne(nom, `<div class="cote"><span class="exemple vignette" aria-hidden="true">${vignette}</span>
+      <button type="button" id="image-choisir">${esc(t('imageChoisir'))}</button>${e.image ? `<button type="button" id="image-retirer">${esc(t('imageRetirer'))}</button>` : ''}</div>${introuvable}`, '', { aide, haute: true, classe: 'cible-image' })
+    + (e.image ? ligne(esc(t('gabarit')), `<input type="checkbox" class="interrupteur" role="switch" id="f-gabarit" ${e.gabarit ? 'checked' : ''}>`, 'f-gabarit', { aide: t('gabaritAide') }) : '');
+}
 function texteChamp(id, cle, valeur, placeholder, aide) {
   return ligne(t(cle), `<input type="text" class="moyen" id="${id}" data-champ="${cle}" value="${esc(valeur ?? '')}" placeholder="${esc(placeholder || '')}">`, id, { aide });
 }
@@ -790,8 +856,8 @@ function dessinerProprietes(reconstruire) {
   const parDefaut = v => t('parDefaut').replace('{v}', v);
   switch (e.type) {
     case 'bouton':
-      html += encart(texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e)
-          + (e.image ? ligne(t('image'), `<p class="explication">${esc(e.image)}</p>`, '') : ''))
+      html += encart(texteChamp('f-texte', 'texte', e.texte, '') + champSymbole(e))
+        + encart(champImage(e))
         + encart(couleurChamp('couleur', e.couleur, '#363636', t('couleurAuto')) + couleurChamp('couleur_texte', e.couleur_texte, '#ffffff', t('couleurTexteAuto'))
           + nombreChamp('taille', e.taille, 8, 1, '', true)
           + ligne(t('affichage'), `<select id="f-affichage" data-champ="affichage">${[['', t('auto')], ['icone', t('affIcone')], ['texte', t('affTexte')], ['les_deux', t('affLesDeux')]].map(([v, l]) => `<option value="${v}"${(e.affichage || '') === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`, 'f-affichage')
@@ -832,6 +898,7 @@ $('proprietes').addEventListener('input', ev => {
   }
   if (c.dataset.couleur) { e[c.dataset.couleur] = c.value; $(`f-${c.dataset.couleur}-auto`).checked = false; changer(); return; }
   if (c.dataset.couleurAuto) { const k = c.dataset.couleurAuto; if (c.checked) delete e[k]; else e[k] = $(`f-${k}`).value; changer(); return; }
+  if (c.id === 'f-gabarit') { if (c.checked) e.gabarit = true; else delete e.gabarit; changer(); dessinerProprietes(true); return; }
   if (c.id === 'f-pile') { if (c.checked) delete e.symbole; else e.symbole = false; changer(); return; }
   if (c.id === 'symbole-nom') { if (c.value.trim()) e.symbole = c.value.trim(); else delete e.symbole; demanderGlyphes([e.symbole]); changer(); dessinerProprietes(true); return; }
   if (c.id === 'symbole-recherche') { rechercheSymbole = c.value; dessinerProprietes(true); return; }
@@ -859,10 +926,39 @@ $('proprietes').addEventListener('click', ev => {
   else if (b.id === 'symbole-aucun') { delete e.symbole; changer(); dessinerProprietes(true); }
   else if (b.dataset.symbole) { e.symbole = b.dataset.symbole; changer(); dessinerProprietes(true); }
   else if (b.dataset.sous != null) selectionner({ i: sel.i, j: +b.dataset.sous });
+  else if (b.id === 'image-choisir' || b.id === 'image-autre') { imageCible = { ...sel }; envoyer({ type: 'choisirImage' }); }
+  else if (b.id === 'image-retirer') { delete e.image; delete e.gabarit; changer(); dessinerProprietes(true); $('image-choisir')?.focus(); }
   else if (b.dataset.choisirApp) { champActionEnCours = b.dataset.choisirApp; envoyer({ type: 'choisirApp' }); }
 });
 $('proprietes').addEventListener('change', ev => {
   if (ev.target.id === 'f-ajout-groupe' && ev.target.value) ajouter(ev.target.value, true);
+});
+
+/* ---------- Image glissée depuis le Finder ----------
+   Le JS ne voit pas le chemin du fichier : il le lit (FileReader) et envoie son contenu en base64 ; Rust l'écrit dans icones/.
+   Partout ailleurs, le dépôt est refusé : sans ça, la WKWebView ouvrirait le fichier à la place de la page. */
+const avecFichiers = ev => [...(ev.dataTransfer?.types || [])].includes('Files');
+const cibleDepot = ev => illisible ? null : ev.target.closest?.('.cible-image, #barre .el[data-type="bouton"]');
+const finDepot = () => document.querySelectorAll('.depot').forEach(n => n.classList.remove('depot'));
+document.addEventListener('dragover', ev => {
+  if (!avecFichiers(ev)) return;
+  ev.preventDefault();
+  const c = cibleDepot(ev);
+  ev.dataTransfer.dropEffect = c ? 'copy' : 'none';
+  if (!c?.classList.contains('depot')) { finDepot(); c?.classList.add('depot'); }
+});
+document.addEventListener('dragleave', ev => { if (!ev.relatedTarget) finDepot(); });
+document.addEventListener('drop', ev => {
+  if (!avecFichiers(ev)) return;
+  ev.preventDefault(); finDepot();
+  const c = cibleDepot(ev), f = ev.dataTransfer.files[0];
+  if (!c || !f) return;
+  if (c.matches('.el')) selectionner({ i: +c.dataset.i });
+  imageCible = { ...sel };
+  if (f.size > 20e6) return tactile.imageRefusee(langue === 'fr' ? 'plus de 20 Mo' : 'larger than 20 MB');
+  const lecteur = new FileReader();
+  lecteur.onload = () => envoyer({ type: 'deposerImage', nom: f.name, donnees: String(lecteur.result).split(',')[1] || '' });
+  lecteur.readAsDataURL(f);
 });
 
 /* ---------- Haut de page ---------- */

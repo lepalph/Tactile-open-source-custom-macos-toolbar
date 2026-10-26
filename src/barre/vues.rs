@@ -64,7 +64,8 @@ pub(crate) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
 }
 
 /// Lit le fichier et le redessine à `HAUTEUR_IMAGE` × `ECHELLE` ; l'original est relâché aussitôt.
-fn reduire(chemin: &str, gabarit: bool) -> Option<Retained<AnyObject>> {
+/// L'éditeur s'en sert aussi pour convertir un SVG, un PDF ou un icns en PNG au même rendu.
+pub(crate) fn reduire(chemin: &str, gabarit: bool) -> Option<Retained<AnyObject>> {
     unsafe {
         let source: Id = msg_send![class!(NSImage), alloc];
         let source: Retained<AnyObject> = Retained::from_raw(msg_send![source, initWithContentsOfFile: &*texte(chemin)])?;

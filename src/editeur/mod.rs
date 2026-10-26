@@ -3,11 +3,16 @@
 //!
 //! JS → Rust, un objet JSON `{ "type": … }` : `pret`, `enregistrer { barre, fermer? }`, `revenir`,
 //! `prereglage { nom }`, `symboles { noms }`, `choisirApp`, `verifierApp { nom }`, `modifie { valeur }`,
-//! `fermer`, `ouvrirFichier`, `relire`, `titre { texte }`, `journal { texte }`, `capture { chemin }`.
+//! `fermer`, `ouvrirFichier`, `relire`, `titre { texte }`, `journal { texte }`, `capture { chemin }`,
+//! `choisirImage`, `deposerImage { nom, donnees }` (fichier glissé, en base64), `importerImage { chemin }`
+//! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`.
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
 //! `tactile.glyphes({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent)`, `tactile.revenu()`,
 //! `tactile.abimeGarde(nom)`, `tactile.erreur(texte)`, `tactile.appChoisie(nom)`,
-//! `tactile.appVerifiee(nom, trouvee, suggestion)`, `tactile.demanderFermeture()`.
+//! `tactile.appVerifiee(nom, trouvee, suggestion)`, `tactile.demanderFermeture()`,
+//! `tactile.imageChoisie(chemin, dataURL)`, `tactile.imageRefusee(texte)`, `tactile.images({chemin: dataURL|null})`.
+
+mod icones;
 
 use crate::config::{self, Barre, Element};
 use objc2::rc::Retained;
@@ -175,6 +180,28 @@ fn recevoir(message: Value) {
                 js(&format!("tactile.appChoisie({})", json!(nom)));
             }
         }
+        "choisirImage" => {
+            if let Some(source) = icones::choisir() {
+                importer_image(icones::importer(&source, &icones::dossier(&config::chemin())));
+            }
+        }
+        "importerImage" => {
+            let source = message["chemin"].as_str().unwrap_or("");
+            importer_image(icones::importer(Path::new(source), &icones::dossier(&config::chemin())));
+        }
+        "deposerImage" => {
+            let (nom, donnees) = (message["nom"].as_str().unwrap_or(""), message["donnees"].as_str().unwrap_or(""));
+            importer_image(icones::importer_depot(nom, donnees, &icones::dossier(&config::chemin())));
+        }
+        "images" => {
+            let chemins = message["chemins"].as_array().cloned().unwrap_or_default();
+            let images: serde_json::Map<String, Value> = chemins
+                .iter()
+                .filter_map(Value::as_str)
+                .map(|c| (c.to_string(), icones::apercu(c).map_or(Value::Null, Value::String)))
+                .collect();
+            js(&format!("tactile.images({})", Value::Object(images)));
+        }
         "journal" => eprintln!("tactile : éditeur, {}", message["texte"].as_str().unwrap_or("")),
         "titre" => {
             if let Some(t) = message["texte"].as_str() {
@@ -197,6 +224,17 @@ fn envoyer_config(config: Result<Barre, String>) {
                 .and_then(|n| std::fs::read_to_string(&chemin).ok()?.lines().nth(n.checked_sub(1)?).map(str::to_string));
             js(&format!("tactile.illisible({}, {}, {})", json!(message), json!(extrait), version(&chemin, 1).exists()));
         }
+    }
+}
+
+/// La copie faite (chemin avec `~` et aperçu), ou la raison du refus.
+fn importer_image(copie: Result<PathBuf, String>) {
+    match copie {
+        Ok(copie) => {
+            let chemin = icones::avec_tilde(&copie);
+            js(&format!("tactile.imageChoisie({}, {})", json!(chemin), json!(icones::apercu(&chemin))));
+        }
+        Err(e) => js(&format!("tactile.imageRefusee({})", json!(e))),
     }
 }
 
@@ -416,15 +454,7 @@ fn glyphe(nom: &str) -> Option<String> {
         }
         let configuration: Id = msg_send![class!(NSImageSymbolConfiguration), configurationWithPointSize: 34.0f64, weight: 0.23f64, scale: 2isize];
         let image: Id = msg_send![image, imageWithSymbolConfiguration: configuration];
-        let tiff: Id = msg_send![image, TIFFRepresentation];
-        let bitmap: Id = msg_send![class!(NSBitmapImageRep), imageRepWithData: tiff];
-        let proprietes: Id = msg_send![class!(NSDictionary), dictionary];
-        let png: Id = msg_send![bitmap, representationUsingType: 4usize, properties: proprietes];
-        if png.is_null() {
-            return None;
-        }
-        let base64: Id = msg_send![png, base64EncodedStringWithOptions: 0usize];
-        Some(format!("data:image/png;base64,{}", *(base64 as *const NSString)))
+        icones::png(image).map(|png| format!("data:image/png;base64,{}", icones::base64(&png)))
     }
 }
 
