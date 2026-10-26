@@ -369,6 +369,20 @@ mod tests {
         assert!(!image.is_null());
     }
 
+    /// Un logo perso monochrome (`image` + `gabarit`, `affichage = "icone"`) : l'image est un gabarit, seule (NSImageOnly).
+    #[test]
+    fn logo_monochrome_est_un_gabarit() {
+        super::super::preparer_cible();
+        let logo = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icone-1024.png");
+        let (titre, icone) = selon(Some(Affichage::Icone), Some("Logo"), Some(Icone::Image(logo, true)));
+        let b = bouton(titre, icone, 0, false, "");
+        let image: Id = unsafe { msg_send![b, image] };
+        assert!(!image.is_null());
+        let gabarit: bool = unsafe { msg_send![image, isTemplate] };
+        let position: isize = unsafe { msg_send![b, imagePosition] };
+        assert_eq!((gabarit, position), (true, 1));
+    }
+
     /// Une image qui annonce 30000 × 30000 px (bouton ou image d'un script JSON, même chemin `Icone::Image`) : repli texte.
     #[test]
     fn image_geante_donne_un_bouton_texte() {

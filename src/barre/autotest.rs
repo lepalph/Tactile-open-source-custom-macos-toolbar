@@ -14,7 +14,15 @@ thread_local! {
     static ECHECS: Cell<usize> = const { Cell::new(0) };
     static LECTURE: Cell<Option<bool>> = const { Cell::new(None) };
     static CONVERSATION: Cell<usize> = const { Cell::new(0) };
+    /// Relances d'une étape qui attend une condition (`patienter`).
+    static REPRISES: Cell<usize> = const { Cell::new(0) };
+    static SERVEUR_HTTP: std::cell::RefCell<Option<std::process::Child>> = const { std::cell::RefCell::new(None) };
+    static PID_MCP: Cell<i32> = const { Cell::new(0) };
+    static CONFIG_ORIGINALE: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
 }
+
+/// Port du petit serveur HTTP local des étapes 31-35.
+const PORT_HTTP: u16 = 47811;
 
 const ETAT_VOCAL: &str = "/tmp/claude-voix/etat";
 
@@ -71,10 +79,138 @@ couleur = "#0050C8"
 largeur = 300
 "##;
 
+/// Barre des étapes 31-38 : le script vert en tête (reconnu par verifier.sh comme « riche »), trois `texte`
+/// liés à une commande, à un serveur HTTP local et au serveur MCP d'exemple, un logo monochrome, deux actions
+/// système non destructives et deux captures (construites, jamais appuyées).
+fn barre_sources(dossier: &std::path::Path) -> String {
+    let d = dossier.display();
+    let mcp = concat!(env!("CARGO_MANIFEST_DIR"), "/exemples/mcp/horloge-mcp.py");
+    let logo = concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icone-1024.png");
+    format!(r##"
+[[element]]
+type = "script"
+commande = '''echo '{{"texte":"ok","couleur":"#00AA00"}}' '''
+intervalle = 5
+largeur = 60
+
+[[element]]
+type = "texte"
+source = "commande"
+gabarit = "val {{texte}}"
+largeur = 90
+
+[[element]]
+type = "texte"
+source = "http"
+gabarit = "{{t}} °C"
+largeur = 90
+
+[[element]]
+type = "texte"
+source = "mcp"
+gabarit = "MCP {{heure}}"
+largeur = 130
+
+[[element]]
+type = "bouton"
+texte = "Logo"
+image = "{logo}"
+gabarit = true
+affichage = "icone"
+
+[[element]]
+type = "bouton"
+symbole = "rectangle.3.group"
+action = "mission_control"
+
+[[element]]
+type = "bouton"
+symbole = "menubar.dock.rectangle"
+action = "bureau"
+
+[[element]]
+type = "bouton"
+symbole = "camera.viewfinder"
+action = "capture_ecran"
+
+[[element]]
+type = "bouton"
+symbole = "camera.metering.matrix"
+action = "capture_zone"
+
+[[source]]
+nom = "commande"
+commande = "cat {d}/valeur.txt"
+toutes_les = 5
+
+[[source]]
+nom = "http"
+http = "http://127.0.0.1:{PORT_HTTP}/valeur.json"
+toutes_les = 5
+
+[[source]]
+nom = "mcp"
+mcp = {{ commande = "/usr/bin/python3 {mcp}", outil = "heure" }}
+toutes_les = 5
+"##)
+}
+
+/// Barre importée aux étapes 39-40 : un bouton orange avec un logo (exportée en `.zip`).
+fn barre_a_importer(logo: &std::path::Path) -> String {
+    format!("[[element]]\ntype = \"bouton\"\ntexte = \"Importée\"\nimage = \"{}\"\ncouleur = \"#FF8C00\"\nlargeur = 300\n", logo.display())
+}
+
+fn dossier_essai() -> std::path::PathBuf {
+    std::env::temp_dir().join("tactile-autotest")
+}
+
 pub(super) fn programmer() {
+    programmer_dans(2.5);
+}
+
+fn programmer_dans(secondes: f64) {
     unsafe {
-        let _: () = msg_send![cible(), performSelector: sel!(etapeAutotest:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 2.5f64];
+        let _: () = msg_send![cible(), performSelector: sel!(etapeAutotest:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: secondes];
     }
+}
+
+/// Étape qui attend une condition : rejouée toutes les 0,5 s (sans nouvelle capture) jusqu'à `secondes`.
+/// `false` : l'étape est reprogrammée, ne rien faire de plus.
+fn patienter(n: usize, pret: bool, secondes: f64) -> bool {
+    if pret || REPRISES.get() as f64 * 0.5 >= secondes {
+        REPRISES.set(0);
+        return true;
+    }
+    REPRISES.set(REPRISES.get() + 1);
+    ETAPE.set(n);
+    programmer_dans(0.5);
+    false
+}
+
+/// L'action système d'un bouton, telle qu'un appui la déclencherait.
+fn action_de(nom: &str) -> Option<Action> {
+    let index = super::etiquette(controle(nom)?) as usize;
+    ETAT.with_borrow(|e| match e.as_ref()?.commandes.get(index)?.0.clone()? {
+        super::Commande::Systeme(a) => Some(a),
+        _ => None,
+    })
+}
+
+/// Pid du serveur MCP d'exemple lancé par cette barre (enfant direct : `zsh -c`, remplacé par python).
+fn pid_mcp() -> i32 {
+    std::process::Command::new("/usr/bin/pgrep").args(["-P", &std::process::id().to_string(), "-f", "horloge-mcp"]).output()
+        .ok().and_then(|s| String::from_utf8_lossy(&s.stdout).lines().next().and_then(|l| l.trim().parse().ok())).unwrap_or(0)
+}
+
+/// `tactile <args>` (ce binaire), avec `TACTILE_CONFIG` donné ou hérité ; vrai si le code de sortie est 0.
+fn cli(args: &[&str], config: Option<&std::path::Path>) -> bool {
+    let Ok(exe) = std::env::current_exe() else { return false };
+    let mut c = std::process::Command::new(exe);
+    c.args(args).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null());
+    if let Some(config) = config {
+        c.env("TACTILE_CONFIG", config);
+    }
+    c.status().is_ok_and(|s| s.success())
 }
 
 fn controle(nom: &str) -> Option<Id> {
@@ -201,6 +337,8 @@ fn attendu(n: usize) -> &'static str {
         26 => "sous",
         27 => "application",
         28 | 29 => "erreur",
+        31..=38 => "riche",
+        39 => "importee",
         _ => "principale",
     }
 }
@@ -208,7 +346,9 @@ fn attendu(n: usize) -> &'static str {
 pub(super) fn etape() {
     let n = ETAPE.get();
     ETAPE.set(n + 1);
-    eprintln!("AUTOTEST {n} pas attendu={}", attendu(n));
+    if REPRISES.get() == 0 {
+        eprintln!("AUTOTEST {n} pas attendu={}", attendu(n));
+    }
     let suivante = match n {
         0 => { noter(n, COURANTE.get() == principale(), "barre principale présentée"); true }
         1 => cliquer(n, "ouvrir sun.max.fill"),
@@ -322,6 +462,126 @@ pub(super) fn etape() {
             let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
             super::installer(&crate::config::charger().unwrap_or_else(|_| config.unwrap()));
             noter(n, controle("Quit").is_none() && COURANTE.get() == principale(), "barre de l'utilisateur rétablie");
+            true
+        }
+        31 => {
+            let dossier = dossier_essai();
+            let _ = std::fs::create_dir_all(&dossier);
+            let ecrit = std::fs::write(dossier.join("valeur.txt"), "un").is_ok() && std::fs::write(dossier.join("valeur.json"), r#"{"t": 21.5}"#).is_ok();
+            let serveur = std::process::Command::new("/usr/bin/python3")
+                .args(["-m", "http.server", &PORT_HTTP.to_string(), "--bind", "127.0.0.1", "--directory"]).arg(&dossier)
+                .stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).spawn();
+            noter(n, ecrit && serveur.is_ok(), &format!("serveur HTTP local lancé sur le port {PORT_HTTP}"));
+            SERVEUR_HTTP.set(serveur.ok());
+            super::installer(&crate::config::lire(&barre_sources(&dossier)).expect("barre des sources invalide"));
+            let manquants: Vec<&str> = ["texte commande", "texte http", "texte mcp", "Logo", "rectangle.3.group", "menubar.dock.rectangle", "camera.viewfinder", "camera.metering.matrix"]
+                .into_iter().filter(|c| controle(c).is_none()).collect();
+            noter(n, manquants.is_empty(), &format!("barre des sources installée (manquants : {manquants:?})"));
+            true
+        }
+        32 => {
+            let (c, h, m) = (titre("texte commande"), titre("texte http"), titre("texte mcp"));
+            let mcp_ok = m.starts_with("MCP ") && m.len() == 12;
+            if !patienter(n, c == "val un" && h == "21.5 °C" && mcp_ok, 15.0) { return; }
+            noter(n, c == "val un", &format!("source commande : « {c} »"));
+            noter(n, h == "21.5 °C", &format!("source http locale : « {h} »"));
+            noter(n, mcp_ok, &format!("source mcp : « {m} »"));
+            noter(n, std::fs::write(dossier_essai().join("valeur.txt"), "deux").is_ok(), "valeur de la commande changée");
+            true
+        }
+        33 => {
+            let c = titre("texte commande");
+            if !patienter(n, c == "val deux", 12.0) { return; }
+            noter(n, c == "val deux", &format!("source commande relue : « {c} »"));
+            let pid = pid_mcp();
+            PID_MCP.set(pid);
+            if pid > 0 {
+                super::tuer_groupe(pid);
+            }
+            noter(n, pid > 0, &format!("serveur MCP {pid} tué"));
+            true
+        }
+        34 => {
+            let m = titre("texte mcp");
+            if !patienter(n, m == "⚠ source", 15.0) { return; }
+            noter(n, m == "⚠ source", &format!("serveur MCP mort : « {m} »"));
+            true
+        }
+        35 => {
+            let m = titre("texte mcp");
+            let relance = m.starts_with("MCP ");
+            if !patienter(n, relance, 15.0) { return; }
+            let pid = pid_mcp();
+            noter(n, relance && pid > 0 && pid != PID_MCP.get(), &format!("serveur MCP relancé (pid {} → {pid}) : « {m} »", PID_MCP.get()));
+            true
+        }
+        36 => {
+            let image: Id = controle("Logo").map_or(std::ptr::null_mut(), |b| unsafe { msg_send![b, image] });
+            let gabarit = !image.is_null() && unsafe { msg_send![image, isTemplate] };
+            // 1 = NSImageOnly : le titre n'est pas dessiné.
+            let seule = controle("Logo").is_some_and(|b| { let p: isize = unsafe { msg_send![b, imagePosition] }; p == 1 });
+            noter(n, gabarit && seule, "logo perso : image de fichier monochrome (gabarit), seule");
+            for (nom, voulue) in [("camera.viewfinder", Action::CaptureEcran), ("camera.metering.matrix", Action::CaptureZone), ("rectangle.3.group", Action::MissionControl), ("menubar.dock.rectangle", Action::Bureau)] {
+                let vue = action_de(nom);
+                noter(n, vue.as_ref() == Some(&voulue), &format!("bouton {nom} → {vue:?}"));
+            }
+            noter(n, actions::executer(&Action::MissionControl).is_ok(), "mission_control ouvert (open -b)");
+            true
+        }
+        37 => {
+            noter(n, actions::executer(&Action::MissionControl).is_ok(), "mission_control refermé");
+            noter(n, actions::executer(&Action::Bureau).is_ok(), "bureau montré (open -b … 1)");
+            true
+        }
+        38 => {
+            noter(n, actions::executer(&Action::Bureau).is_ok(), "bureau rétabli");
+            if std::env::var_os("TACTILE_CONFIG").is_none() {
+                // L'import remplace le fichier de config : jamais celui de l'utilisateur.
+                eprintln!("AUTOTEST {n} info sans TACTILE_CONFIG, import sauté (scripts/verifier.sh le fixe)");
+                ETAPE.set(41);
+            }
+            true
+        }
+        39 => {
+            let dossier = dossier_essai().join("import");
+            let _ = std::fs::create_dir_all(&dossier);
+            let logo = dossier.join("logo.png");
+            let source = dossier.join("barre.toml");
+            let zip = dossier.join("barre.zip");
+            let _ = std::fs::remove_file(&zip);
+            let pret = std::fs::copy(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/icone-1024.png"), &logo).is_ok()
+                && std::fs::write(&source, barre_a_importer(&logo)).is_ok();
+            let exporte = pret && cli(&["--exporter", &zip.to_string_lossy()], Some(&source));
+            let est_zip = std::fs::read(&zip).is_ok_and(|o| o.starts_with(b"PK"));
+            noter(n, exporte && est_zip, "tactile --exporter : barre à logo exportée en .zip");
+            CONFIG_ORIGINALE.set(std::fs::read(crate::config::chemin()).ok());
+            noter(n, cli(&["--importer", &zip.to_string_lossy(), "--oui"], None), "tactile --importer … --oui");
+            true
+        }
+        40 => {
+            let vue = controle("Importée").is_some();
+            if !patienter(n, vue, 5.0) { return; }
+            noter(n, vue && a_une_image("Importée") && COURANTE.get() == principale(), "barre importée rechargée à chaud, avec son logo");
+            let remise = CONFIG_ORIGINALE.take().is_some_and(|o| std::fs::write(crate::config::chemin(), o).is_ok());
+            noter(n, remise, "fichier de config d'origine réécrit");
+            true
+        }
+        41 => {
+            let partie = controle("Importée").is_none();
+            if !patienter(n, partie, 5.0) { return; }
+            noter(n, partie, "config d'origine rechargée à chaud");
+            true
+        }
+        42 => {
+            if let Some(mut serveur) = SERVEUR_HTTP.take() {
+                let _ = serveur.kill();
+                let _ = serveur.wait();
+            }
+            let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
+            super::installer(&crate::config::charger().unwrap_or_else(|_| config.unwrap()));
+            noter(n, controle("texte mcp").is_none() && COURANTE.get() == principale(), "barre de l'utilisateur rétablie");
+            let restants = std::process::Command::new("/usr/bin/pgrep").args(["-P", &std::process::id().to_string(), "-f", "horloge-mcp|http.server"]).output().map(|s| s.stdout.is_empty()).unwrap_or(false);
+            noter(n, restants, "serveurs MCP et HTTP arrêtés");
             eprintln!("AUTOTEST fin {} échec(s)", ECHECS.get());
             false
         }

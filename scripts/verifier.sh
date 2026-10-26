@@ -13,12 +13,19 @@ dossier=target/verification
 rm -rf $dossier && mkdir -p $dossier
 journal=$dossier/journal.log
 
-pkill -x tactile; sleep 0.5
+# Seule la barre est arrêtée (l'app installée ou ce binaire, sans argument) : un éditeur `--personnaliser` continue.
+app=$HOME/Applications/Tactile.app/Contents/MacOS/tactile
+barres="^($app|(${PWD}/)?target/release/tactile)\$"
+pgrep -qf "^$app\$" && relancer=1 || relancer=0
+pkill -f "$barres"; sleep 0.5
+# Jamais la vraie barre : l'autotest importe une barre par la CLI dans ce fichier.
+export TACTILE_CONFIG=${TACTILE_CONFIG:-$dossier/barre.toml}
+[[ -e $TACTILE_CONFIG ]] || cp ~/.config/tactile/barre.toml $TACTILE_CONFIG 2>/dev/null || cp exemples/barre.toml $TACTILE_CONFIG
 TACTILE_AUTOTEST=1 target/release/tactile 2>$journal &
 pid=$!
 
 vus=0
-for i in {1..600}; do
+for i in {1..2000}; do
   sleep 0.1
   n=$(grep -c '^AUTOTEST [0-9]* pas' $journal)
   if (( n > vus )); then
@@ -30,6 +37,8 @@ for i in {1..600}; do
   grep -q '^AUTOTEST fin' $journal && break
 done
 kill $pid 2>/dev/null
+pkill -f "http.server 47811" 2>/dev/null  # serveur de l'autotest, s'il a été interrompu
+(( relancer )) && open ~/Applications/Tactile.app
 
 # Classe chaque capture d'après sa zone de gauche : « principale » ressemble à l'étape 0,
 # « sous » à l'étape 1 (bouton ✕), le reste est la barre d'Apple.
@@ -78,9 +87,18 @@ func bleuAGauche(_ f: String) -> Bool {
     } }
     return n > 100
 }
+// La barre importée par la CLI (étape 39) commence par un bouton orange.
+func orangeAGauche(_ f: String) -> Bool {
+    let r = NSBitmapImageRep(data: try! Data(contentsOf: URL(fileURLWithPath: f)))!
+    var n = 0
+    for x in stride(from: 0, to: 300, by: 3) { for y in stride(from: 0, to: r.pixelsHigh, by: 3) {
+        if let c = r.colorAt(x: x, y: y), c.redComponent > 0.8, c.greenComponent > 0.45, c.greenComponent < 0.7, c.blueComponent < 0.35 { n += 1 }
+    } }
+    return n > 100
+}
 for f in fichiers {
     let p = pixels(f)
-    var vu = rougeAGauche(f) ? "erreur" : vertAGauche(f) ? "riche" : bleuAGauche(f) ? "application" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
+    var vu = rougeAGauche(f) ? "erreur" : orangeAGauche(f) ? "importee" : vertAGauche(f) ? "riche" : bleuAGauche(f) ? "application" : ecart(p, principale) < 0.02 ? "principale" : ecart(p, sous) < 0.02 ? "sous" : "apple"
     if vu == "apple" && !droiteAllumee(f) { vu = "noir" }
     let attendu = String(f.split(separator: "-").last!.dropLast(4))
     let verdict = vu == attendu ? "ok   " : vu == "noir" ? "?    " : "ÉCHEC"
