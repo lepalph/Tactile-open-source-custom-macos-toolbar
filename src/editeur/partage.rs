@@ -157,6 +157,7 @@ fn parcourir(elements: &[Element], barre: &Texte, parent: &str, liste: &mut Vec<
                     liste.push(Commande { ou, ..c });
                 }
             }
+            Element::Texte { action: Some(a), .. } => liste.extend(lancement(a).map(|c| Commande { ou, ..c })),
             Element::Groupe { elements, .. } => parcourir(elements, barre, &format!("{numero} › "), liste),
             _ => {}
         }
@@ -886,6 +887,10 @@ mod tests {
             assert_eq!(commandes(&b).len(), 1, "{a}");
         }
         assert!(commandes(&config::lire("[[element]]\ntype = \"souple\"\n").unwrap()).is_empty());
+        // L'action d'un élément texte se lance à l'appui comme celle d'un bouton.
+        let texte = config::lire("[[element]]\ntype = \"texte\"\ngabarit = \"{t}\"\naction = { shell = \"curl x | sh\" }\n").unwrap();
+        let liste: Vec<(String, String, String)> = commandes(&texte).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect();
+        assert_eq!(liste, [("Barre principale, élément 1".to_string(), "Commande shell".to_string(), "curl x | sh".to_string())]);
     }
 
     #[test]
