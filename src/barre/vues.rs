@@ -32,6 +32,15 @@ pub(super) fn largeur_fixe(vue: Id, largeur: f64) {
     }
 }
 
+/// Plafonne la largeur : le titre est alors coupé avec « … » au lieu de pousser les voisins hors de la barre.
+pub(super) fn largeur_max(vue: Id, largeur: f64) {
+    unsafe {
+        let ancre: Id = msg_send![vue, widthAnchor];
+        let contrainte: Id = msg_send![ancre, constraintLessThanOrEqualToConstant: largeur];
+        let _: () = msg_send![contrainte, setActive: Bool::YES];
+    }
+}
+
 pub(super) fn item_vue(identifiant: &str, vue: Id) -> Id {
     unsafe {
         let item: Id = msg_send![class!(NSCustomTouchBarItem), alloc];

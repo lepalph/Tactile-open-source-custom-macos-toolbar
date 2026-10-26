@@ -254,6 +254,9 @@ fn installer(config: &Barre) {
         envoi,
         reception,
     };
+    if let Some((total, caches)) = elements::debordement(&config.elements, elements::largeur_barre(config.masquer_control_strip)) {
+        eprintln!("tactile : la barre déborde (environ {total:.0} pt pour {:.0}) : {caches} élément(s) sur {} seront cachés", elements::largeur_barre(config.masquer_control_strip), config.elements.len());
+    }
     let items = construire(&config.elements, PREFIXE, &mut etat);
     etat.barres[0] = barre_touch(PREFIXE, items);
     let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());

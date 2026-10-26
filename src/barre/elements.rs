@@ -5,7 +5,7 @@ use objc2::{class, msg_send, sel};
 use std::time::{Duration, Instant};
 
 use super::rafraichi::Rafraichi;
-use super::vues::{barre_touch, couleur, item_vue, largeur_fixe, symbole, texte};
+use super::vues::{barre_touch, couleur, item_vue, largeur_fixe, largeur_max, symbole, texte};
 use super::{cible, Commande, Etat, Id, PREFIXE};
 use crate::actions::{self, Action};
 use crate::config::{Element, Reglage};
@@ -113,8 +113,10 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 if let Some(col) = c.as_deref().and_then(couleur) {
                     unsafe { let _: () = msg_send![b, setBezelColor: col]; }
                 }
-                if let Some(l) = largeur {
-                    largeur_fixe(b, *l);
+                match largeur {
+                    Some(l) => largeur_fixe(b, *l),
+                    None if t.is_some() => largeur_max(b, LARGEUR_MAX_TEXTE),
+                    None => {}
                 }
                 item_vue(&ident, b)
             }
@@ -126,14 +128,16 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 let b = bouton_texte(etat, None);
                 let formateur: Id = unsafe { msg_send![class!(NSDateFormatter), new] };
                 unsafe { let _: () = msg_send![formateur, setDateFormat: &*texte(format.as_deref().unwrap_or("HH:mm"))]; }
+                largeur_max(b, LARGEUR_MAX_TEXTE);
                 etat.rafraichis.push(Rafraichi::Heure { bouton: b, formateur });
                 item_vue(&ident, b)
             }
             Element::EnCours { largeur } => {
                 let b = bouton_texte(etat, Some(Action::LecturePause));
                 etat.controles.push(("en_cours".into(), b));
-                if let Some(l) = largeur {
-                    largeur_fixe(b, *l);
+                match largeur {
+                    Some(l) => largeur_fixe(b, *l),
+                    None => largeur_max(b, LARGEUR_MAX_TEXTE),
                 }
                 etat.rafraichis.push(Rafraichi::EnCours { bouton: b });
                 item_vue(&ident, b)
@@ -175,6 +179,41 @@ pub(super) fn largeur_script(largeur: Option<f64>) -> f64 {
     largeur.unwrap_or(LARGEUR_SCRIPT)
 }
 
+/// Largeur au-delà de laquelle un texte sans `largeur` (bouton, heure, titre en cours) est coupé avec « … ».
+pub(super) const LARGEUR_MAX_TEXTE: f64 = 200.0;
+
+/// Largeur de la barre en points : toute la Touch Bar, ou ce qu'il reste à côté du Control Strip.
+pub(super) fn largeur_barre(masquer_control_strip: bool) -> f64 {
+    if masquer_control_strip { 1004.0 } else { 685.0 }
+}
+
+/// Largeur approximative d'un élément (texte : ~9 pt par caractère plus les marges ; symbole seul : 72, mesuré).
+fn largeur_estimee(element: &Element) -> f64 {
+    let texte = |t: &str| (t.chars().count() as f64 * 9.0 + 24.0).min(LARGEUR_MAX_TEXTE);
+    match element {
+        Element::Bouton { largeur: Some(l), .. } | Element::EnCours { largeur: Some(l) } | Element::Espace { largeur: l } => *l,
+        Element::Bouton { texte: t, symbole: s, .. } => t.as_deref().map_or(72.0, texte) + if t.is_some() && s.is_some() { 24.0 } else { 0.0 },
+        Element::Heure { format } => texte(format.as_deref().unwrap_or("HH:mm")),
+        Element::EnCours { largeur: None } => LARGEUR_MAX_TEXTE,
+        Element::Script { largeur, .. } => largeur_script(*largeur),
+        Element::Slider { .. } | Element::Groupe { .. } => 72.0,
+        Element::Souple => 0.0,
+    }
+}
+
+/// La Touch Bar retire en silence ce qui dépasse : largeur totale estimée et nombre d'éléments
+/// qui seront cachés (du premier qui dépasse `disponible` jusqu'au dernier), ou `None` si tout tient.
+pub(super) fn debordement(elements: &[Element], disponible: f64) -> Option<(f64, usize)> {
+    const ESPACEMENT: f64 = 8.0;
+    let largeurs: Vec<f64> = elements.iter().map(|e| largeur_estimee(e) + ESPACEMENT).collect();
+    let mut cumul = 0.0;
+    let premier_cache = largeurs.iter().position(|l| {
+        cumul += l;
+        cumul > disponible
+    })?;
+    Some((largeurs.iter().sum(), elements.len() - premier_cache))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,6 +226,28 @@ mod tests {
         let image: Id = unsafe { msg_send![b, image] };
         assert_eq!(unsafe { (*(titre as *const objc2_foundation::NSString)).to_string() }, "symbole.qui.nexiste.pas");
         assert!(image.is_null());
+    }
+
+    #[test]
+    fn debordement_compte_les_elements_caches() {
+        let bouton = |texte: Option<&str>, largeur: Option<f64>| Element::Bouton {
+            texte: texte.map(String::from),
+            symbole: Some("bolt.fill".into()),
+            couleur: None,
+            largeur,
+            action: None,
+            appui_long: None,
+        };
+        let defaut = crate::config::lire(include_str!("../../exemples/barre.toml")).unwrap();
+        assert_eq!(debordement(&defaut.elements, largeur_barre(true)), None);
+        assert_eq!(debordement(&[bouton(None, Some(100_000.0)), bouton(None, None)], 1004.0).map(|d| d.1), Some(2));
+        let vingt_cinq: Vec<Element> = (0..25).map(|_| bouton(None, None)).collect();
+        let (total, caches) = debordement(&vingt_cinq, 1004.0).unwrap();
+        assert_eq!(total, 25.0 * 80.0);
+        assert_eq!(caches, 25 - 12);
+        // Un texte long sans largeur est plafonné, il ne cache pas tout seul ses voisins.
+        let long = "x".repeat(200);
+        assert_eq!(debordement(&[bouton(Some(&long), None), bouton(None, None)], 1004.0), None);
     }
 
     #[test]
