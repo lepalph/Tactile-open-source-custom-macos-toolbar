@@ -35,10 +35,25 @@ fn origine(url: &str) -> &str {
     &url[..url[debut..].find(['/', '?', '#']).map_or(url.len(), |i| debut + i)]
 }
 
-fn hote(url: &str) -> String {
+/// L'hôte seul (sans identifiants, port ni crochets), en minuscules.
+fn hote_brut(url: &str) -> String {
     let autorite = &origine(url)[url.find("://").map_or(0, |i| i + 3)..];
-    let h = autorite.rsplit('@').next().unwrap_or(autorite).split(':').next().unwrap_or(autorite);
-    h.strip_prefix("www.").unwrap_or(h).to_string()
+    let h = autorite.rsplit('@').next().unwrap_or(autorite).to_lowercase();
+    match h.strip_prefix('[') {
+        Some(v6) => v6.split(']').next().unwrap_or_default().to_string(),
+        None => h.split(':').next().unwrap_or_default().to_string(),
+    }
+}
+
+fn hote(url: &str) -> String {
+    let h = hote_brut(url);
+    h.strip_prefix("www.").unwrap_or(&h).to_string()
+}
+
+/// Cette machine : localhost et ses sous-domaines, 127.x.x.x, 0.0.0.0, ::1.
+fn locale(url: &str) -> bool {
+    let h = hote_brut(url);
+    h == "localhost" || h.ends_with(".localhost") || h == "0.0.0.0" || h == "::1" || (h.starts_with("127.") && h.bytes().all(|o| o.is_ascii_digit() || o == b'.'))
 }
 
 /// `href` résolu contre la page `base` (absolu, `//hôte`, `/chemin` ou relatif).
@@ -92,9 +107,12 @@ fn lire(url: &str, sortie: &Path, borner: bool, processus: &Processus) -> Result
 }
 
 /// Télécharge `url` dans `sortie` en suivant au plus `REDIRECTIONS` redirections ; rend l'adresse finale.
-fn telecharger(url: &str, sortie: &Path, borner: bool, processus: &Processus) -> Result<String, String> {
+fn telecharger(url: &str, sortie: &Path, borner: bool, distant: bool, processus: &Processus) -> Result<String, String> {
     let mut url = url.to_string();
     for _ in 0..=REDIRECTIONS {
+        if distant && locale(&url) {
+            return Err("adresse locale refusée : un site distant ne peut pas en désigner une".into());
+        }
         if !url_permise(&url) || suspecte(&url) {
             return Err(format!("« {} » refusée : seules les adresses https:// (et http://localhost) sont lues", url.chars().take(80).collect::<String>()));
         }
@@ -196,9 +214,9 @@ impl Drop for Temporaire {
 }
 
 /// Une icône du site, téléchargée, validée (`controler_image`, 1 Mo) puis copiée dans `icones/` : son chemin, ou `None`.
-fn icone(url: &str, hote: &str, dossier: &Path, tmp: &Path, processus: &Processus) -> Option<PathBuf> {
+fn icone(url: &str, hote: &str, dossier: &Path, tmp: &Path, distant: bool, processus: &Processus) -> Option<PathBuf> {
     let brut = tmp.join("icone.bin");
-    telecharger(url, &brut, true, processus).ok()?;
+    telecharger(url, &brut, true, distant, processus).ok()?;
     let octets = std::fs::read(&brut).ok().filter(|o| o.len() <= TAILLE_MAX)?;
     let fichier = tmp.join(format!("{hote}.{}", extension(&octets)?));
     std::fs::rename(&brut, &fichier).ok()?;
@@ -209,13 +227,15 @@ fn icone(url: &str, hote: &str, dossier: &Path, tmp: &Path, processus: &Processu
 /// Le bouton du lien. Sans icône trouvée, le symbole `globe`.
 pub(super) fn recuperer(saisie: &str, dossier: &Path, processus: &Processus) -> Result<Element, String> {
     let adresse = normaliser(saisie)?;
+    // Tapée par l'utilisateur, une adresse locale est permise ; une page distante, elle, ne mène jamais à cette machine.
+    let distant = !locale(&adresse);
     let tmp = Temporaire::nouveau()?;
     let page = tmp.0.join("page.html");
-    let finale = telecharger(&adresse, &page, false, processus)?;
+    let finale = telecharger(&adresse, &page, false, distant, processus)?;
     let octets: Vec<u8> = std::fs::read(&page).unwrap_or_default().into_iter().take(TAILLE_MAX).collect();
     let html = String::from_utf8_lossy(&octets).into_owned();
     let nom = hote(&finale);
-    let image = icones_de(&html, &finale).iter().find_map(|u| icone(u, &nom, dossier, &tmp.0, processus));
+    let image = icones_de(&html, &finale).iter().find_map(|u| icone(u, &nom, dossier, &tmp.0, distant, processus));
     Ok(Element::Bouton {
         texte: Some(titre(&html).unwrap_or(nom)),
         symbole: image.is_none().then(|| "globe".to_string()),
@@ -282,6 +302,27 @@ mod tests {
         assert_eq!(icones_de(html, "https://a.fr/p"), ["https://a.fr/t.png", "https://a.fr/f.ico", "https://a.fr/favicon.ico"]);
         assert_eq!(titre(&format!("<title>{}</title>", "x".repeat(40))).unwrap().chars().count(), 25);
         assert_eq!(titre("<p>rien"), None);
+    }
+
+    /// Un site distant ne fait pas lire un service de cette machine : ni par redirection, ni par l'adresse d'une icône.
+    #[test]
+    fn un_site_distant_ne_mene_pas_au_local() {
+        for local in ["http://localhost:3000/x", "https://localhost/x", "http://127.0.0.1:8080", "https://127.1.2.3/", "http://[::1]:80/", "https://app.localhost/", "http://0.0.0.0/", "https://user@localhost/"] {
+            assert!(locale(local), "{local}");
+        }
+        for distant in ["https://youtube.com", "https://localhost.example.org/", "https://example.org/127.0.0.1", "https://notlocalhost.fr"] {
+            assert!(!locale(distant), "{distant}");
+        }
+        let serveur = serveur(|chemin| match chemin {
+            "/ancien" => (301, "Location: /\r\n".into(), vec![]),
+            _ => (200, String::new(), b"x".to_vec()),
+        });
+        let (tmp, p) = (std::env::temp_dir().join(format!("tactile-distant-{}", std::process::id())), processus());
+        std::fs::create_dir_all(&tmp).unwrap();
+        // Départ local (l'utilisateur l'a tapé) : la redirection locale passe. Départ distant : le local est refusé.
+        assert!(telecharger(&format!("{serveur}/ancien"), &tmp.join("a"), false, false, &p).is_ok());
+        assert_eq!(telecharger(&format!("{serveur}/ancien"), &tmp.join("b"), false, true, &p).unwrap_err(), "adresse locale refusée : un site distant ne peut pas en désigner une");
+        std::fs::remove_dir_all(&tmp).unwrap();
     }
 
     #[test]
