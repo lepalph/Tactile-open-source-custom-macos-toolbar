@@ -2,7 +2,7 @@
 //! Chaque test tire ses cas d'une graine fixe : un échec se rejoue à l'identique, la graine est dans le message.
 
 use crate::actions::{clavier::Touche, Action};
-use crate::config::{Affichage, Application, Barre, CouleurSelon, Element, Reglage, Source, SourceMcp, SymboleSelon};
+use crate::config::{Affichage, Application, Barre, CouleurSelon, Element, Reglage, Site, Source, SourceMcp, SymboleSelon};
 use serde_json::json;
 
 /// xorshift64* : assez de hasard pour varier les cas, et le même tirage à chaque exécution.
@@ -161,6 +161,9 @@ impl Hasard {
             applications: (0..self.jusqua(3))
                 .map(|_| Application { app: self.texte(), herite: self.pile(), elements: (0..1 + self.jusqua(3)).map(|_| self.element(0)).collect() })
                 .collect(),
+            sites: (0..self.jusqua(3))
+                .map(|_| Site { adresse: self.texte(), herite: self.pile(), elements: (0..1 + self.jusqua(3)).map(|_| self.element(0)).collect() })
+                .collect(),
             sources: (0..self.jusqua(3)).map(|_| self.source()).collect(),
         }
     }
@@ -188,19 +191,32 @@ pub(crate) fn sans_panique<R>(f: impl FnOnce() -> R) -> Result<R, String> {
     })
 }
 
+#[repr(C)]
+struct Rusage {
+    /// `ru_utime` puis `ru_stime` : secondes, puis microsecondes (32 bits) et remplissage.
+    temps: [i64; 4],
+    maxrss: i64,
+    reste: [i64; 13],
+}
+
+unsafe extern "C" {
+    fn getrusage(qui: i32, usage: *mut Rusage) -> i32;
+}
+
+fn usage(qui: i32) -> Rusage {
+    let mut u = Rusage { temps: [0; 4], maxrss: 0, reste: [0; 13] };
+    assert_eq!(unsafe { getrusage(qui, &mut u) }, 0);
+    u
+}
+
 /// Pic de mémoire du processus de test (`getrusage`, `ru_maxrss` : en octets sur macOS).
 pub(crate) fn pic_memoire() -> i64 {
-    #[repr(C)]
-    struct Rusage {
-        temps: [i64; 4],
-        maxrss: i64,
-        reste: [i64; 13],
-    }
-    unsafe extern "C" {
-        fn getrusage(qui: i32, usage: *mut Rusage) -> i32;
-    }
-    let mut u = Rusage { temps: [0; 4], maxrss: 0, reste: [0; 13] };
     // 0 : RUSAGE_SELF.
-    assert_eq!(unsafe { getrusage(0, &mut u) }, 0);
-    u.maxrss
+    usage(0).maxrss
+}
+
+/// Temps CPU, utilisateur et système, en ms : de ce processus (`qui` = 0) ou de ses enfants attendus (-1).
+pub(crate) fn cpu_ms(qui: i32) -> f64 {
+    let t = usage(qui).temps;
+    (t[0] + t[2]) as f64 * 1e3 + ((t[1] as i32) + (t[3] as i32)) as f64 / 1e3
 }

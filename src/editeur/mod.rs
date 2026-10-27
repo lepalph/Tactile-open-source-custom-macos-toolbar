@@ -485,6 +485,9 @@ fn enregistrer(chemin: &Path, barre: Value) -> Result<Option<String>, String> {
     for app in &relue.applications {
         verifier(&app.elements).map_err(|e| format!("application « {} », {e}", app.app))?;
     }
+    for site in &relue.sites {
+        verifier(&site.elements).map_err(|e| format!("site « {} », {e}", site.adresse))?;
+    }
     // Le validateur partagé avec `--verifier` et la barre refuse ce qui la rendrait inutilisable : une principale vide
     // (cf. SYNTHESE E1), même avec des barres d'application, puisque la barre montrerait alors « ⚠ config vide ».
     if let Some(avis) = config::controler(&relue, None).into_iter().find(|a| a.grave) {
@@ -551,7 +554,7 @@ fn mettre_de_cote(chemin: &Path) -> Result<PathBuf, String> {
 
 /// Le fichier a-t-il des commentaires autres que l'en-tête que l'éditeur écrit lui-même ?
 fn ecrit_a_la_main(texte: &str) -> bool {
-    let barre = Barre { masquer_control_strip: true, elements: vec![Element::Souple], applications: vec![], sources: vec![] };
+    let barre = Barre { masquer_control_strip: true, elements: vec![Element::Souple], applications: vec![], sites: vec![], sources: vec![] };
     let entete = config::ecrire(&barre).unwrap_or_default();
     let entete: Vec<&str> = entete.lines().filter(|l| l.starts_with('#')).collect();
     texte.lines().filter(|l| !entete.contains(&l.trim_end())).any(a_un_commentaire)
@@ -1312,6 +1315,7 @@ mod tests {
             }
             sans_symbole(&mut barre.elements);
             barre.applications.iter_mut().for_each(|a| sans_symbole(&mut a.elements));
+            barre.sites.iter_mut().for_each(|s| sans_symbole(&mut s.elements));
             let avant = std::fs::read(&chemin).unwrap();
             match enregistrer(&chemin, serde_json::to_value(&barre).unwrap()) {
                 Ok(_) => {
@@ -1333,7 +1337,7 @@ mod tests {
     #[test]
     fn un_nombre_traverse_le_json_au_bit_pres() {
         for largeur in [508.278_594_479_536_37_f64, 0.1, 59.761, 1e6 / 3.0] {
-            let barre = Barre { masquer_control_strip: true, elements: vec![Element::Espace { largeur }], applications: vec![], sources: vec![] };
+            let barre = Barre { masquer_control_strip: true, elements: vec![Element::Espace { largeur }], applications: vec![], sites: vec![], sources: vec![] };
             let json = serde_json::to_string(&barre).unwrap();
             assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre, "{json}");
         }
@@ -1348,11 +1352,15 @@ mod tests {
         let dossier = dossier_essai("complet");
         let chemin = dossier.join("barre.toml");
         assert!(json["application"][0]["herite"].as_bool().unwrap(), "{json}");
+        assert_eq!(json["site"][0]["adresse"], "*.google.com/maps*", "{json}");
+        assert!(json["site"][0]["herite"].as_bool().unwrap() && json["site"][1]["element"][0]["action"]["touche"] == "c", "{json}");
         enregistrer(&chemin, json).unwrap();
         assert_eq!(config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap(), barre);
         // Une barre d'application aussi est vérifiée avant l'écriture.
         let erreur = enregistrer(&chemin, json!({ "application": [{ "app": "Safari", "element": [{ "type": "bouton", "couleur": "bleu" }] }] })).unwrap_err();
         assert!(erreur.starts_with("application « Safari », élément 1"), "{erreur}");
+        let erreur = enregistrer(&chemin, json!({ "site": [{ "adresse": "youtube.com", "element": [{ "type": "bouton", "couleur": "bleu" }] }] })).unwrap_err();
+        assert!(erreur.starts_with("site « youtube.com », élément 1"), "{erreur}");
         std::fs::remove_dir_all(&dossier).unwrap();
     }
 }

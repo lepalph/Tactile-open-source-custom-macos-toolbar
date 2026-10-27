@@ -1,0 +1,51 @@
+# Une barre par site web : copie ces blocs à la fin de ~/.config/tactile/barre.toml.
+# Quand l'onglet actif de Safari, Chrome, Arc, Brave, Edge, Vivaldi ou Chromium (au premier plan) est sur ce site,
+# sa barre passe avant celle de l'application et avant la principale.
+# La première fois, macOS demande « Tactile souhaite contrôler Safari » (Automatisation) : réponds OK.
+# Refusé par erreur : Réglages Système → Confidentialité et sécurité → Automatisation → Tactile.
+
+[[element]]
+type = "heure"
+format = "HH:mm"
+
+[[element]]
+type = "souple"
+
+[[element]]
+type = "souple"
+
+# YouTube (et ses sous-domaines : www., m., music.) : les raccourcis du lecteur.
+# `herite = true` garde l'heure de la principale et met ces boutons entre ses deux « souple ».
+[[site]]
+adresse = "youtube.com"
+herite = true
+
+[[site.element]]
+type = "bouton"
+symbole = "gobackward.10"
+action = { touche = "j" }
+
+[[site.element]]
+type = "bouton"
+symbole = "playpause.fill"
+action = { touche = "k" }
+
+[[site.element]]
+type = "bouton"
+symbole = "goforward.10"
+action = { touche = "l" }
+
+[[site.element]]
+type = "bouton"
+symbole = "arrow.up.left.and.arrow.down.right"
+action = { touche = "f" }
+
+# Gmail : un motif peut aussi viser un chemin (`*` = n'importe quoi), par exemple « *.google.com/maps* ».
+[[site]]
+adresse = "mail.google.com"
+
+[[site.element]]
+type = "bouton"
+texte = "Nouveau message"
+symbole = "square.and.pencil"
+action = { touche = "c" }

@@ -26,7 +26,7 @@ Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : b
 - Ta barre tient dans `~/.config/tactile/barre.toml`, un bloc `[[element]]` par élément. Tu enregistres, la barre change dans la seconde. Une erreur laisse ta barre actuelle en place et donne la ligne à corriger.
 - La fenêtre de l'éditeur (`tactile --personnaliser`) montre la Touch Bar à sa vraie taille. Tu y déplaces les éléments, tu choisis symboles et couleurs, et elle écrit ce même fichier.
 - Un élément `type = "script"` lance n'importe quelle commande toutes les `intervalle` secondes et affiche ce qu'elle écrit. Si la commande sort du JSON, elle choisit aussi son symbole et ses couleurs.
-- Une table `[[application]]` donne sa propre barre à une app tant qu'elle est au premier plan. Avec `herite = true`, les bords de ta barre principale (curseurs, heure) ne bougent pas.
+- Une table `[[application]]` donne sa propre barre à une app tant qu'elle est au premier plan. Avec `herite = true`, les bords de ta barre principale (curseurs, heure) ne bougent pas. Une table `[[site]]` fait de même pour un site web : sur YouTube, tes propres boutons lecture et avance.
 - Un bouton envoie un raccourci (`action = { touche = "cmd+shift+4" }`, lu sur ta disposition de clavier, AZERTY compris), ouvre une app ou une adresse, lance un AppleScript ou une commande. `appui_long` lui donne une seconde action.
 - Un `lanceur` montre la vraie icône d'une app, avec un point tant qu'elle tourne ; quelques-uns dans un `groupe` font un tiroir d'apps. Une `[[source]]` alimente un texte vivant depuis une adresse, une commande ou un outil MCP (la météo, l'état d'un build), et les clés d'API restent dans le trousseau macOS.
 
@@ -304,6 +304,7 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | `url` | `url` |
 | `applescript` | `applescript` |
 | `herite` | `inherit` |
+| `adresse` | `address` |
 | `lanceur` | `launcher` |
 | `mission_control` | `mission_control` |
 | `fenetres_app` | `app_windows` |
@@ -391,6 +392,29 @@ action = { touche = "cmd+t" }
 - Une sous-barre ouverte (curseur, groupe) reste en place quand tu changes d'app ; son ✕ ramène la barre de l'app au premier plan. L'icône ✳ ramène aussi la barre de l'app en cours.
 
 Exemple complet : [exemples/par-application.toml](exemples/par-application.toml). La fenêtre « Personnaliser ma barre » ne règle que la barre principale, mais garde tes `[[application]]` à l'enregistrement.
+
+## Une barre par site
+
+Une table `[[site]]` donne sa propre barre à un site web : tant que l'onglet actif du navigateur au premier plan est sur ce site, sa barre passe avant celle de l'app et avant la principale.
+
+```toml
+[[site]]
+adresse = "youtube.com"         # le domaine et ses sous-domaines ; ou un motif : "*.google.com/maps*"
+herite = true                   # comme [[application]]
+
+[[site.element]]
+type = "bouton"
+symbole = "playpause.fill"
+action = { touche = "k" }
+```
+
+- `adresse` : un domaine, sous-domaines compris (`youtube.com` vaut pour `www.youtube.com` et `m.youtube.com`, pas pour `notyoutube.com`), suivi si tu veux du début d'un chemin (`github.com/lepalph`). Avec `*`, un motif sur « domaine/chemin » : `*.google.com/maps*` (`*` vaut n'importe quoi, même rien). Majuscules et minuscules confondues ; pas de `https://`, et ce qui suit `?` ou `#` n'est jamais lu. Le premier `[[site]]` qui correspond l'emporte. `tactile --verifier` signale une adresse vide, un motif invalide et deux `[[site]]` pour la même adresse.
+- Navigateurs : Safari, Google Chrome, Arc, Brave, Microsoft Edge, Vivaldi et Chromium. Tactile lit l'onglet actif seulement quand l'un d'eux est au premier plan et que ton fichier a un `[[site]]` : toutes les 0,5 s, par un AppleScript exécuté dans Tactile sur un fil à part (1 s au plus par lecture). Passer à une autre app arrête la lecture.
+- Autorisation : la première fois, macOS demande « Tactile souhaite contrôler Safari » (Automatisation). Réponds OK. Si tu as refusé, les barres de site restent cachées dans ce navigateur, sa barre montre un petit bouton « ⚠ site » qui ouvre le bon réglage, et `tactile --verifier` le dit : Réglages Système → Confidentialité et sécurité → Automatisation → Tactile.
+- Vie privée : Tactile ne garde que « domaine/chemin » de l'onglet actif, en mémoire. L'adresse n'est jamais écrite au journal (seul le nom d'un navigateur refusé ou illisible y figure), jamais sur le disque, jamais envoyée nulle part. Une barre importée liste chacun de ses `[[site]]` avant que tu l'acceptes (« change la barre sur youtube.com ; lit l'adresse de l'onglet actif de tes navigateurs »).
+- Une sous-barre ouverte reste en place quand l'onglet change ; son ✕ ramène la barre du site en cours.
+
+Exemple complet (YouTube : lecture/pause `k`, avance `l`, recul `j`, plein écran `f` ; Gmail : nouveau message `c`) : [exemples/par-site.toml](exemples/par-site.toml). L'éditeur garde tes `[[site]]` à l'enregistrement ; leur réglage dans la fenêtre viendra plus tard.
 
 ## Extra : Claude vocal
 

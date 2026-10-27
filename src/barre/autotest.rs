@@ -6,7 +6,7 @@ use objc2::runtime::AnyObject;
 use objc2::{msg_send, sel};
 use std::cell::Cell;
 
-use super::{cible, modale, vues, Id, APP_SIMULEE, COURANTE, ETAT, PREFIXE};
+use super::{cible, modale, onglet, vues, Id, APP_SIMULEE, COURANTE, ETAT, NAVIGATEUR, PREFIXE};
 use crate::actions::{self, luminosite, media, volume, Action};
 
 thread_local! {
@@ -19,6 +19,69 @@ thread_local! {
     static SERVEUR_HTTP: std::cell::RefCell<Option<std::process::Child>> = const { std::cell::RefCell::new(None) };
     static PID_MCP: Cell<i32> = const { Cell::new(0) };
     static CONFIG_ORIGINALE: std::cell::RefCell<Option<Vec<u8>>> = const { std::cell::RefCell::new(None) };
+    /// Étapes 42-46 : Safari était-il ouvert avant (sinon l'autotest le referme) ?
+    static SAFARI_AVANT: Cell<bool> = const { Cell::new(false) };
+}
+
+const SAFARI: &str = "com.apple.Safari";
+
+/// Barres de site des étapes 42-47 : `localhost` en bleu, `127.0.0.1`
+/// en orange : deux « domaines » pour le même serveur local, reconnus par verifier.sh comme « application » et « importee ».
+const BARRE_SITES: &str = r##"
+[[site]]
+adresse = "localhost"
+[[site.element]]
+type = "bouton"
+texte = "Site localhost"
+couleur = "#0050C8"
+largeur = 300
+
+[[site]]
+adresse = "127.0.0.1"
+[[site.element]]
+type = "bouton"
+texte = "Site 127.0.0.1"
+couleur = "#FF8C00"
+largeur = 300
+"##;
+
+/// Safari est-il ouvert ? Avec `quitter`, le referme (sans AppleScript : `terminate` ne demande aucune autorisation).
+fn safari(quitter: bool) -> bool {
+    unsafe {
+        let apps: Id = msg_send![objc2::class!(NSRunningApplication), runningApplicationsWithBundleIdentifier: &*vues::texte(SAFARI)];
+        let n: usize = msg_send![apps, count];
+        (0..n).any(|i| {
+            let app: Id = msg_send![apps, objectAtIndex: i];
+            let terminee: bool = msg_send![app, isTerminated];
+            if quitter && !terminee {
+                let _: bool = msg_send![app, terminate];
+            }
+            !terminee
+        })
+    }
+}
+
+fn site(k: usize) -> Id {
+    ETAT.with_borrow(|e| e.as_ref().and_then(|e| e.sites.get(k).copied()).unwrap_or(std::ptr::null_mut()))
+}
+
+/// Page de Safari : ouverte pour de vrai, ou donnée à la main quand la lecture réelle est impossible (simulée).
+fn page_safari(n: usize, url: &str) {
+    if onglet::SIMULE.load(std::sync::atomic::Ordering::Relaxed) {
+        super::recevoir_page(SAFARI, Ok(onglet::page(url)));
+    } else {
+        let ouvert = std::process::Command::new("/usr/bin/open").args(["-a", "Safari", url]).status().is_ok_and(|s| s.success());
+        noter(n, ouvert, &format!("open -a Safari {url}"));
+    }
+}
+
+/// Passe en simulation (écran verrouillé, autorisation refusée ou en attente) : Safari est l'app active simulée.
+fn simuler(n: usize, raison: &str) {
+    eprintln!("AUTOTEST {n} info {raison} : l'onglet de Safari est simulé (la page est donnée à la main, la lecture AppleScript reste à prouver)");
+    onglet::SIMULE.store(true, std::sync::atomic::Ordering::Relaxed);
+    onglet::suivre(None);
+    APP_SIMULEE.set(Some((SAFARI.into(), "Safari".into())));
+    super::suivre_app();
 }
 
 /// Port du petit serveur HTTP local des étapes 31-35.
@@ -266,9 +329,18 @@ fn a_une_image(nom: &str) -> bool {
 
 /// Le badge « ⚠ config » est-il dans ce que montre la barre système ?
 fn badge_montre() -> bool {
+    montre(&format!("{PREFIXE}.erreur"))
+}
+
+/// Le badge « ⚠ site » (Automatisation refusée) est-il dans ce que montre la barre système ?
+fn badge_site_montre() -> bool {
+    montre(&format!("{PREFIXE}.site-refuse"))
+}
+
+fn montre(ident: &str) -> bool {
     unsafe {
         let idents: Id = msg_send![modale(), defaultItemIdentifiers];
-        msg_send![idents, containsObject: &*vues::texte(&format!("{PREFIXE}.erreur"))]
+        msg_send![idents, containsObject: &*vues::texte(ident)]
     }
 }
 
@@ -327,6 +399,17 @@ fn verifier_slider(n: usize, nom: &str, lire: fn() -> Result<f32, String>, vers_
         &format!("slider {nom} : {origine:.2} → {cible_:.2}, relu {relue:.2}, restauré {restauree:.2}"));
 }
 
+/// La ligne que verifier.sh suit : il capture la barre 1,2 s après.
+fn annoncer(n: usize) {
+    eprintln!("AUTOTEST {n} pas attendu={}", attendu(n));
+}
+
+/// Étapes de site : l'écran dépend de Safari, qui met un temps variable à s'ouvrir et à être lu. Elles s'annoncent
+/// elles-mêmes une fois la barre attendue montrée (43, 45, 47), ou pas du tout (42, 46 : Safari s'ouvre ou se ferme).
+fn differe(n: usize) -> bool {
+    matches!(n, 42 | 43 | 45 | 46 | 47)
+}
+
 /// Écran qui doit être visible après l'action de l'étape n (comparé aux captures par scripts/verifier.sh).
 fn attendu(n: usize) -> &'static str {
     match n {
@@ -338,7 +421,10 @@ fn attendu(n: usize) -> &'static str {
         27 => "application",
         28 | 29 => "erreur",
         31..=38 => "riche",
-        39 => "importee",
+        39 | 45 => "importee",
+        43 => "application",
+        44 => "sous",
+        47 => "principale",
         _ => "principale",
     }
 }
@@ -380,8 +466,8 @@ pub(super) fn etape() {
     }
     let n = ETAPE.get();
     ETAPE.set(n + 1);
-    if REPRISES.get() == 0 {
-        eprintln!("AUTOTEST {n} pas attendu={}", attendu(n));
+    if REPRISES.get() == 0 && !differe(n) {
+        annoncer(n);
     }
     let suivante = match n {
         0 => { noter(n, COURANTE.get() == principale(), "barre principale présentée"); true }
@@ -607,6 +693,74 @@ pub(super) fn etape() {
             true
         }
         42 => {
+            let mut config = crate::config::charger().expect("config illisible");
+            config.sites = crate::config::lire(BARRE_SITES).expect("barres de site invalides").sites;
+            super::installer(&config);
+            noter(n, !site(1).is_null() && COURANTE.get() == principale(), "barres de site construites, principale présentée");
+            SAFARI_AVANT.set(safari(false));
+            if super::app_active().0 == "com.apple.loginwindow" {
+                simuler(n, "écran verrouillé");
+            }
+            page_safari(n, &format!("http://localhost:{PORT_HTTP}/valeur.json"));
+            true
+        }
+        43 => {
+            let vue = COURANTE.get() == site(0);
+            if !onglet::SIMULE.load(std::sync::atomic::Ordering::Relaxed) && !patienter(n, vue, 20.0) { return; }
+            if !vue && !onglet::SIMULE.load(std::sync::atomic::Ordering::Relaxed) {
+                let refuse = super::REFUSES.with_borrow(|r| r.iter().any(|b| b == SAFARI));
+                if refuse {
+                    noter(n, controle("site refusé").is_some() && badge_site_montre(), "autorisation refusée : badge « ⚠ site » sur la barre de Safari");
+                }
+                simuler(n, if refuse { "Automatisation de Safari refusée (-1743)" } else { "onglet de Safari illisible en 20 s (autorisation Automatisation en attente ?)" });
+            }
+            if onglet::SIMULE.load(std::sync::atomic::Ordering::Relaxed) {
+                // Le refus, simulé lui aussi : badge sur la base de Safari, puis retiré dès qu'une page est lue.
+                super::recevoir_page(SAFARI, Err(onglet::REFUSE));
+                noter(n, badge_site_montre() && COURANTE.get() == principale(), "refus simulé (-1743) : badge « ⚠ site » sur la barre de Safari");
+                page_safari(n, &format!("http://localhost:{PORT_HTTP}/valeur.json"));
+                noter(n, !badge_site_montre(), "page lue : badge « ⚠ site » retiré");
+            }
+            annoncer(n);
+            let (bundle, _) = super::app_active();
+            noter(n, bundle == SAFARI, &format!("Safari au premier plan (vu : « {bundle} »)"));
+            noter(n, COURANTE.get() == site(0), "onglet sur localhost : barre du site localhost (bleue)");
+            true
+        }
+        44 => {
+            let ouvert = cliquer(n, "ouvrir sun.max.fill");
+            page_safari(n, &format!("http://127.0.0.1:{PORT_HTTP}/valeur.txt"));
+            ouvert
+        }
+        45 => {
+            let bonne = super::base() == Some(site(1));
+            if !patienter(n, bonne, 10.0) { return; }
+            annoncer(n);
+            noter(n, bonne, "onglet sur 127.0.0.1 : la base devient la barre du site 127.0.0.1");
+            noter(n, COURANTE.get() != site(0) && COURANTE.get() != site(1) && COURANTE.get() != principale(), "sous-barre gardée malgré le changement d'onglet");
+            cliquer(n, "fermer");
+            noter(n, COURANTE.get() == site(1), "✕ ramène la barre du site 127.0.0.1 (orange)");
+            true
+        }
+        46 => {
+            if !SAFARI_AVANT.get() {
+                safari(true);
+            } else {
+                eprintln!("AUTOTEST {n} info Safari était ouvert : ses deux onglets locaux restent ouverts");
+            }
+            if onglet::SIMULE.load(std::sync::atomic::Ordering::Relaxed) {
+                APP_SIMULEE.set(None);
+                super::suivre_app();
+            }
+            true
+        }
+        47 => {
+            let quitte = SAFARI_AVANT.get() || !safari(false);
+            if !patienter(n, quitte && COURANTE.get() == principale(), 10.0) { return; }
+            annoncer(n);
+            noter(n, NAVIGATEUR.with_borrow(Option::is_none), "navigateur quitté : lecture des onglets arrêtée");
+            noter(n, COURANTE.get() == principale(), "retour à la barre principale");
+            onglet::SIMULE.store(false, std::sync::atomic::Ordering::Relaxed);
             if let Some(mut serveur) = SERVEUR_HTTP.take() {
                 let _ = serveur.kill();
                 let _ = serveur.wait();

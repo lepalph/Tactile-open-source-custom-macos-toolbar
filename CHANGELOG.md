@@ -4,6 +4,10 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- A bar per website: a `[[site]]` table (`adresse` / `address`: a domain with its subdomains, optionally a path prefix, or a `*` pattern such as `*.google.com/maps*`; `herite` / `inherit` like `[[application]]`) shows its bar while the active tab of the browser in front is on that site, before the app's bar and the main bar. Safari, Google Chrome, Arc, Brave, Microsoft Edge, Vivaldi and Chromium are read every 0.5 s, only while one of them is in front and the file has a `[[site]]`, through a compiled `NSAppleScript` on a dedicated thread (1 s at most per read). Only "domain/path" is kept, in memory; the URL is never logged, written or sent. A refused Automation permission shows a "⚠ site" button that opens the right settings pane, logs once per browser, and `--verifier` explains where to allow it. `--verifier` also reports an empty address, an invalid pattern and two `[[site]]` tables for the same address. Imports list each `[[site]]`; the editor keeps them. Example: `exemples/par-site.toml` (YouTube, Gmail). The app bundle declares `NSAppleEventsUsageDescription` (French and English).
+
 ## [0.3.0] - 2026-10-26
 
 ### Added
