@@ -1,4 +1,5 @@
 mod actions;
+mod agent;
 mod barre;
 mod config;
 mod editeur;
@@ -16,6 +17,7 @@ Usage :
   tactile --verifier [fichier]   vérifie un fichier de barre (syntaxe, symboles, apps, largeur)
   tactile --exporter <fichier>   exporte ta barre : un .toml, ou un .zip avec ses logos
   tactile --importer <fichier> [--oui]   montre ce que la barre lance, puis remplace la tienne
+  tactile --mcp                  serveur MCP (stdio) : un agent écrit sur la Touch Bar (l'app doit tourner)
   tactile --version | --help     version, cette aide (--check, --customize, --export, --import, --yes marchent aussi)
 Variables : TACTILE_CONFIG=fichier, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1, TACTILE_MESURE=1 (voir CONTRIBUTING.md).
 Journal : ~/Library/Logs/Tactile.log";
@@ -27,6 +29,7 @@ Usage:
   tactile --check [file]         checks a bar file (syntax, symbols, apps, width)
   tactile --export <file>        exports your bar: a .toml, or a .zip with its logos
   tactile --import <file> [--yes]   shows what the bar runs, then replaces yours
+  tactile --mcp                  MCP server (stdio): an agent writes on the Touch Bar (the app must be running)
   tactile --version | --help     version, this help (--verifier, --personnaliser, --exporter, --importer, --oui work too)
 Variables: TACTILE_CONFIG=file, TACTILE_OUVRIR=k, TACTILE_MASQUER=1, TACTILE_RETOUR=1, TACTILE_AUTOTEST=1, TACTILE_MESURE=1 (see CONTRIBUTING.md).
 Log: ~/Library/Logs/Tactile.log";
@@ -55,6 +58,8 @@ enum Commande {
     Version,
     Verifier(Option<PathBuf>),
     Personnaliser,
+    /// Serveur MCP sur stdin/stdout.
+    Mcp,
     Exporter(PathBuf),
     /// Le fichier, et `--oui` : sans confirmation.
     Importer(PathBuf, bool),
@@ -68,6 +73,7 @@ fn commande(args: &[String]) -> Commande {
         [a] if a == "--version" => Commande::Version,
         [a] if a == "--verifier" || a == "--check" => Commande::Verifier(None),
         [a] if a == "--personnaliser" || a == "--customize" => Commande::Personnaliser,
+        [a] if a == "--mcp" => Commande::Mcp,
         [a, fichier] if a == "--verifier" || a == "--check" => Commande::Verifier(Some(PathBuf::from(fichier))),
         [a, fichier] if (a == "--exporter" || a == "--export") && !fichier.starts_with("--") => Commande::Exporter(PathBuf::from(fichier)),
         [a, fichier] if (a == "--importer" || a == "--import") && !fichier.starts_with("--") => Commande::Importer(PathBuf::from(fichier), false),
@@ -116,6 +122,7 @@ fn main() {
         Commande::Verifier(fichier) => std::process::exit(verifier(&fichier.unwrap_or_else(config::chemin))),
         // La fenêtre « Personnaliser ma barre » seule, sans toucher à la Touch Bar.
         Commande::Personnaliser => return editeur::lancer_seul(),
+        Commande::Mcp => return agent::lancer_mcp(),
         Commande::Exporter(fichier) => std::process::exit(editeur::exporter_cli(&fichier, aide() == AIDE)),
         Commande::Importer(fichier, oui) => std::process::exit(editeur::importer_cli(&fichier, oui, aide() == AIDE)),
         Commande::Inconnue(a) => {
@@ -141,6 +148,10 @@ fn main() {
             journaliser_avis(&b);
         }
     });
+    // Sans la socket, la barre marche quand même : seul l'accès des agents manque.
+    if let Err(e) = agent::ecouter(&agent::chemin_socket(), barre::soumettre) {
+        eprintln!("tactile : socket des agents indisponible, {e}");
+    }
     barre::lancer(config, recharges);
 }
 
@@ -208,6 +219,8 @@ mod tests {
         assert_eq!(commande(&args(&["--check"])), Commande::Verifier(None));
         assert_eq!(commande(&args(&["--check", "x.toml"])), Commande::Verifier(Some("x.toml".into())));
         assert_eq!(commande(&args(&["--customize"])), Commande::Personnaliser);
+        assert_eq!(commande(&args(&["--mcp"])), Commande::Mcp);
+        assert_eq!(commande(&args(&["--mcp", "x"])), Commande::Inconnue("--mcp".into()));
         assert_eq!(commande(&args(&["--truc"])), Commande::Inconnue("--truc".into()));
         assert_eq!(commande(&args(&["--help", "x"])), Commande::Inconnue("--help".into()));
         assert_eq!(commande(&args(&["--customize", "x"])), Commande::Inconnue("--customize".into()));
@@ -224,10 +237,10 @@ mod tests {
     }
 
     #[test]
-    fn aide_en_dix_lignes() {
-        assert!(AIDE.lines().count() <= 10 && HELP.lines().count() <= 10);
+    fn aide_courte() {
+        assert!(AIDE.lines().count() <= 11 && HELP.lines().count() <= 11);
         // Chaque option de l'aide existe, dans les deux langues.
-        for option in ["--personnaliser", "--customize", "--verifier", "--check", "--version", "--help"] {
+        for option in ["--personnaliser", "--customize", "--mcp", "--verifier", "--check", "--version", "--help"] {
             assert!(AIDE.contains(option) && HELP.contains(option), "{option}");
             assert_ne!(commande(&args(&[option])), Commande::Inconnue(option.into()));
         }

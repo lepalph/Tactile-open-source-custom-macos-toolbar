@@ -534,6 +534,19 @@ Full example (YouTube: play/pause `k`, forward `l`, back `j`, full screen `f`; G
 
 A ✳ Claude button: you talk, and Claude Code answers out loud. Transcription (whisper.cpp) and the voice (Piper) run on your Mac; only the answer goes through Claude Code and your Claude account. The first time, macOS asks to give Tactile the microphone. Setup is in [extras/claude-voix](extras/claude-voix/README.md) (in French), and the items to add to your bar are in [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
 
+## For agents (MCP)
+
+`tactile --mcp` turns Tactile into an MCP server (stdio), so an agent such as Claude Code can write on your Touch Bar. The Tactile app must be running: the server talks to it through a private socket (`~/Library/Application Support/Tactile/agent.sock`, folder mode 0700) and answers "Tactile n'est pas lancé" when it is not.
+
+```
+claude mcp add tactile -- ~/Applications/Tactile.app/Contents/MacOS/tactile --mcp
+```
+
+- `afficher {texte, duree_s = 5}` (1 to 60 s): a message over your bar, then your bar comes back. Does not wait.
+- `demander {question, choix, delai_s = 120}` (5 to 600 s): a question with 1 to 4 buttons; waits and returns the label you touched, or `aucun` (time ran out, or you touched ✕).
+
+Text is cut at 80 characters, button labels at 20. One request at a time: while one is on the bar, the next gets an `occupé` tool error right away and the agent retries. Nothing sent through the socket runs a command.
+
 ## Command line
 
 The binary inside the app is `/Applications/Tactile.app/Contents/MacOS/tactile`.
@@ -545,6 +558,7 @@ The binary inside the app is `/Applications/Tactile.app/Contents/MacOS/tactile`.
 | `tactile --check [file]` | Checks a bar file without touching the Touch Bar. Same as `--verifier`. Without a file, checks your `barre.toml`. See below. |
 | `tactile --export <file>` | Exports your bar: a `.toml`, or a `.zip` with its logos (`barre.toml` + `icones/`). Without an extension, picks the right one. Asking for a `.toml` when the bar has logos writes it with a warning: the logos stay as paths on this Mac. Same as `--exporter`. |
 | `tactile --import <file> [--yes]` | Reads a `.toml` or `.zip`, checks it like `--check`, prints a summary and everything the bar can run, then asks before replacing your bar (the current one goes into the history). Without a terminal, it refuses unless you add `--yes`. Same as `--importer` and `--oui`. |
+| `tactile --mcp` | MCP server on stdin/stdout, for agents (see above). The app must be running. |
 | `tactile --version` | Prints the version. |
 | `tactile --help` | Prints the help, in English, or in French when the system language is French (`LC_ALL`, `LANG`, then the macOS language). |
 
