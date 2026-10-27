@@ -61,7 +61,7 @@ Tactile is built for its author's own use first, so the order below follows what
 | Import and export a bar (`.toml`, or `.zip` with its logos) | Done (0.3.0) |
 | Your own logos on buttons | Done (0.3.0) |
 | Data sources for live items: HTTP, commands, MCP servers | Done (0.3.0) |
-| Slider styles, and a free-standing slider | Planned |
+| Slider styles, free-standing slider and choice picker | Done (unreleased) |
 | A bar per website | Planned |
 | Edit per-app bars in the editor | Planned |
 | Modules: a widget is a program in any language that talks JSON with Tactile | Planned |
@@ -184,7 +184,8 @@ A button, the clock or now playing without a `largeur` / `width` is capped at 20
 | `type` | Fields | What it shows |
 |---|---|---|
 | `bouton` / `button` | `texte` / `text`; `symbole` / `symbol` (an SF Symbol name) or `image` (path to a PNG, PDF, icns…; `~` works; `gabarit` / `template` = `true` for a monochrome image tinted like a symbol); `couleur` / `color` (background, `"#RRGGBB"`); `couleur_texte` / `text_color`; `taille` / `size` (font size in points); `affichage` / `display`: `"icone"` / `"icon"`, `"texte"` / `"text"` or `"les_deux"` / `"both"` (default); `largeur` / `width` (points); `action`; `appui_long` / `long_press` (an action, after 0.5 s) | A button. Every field is optional. With both a symbol and an image, the image shows. An image that can't be found shows as text, like an unknown symbol. |
-| `slider` | `reglage` / `setting` (required): `"luminosite"` / `"brightness"` or `"volume"`; `symbole` / `symbol` | A button that opens a sub-bar with a slider; ✕ closes it. |
+| `slider` (or `curseur`) | `reglage` / `setting` (`"luminosite"` / `"brightness"` or `"volume"`) **or** `regler` / `set` (a command with `{valeur}`); `symbole` / `symbol`, `style`, `couleurs` / `colors` and `seuils` / `thresholds`, `crans` / `notches`, `haptique` / `haptic`; with `set`: `lire` / `read`, `min`, `max`, `pas` / `step`, `toutes_les` / `every` (see [Sliders](#sliders)) | A button that opens a sub-bar with a slider; ✕ closes it. |
+| `choix` / `choice` | `options` (a list of texts), `action`, `lire` / `read`, `toutes_les` / `every` (5 s by default), `largeur` / `width` | A segmented picker. The option you tap replaces `{valeur}` in the action, single-quoted for the shell (double-quoted in an AppleScript): `action = { shell = "echo {valeur} > ~/speed" }`. `read` prints the current option, which then shows as selected. |
 | `heure` / `clock` | `format` (an Apple date format, `"HH:mm"` by default) | The time, kept up to date. |
 | `en_cours` / `now_playing` | `largeur` / `width` | Title and artist of what's playing (44 characters at most, refreshed every 2 s); a tap pauses or resumes. Needs `media-control`. |
 | `script` | `commande` / `command` (required); `intervalle` / `interval` (seconds, required; values below 0.1 are raised to 0.1); `delai` / `timeout` (seconds, 5 by default); `largeur` / `width` (120 by default); `action` | The output of the command, run with `zsh -c` at every interval and killed after `delai`. Text wider than the item is cut. A non-zero exit code or anything on stderr writes a line to the log. If the output starts with `{`, it is read as JSON: `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/rain.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, every key optional (English keys work too: `text`, `symbol`, `color`, `text_color`). That's how a script sets its own icon and colors. |
@@ -195,6 +196,42 @@ A button, the clock or now playing without a `largeur` / `width` is capped at 20
 | `groupe` / `group` | `texte` / `text`, `symbole` / `symbol`, `largeur` / `width` (72 by default), then sub-items `[[element.element]]` / `[[item.item]]` | A button that opens a sub-bar with its items; ✕ closes it. |
 | `lanceur` / `launcher` | `app` (required: the `.app` folder name, a bundle id or a path, like the `app` action); `texte` / `text`; `affichage` / `display` (as for a button); `largeur` / `width`; `appui_long` / `long_press` | The app's own icon. A tap opens the app or brings it to the front; a small dot under the icon means it's running, as in the Dock. An app that can't be found shows its name as text, and `tactile --check` warns about it. |
 
+
+#### Sliders
+
+A slider sets the built-in display's brightness or the volume (`setting`), or anything else a command can set (`set`):
+
+- `set` runs with `zsh -c` as your finger moves, at most every 0.1 s, then once more when you lift it. `{valeur}` (or `{value}`) becomes the chosen number, written with as many decimals as `step`: never text, so nothing else can get into the command.
+- `read` prints the current value (a number). Tactile runs it when the slider opens, then every `every` seconds (5 by default, 0.5 at least) while it stays open.
+- `min` (0), `max` (100) and `step` (1) bound the value. Brightness and volume go from 0 to 100 %.
+- `style`: `classic` (Apple's slider, the default), `grid` (bars that light up), `gauge`, `dots`, `equalizer` (bars that grow taller), `stepper` (big digits, − and +, a long press repeats) or `dial` (a compact ring; swipe left or right).
+- `colors` and `thresholds`: one color per level, one more color than thresholds, in the slider's own units. `colors = ["#30D158", "#FFD60A", "#FF453A"]` with `thresholds = [60, 85]` gives green, yellow from 60, red from 85. A single color paints the whole slider. Without `colors`, white.
+- `notches`: how many bars or dots (10 by default, 2 to 40). `haptic = true`: a small trackpad click at each notch.
+
+| | |
+|---|---|
+| `classic` | ![classic](docs/curseurs/classique.png) |
+| `grid` | ![grid](docs/curseurs/grille.png) |
+| `gauge` | ![gauge](docs/curseurs/jauge.png) |
+| `dots` | ![dots](docs/curseurs/points.png) |
+| `equalizer` | ![equalizer](docs/curseurs/egaliseur.png) |
+| `stepper` | ![stepper](docs/curseurs/pas_a_pas.png) |
+| `dial` | ![dial](docs/curseurs/cadran.png) |
+
+```toml
+# Spotify's volume, without touching the Mac's.
+[[item]]
+type = "slider"
+symbol = "music.note"
+read = "osascript -e 'if application \"Spotify\" is running then tell application \"Spotify\" to get sound volume'"
+set = "osascript -e 'if application \"Spotify\" is running then tell application \"Spotify\" to set sound volume to {value}'"
+step = 5
+style = "equalizer"
+colors = ["#30D158", "#FFD60A", "#FF453A"]
+thresholds = [60, 85]
+```
+
+More templates (Music's volume, an external display through `m1ddc`, a `choice`): [exemples/curseurs.toml](exemples/curseurs.toml). In the editor, a slider's panel shows the styles as live thumbnails, the per-level colors and these templates.
 #### An app drawer
 
 Launchers in a group make an app drawer: one icon in the main bar opens a sub-bar of apps, ✕ closes it. A full French example is in [exemples/lanceur.toml](exemples/lanceur.toml).
@@ -331,6 +368,20 @@ French is the reference form, but you can write the whole file in English, which
 | `defaut` | `default` |
 | `seuils` | `thresholds` |
 | `couleurs` | `colors` |
+| `curseur` | `slider` |
+| `lire` | `read` |
+| `regler` | `set` |
+| `pas` | `step` |
+| `crans` | `notches` |
+| `haptique` | `haptic` |
+| `classique` | `classic` |
+| `grille` | `grid` |
+| `jauge` | `gauge` |
+| `points` | `dots` |
+| `egaliseur` | `equalizer` |
+| `pas_a_pas` | `stepper` |
+| `cadran` | `dial` |
+| `choix` | `choice` |
 
 In a `script`'s JSON output too: `text`, `symbol`, `color`, `text_color`.
 

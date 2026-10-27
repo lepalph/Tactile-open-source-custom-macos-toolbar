@@ -2,7 +2,7 @@
 //! Chaque test tire ses cas d'une graine fixe : un échec se rejoue à l'identique, la graine est dans le message.
 
 use crate::actions::{clavier::Touche, Action};
-use crate::config::{Affichage, Application, Barre, CouleurSelon, Element, Reglage, Source, SourceMcp, SymboleSelon};
+use crate::config::{Affichage, Application, Barre, CouleurSelon, Element, Reglage, Source, SourceMcp, StyleCurseur, SymboleSelon};
 use serde_json::json;
 
 /// xorshift64* : assez de hasard pour varier les cas, et le même tirage à chaque exécution.
@@ -112,7 +112,31 @@ impl Hasard {
                 appui_long: self.peut_etre(Self::action),
                 source: self.peut_etre(Self::texte),
             },
-            2 => Element::Slider { reglage: *self.parmi(&[Reglage::Luminosite, Reglage::Volume]), symbole: self.peut_etre(|_| "speaker.wave.2".to_string()) },
+            2 => match self.jusqua(3) {
+                0 => Element::slider(*self.parmi(&[Reglage::Luminosite, Reglage::Volume]), self.peut_etre(|_| "speaker.wave.2".to_string())),
+                1 => Element::Slider {
+                    reglage: None,
+                    symbole: self.peut_etre(|_| "slider.horizontal.3".to_string()),
+                    lire: self.peut_etre(Self::texte),
+                    regler: Some(format!("{} {{valeur}}", self.texte())),
+                    min: self.peut_etre(Self::nombre),
+                    max: self.peut_etre(Self::nombre),
+                    pas: self.peut_etre(Self::nombre),
+                    toutes_les: self.peut_etre(Self::nombre),
+                    style: self.peut_etre(|h| *h.parmi(&[StyleCurseur::Classique, StyleCurseur::Grille, StyleCurseur::Jauge, StyleCurseur::Points, StyleCurseur::Egaliseur, StyleCurseur::PasAPas, StyleCurseur::Cadran])),
+                    crans: self.peut_etre(|h| h.jusqua(50) as u32),
+                    couleurs: (0..self.jusqua(4)).map(|_| self.parmi(&["#30D158", "#FFD60A", "rouge"]).to_string()).collect(),
+                    seuils: (0..self.jusqua(3)).map(|_| self.nombre()).collect(),
+                    haptique: self.pile(),
+                },
+                _ => Element::Choix {
+                    options: (0..self.jusqua(4)).map(|_| self.texte()).collect(),
+                    action: self.peut_etre(Self::action),
+                    lire: self.peut_etre(Self::texte),
+                    toutes_les: self.peut_etre(Self::nombre),
+                    largeur: self.peut_etre(Self::nombre),
+                },
+            },
             3 => Element::Heure { format: self.peut_etre(Self::texte) },
             4 => Element::EnCours { largeur: self.peut_etre(Self::nombre) },
             5 => Element::Script {

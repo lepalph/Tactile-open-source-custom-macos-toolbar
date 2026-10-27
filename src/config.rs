@@ -172,11 +172,50 @@ pub enum Element {
         largeur: Option<f64>,
         action: Option<Action>,
     },
+    /// Curseur dans une sous-barre : luminosité ou volume (`reglage`), ou n'importe quel réglage pilotable par une commande
+    /// (`regler`, avec `{valeur}`, et `lire` pour la valeur actuelle). `curseur` est accepté comme nom de type.
+    #[serde(alias = "curseur")]
     Slider {
         #[serde(alias = "setting")]
-        reglage: Reglage,
+        reglage: Option<Reglage>,
         #[serde(alias = "symbol")]
         symbole: Option<String>,
+        /// Commande zsh qui affiche la valeur actuelle (un nombre), relue à l'ouverture et toutes les `toutes_les` s.
+        #[serde(alias = "read")]
+        lire: Option<String>,
+        /// Commande zsh lancée quand le doigt bouge (au plus toutes les 0,1 s) et au lâcher ; `{valeur}` y devient le nombre.
+        #[serde(alias = "set")]
+        regler: Option<String>,
+        min: Option<f64>,
+        max: Option<f64>,
+        #[serde(alias = "step")]
+        pas: Option<f64>,
+        #[serde(alias = "every")]
+        toutes_les: Option<f64>,
+        style: Option<StyleCurseur>,
+        /// Nombre de barres ou de points (grille, points, égaliseur) et de retours haptiques.
+        #[serde(alias = "notches")]
+        crans: Option<u32>,
+        /// Une couleur par niveau, une de plus que de `seuils` (dans les unités du curseur, entre `min` et `max`).
+        #[serde(default, alias = "colors", skip_serializing_if = "Vec::is_empty")]
+        couleurs: Vec<String>,
+        #[serde(default, alias = "thresholds", skip_serializing_if = "Vec::is_empty")]
+        seuils: Vec<f64>,
+        #[serde(default, alias = "haptic", skip_serializing_if = "std::ops::Not::not")]
+        haptique: bool,
+    },
+    /// Sélecteur à choix (contrôle segmenté) : l'option touchée remplace `{valeur}` dans l'action, protégée pour le shell.
+    #[serde(alias = "choice")]
+    Choix {
+        options: Vec<String>,
+        action: Option<Action>,
+        /// Commande zsh qui affiche l'option actuelle, relue toutes les `toutes_les` s.
+        #[serde(alias = "read")]
+        lire: Option<String>,
+        #[serde(alias = "every")]
+        toutes_les: Option<f64>,
+        #[serde(alias = "width")]
+        largeur: Option<f64>,
     },
     #[serde(alias = "clock")]
     Heure {
@@ -241,6 +280,28 @@ pub enum Element {
     },
 }
 
+#[cfg(test)]
+impl Element {
+    /// Un slider de luminosité ou de volume, sans style.
+    pub fn slider(reglage: Reglage, symbole: Option<String>) -> Element {
+        Element::Slider {
+            reglage: Some(reglage),
+            symbole,
+            lire: None,
+            regler: None,
+            min: None,
+            max: None,
+            pas: None,
+            toutes_les: None,
+            style: None,
+            crans: None,
+            couleurs: Vec::new(),
+            seuils: Vec::new(),
+            haptique: false,
+        }
+    }
+}
+
 /// Ce qu'un bouton montre quand il a un symbole (ou une image) et un texte.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -251,6 +312,27 @@ pub enum Affichage {
     Texte,
     #[serde(alias = "both")]
     LesDeux,
+}
+
+/// Le dessin d'un curseur. `classique` est le curseur d'Apple ; les autres sont dessinés par Tactile.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum StyleCurseur {
+    #[default]
+    #[serde(alias = "classic")]
+    Classique,
+    #[serde(alias = "grid")]
+    Grille,
+    #[serde(alias = "gauge")]
+    Jauge,
+    #[serde(alias = "dots")]
+    Points,
+    #[serde(alias = "equalizer")]
+    Egaliseur,
+    #[serde(alias = "stepper")]
+    PasAPas,
+    #[serde(alias = "dial")]
+    Cadran,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -323,7 +405,38 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
             return Err(situer(table.map(|t| t.span().start), format!("[[source]] « {} » : {message}", source.nom)));
         }
     }
+    if let Some((chemin, message)) = curseur_mal_forme(&barre) {
+        return Err(situer(position(&document, &chemin), message.into()));
+    }
     Ok(barre)
+}
+
+/// Le premier `slider` sans réglage, ou avec `reglage` et `regler` à la fois (chemin dans le fichier, message).
+fn curseur_mal_forme(barre: &Barre) -> Option<(Vec<(&'static str, usize)>, &'static str)> {
+    fn chercher(elements: &[Element], chemin: &mut Vec<(&'static str, usize)>) -> Option<(Vec<(&'static str, usize)>, &'static str)> {
+        for (i, e) in elements.iter().enumerate() {
+            chemin.push(("element", i));
+            let message = match e {
+                Element::Slider { reglage: Some(_), regler: Some(_), .. } => Some("slider : écris reglage (luminosite ou volume) ou regler (une commande avec {valeur}), pas les deux"),
+                Element::Slider { reglage: None, regler: None, .. } => Some("slider sans réglage : écris reglage = \"luminosite\" ou \"volume\", ou regler = \"une commande avec {valeur}\""),
+                Element::Slider { reglage: Some(_), lire: Some(_), .. } => Some("slider : lire ne sert qu'avec regler (Tactile lit lui-même la luminosité et le volume)"),
+                Element::Groupe { elements, .. } => {
+                    if let Some(trouve) = chercher(elements, chemin) {
+                        return Some(trouve);
+                    }
+                    None
+                }
+                _ => None,
+            };
+            if let Some(m) = message {
+                return Some((chemin.clone(), m));
+            }
+            chemin.pop();
+        }
+        None
+    }
+    chercher(&barre.elements, &mut Vec::new())
+        .or_else(|| barre.applications.iter().enumerate().find_map(|(k, a)| chercher(&a.elements, &mut vec![("application", k)])))
 }
 
 /// Le premier `nan` ou `inf` du fichier (position, texte) : valides en TOML, mais ni une largeur ni une durée,
@@ -630,6 +743,51 @@ impl Controle<'_> {
         }
     }
 
+    fn lecture(&mut self, chemin: &[(&str, usize)], ici: &str, toutes_les: Option<f64>) {
+        if toutes_les.is_some_and(|t| t < crate::barre::LECTURE_MIN) {
+            let cle = self.cle(chemin, &["toutes_les", "every"]);
+            self.signaler(false, chemin, ici, format!("{cle} est ramené à {} seconde, le minimum", crate::barre::LECTURE_MIN));
+        }
+    }
+
+    /// Bornes, pas, crans, couleurs par niveau et `{valeur}` d'un curseur : ce qui se lit mais se dessinerait ou se réglerait mal.
+    fn curseur(&mut self, chemin: &[(&str, usize)], ici: &str, element: &Element) {
+        let Element::Slider { reglage, regler, min, max, pas, toutes_les, crans, couleurs, seuils, .. } = element else { return };
+        let (reglage, min, max, pas, toutes_les, crans) = (*reglage, *min, *max, *pas, *toutes_les, *crans);
+        if reglage.is_none() {
+            let (a, b) = (min.unwrap_or(0.0), max.unwrap_or(100.0));
+            if a >= b {
+                self.signaler(false, chemin, ici, format!("min ({a}) doit être plus petit que max ({b}) : le curseur ira de 0 à 100"));
+            } else if pas.is_some_and(|p| p <= 0.0 || p > b - a) {
+                let cle = self.cle(chemin, &["pas", "step"]);
+                self.signaler(false, chemin, ici, format!("{cle} doit être plus grand que 0 et pas plus grand que max − min ({}) : il sera ignoré", b - a));
+            }
+            if let Some(r) = regler.as_deref().filter(|r| !crate::barre::contient_valeur(r)) {
+                let cle = self.cle(chemin, &["regler", "set"]);
+                self.signaler(false, chemin, ici, format!("{cle} ne contient pas {{valeur}} : « {r} » recevra toujours la même chose"));
+            }
+        }
+        self.lecture(chemin, ici, toutes_les);
+        if let Some(c) = crans.filter(|c| !(2..=40).contains(c)) {
+            let cle = self.cle(chemin, &["crans", "notches"]);
+            self.signaler(false, chemin, ici, format!("{cle} = {c} est ramené entre 2 et 40"));
+        }
+        for c in couleurs.iter().filter(|c| rgb(c).is_none()) {
+            self.signaler(false, chemin, ici, format!("la couleur « {c} » doit s'écrire #RRGGBB : elle sera ignorée"));
+        }
+        if couleurs.len() > 1 && couleurs.len() != seuils.len() + 1 {
+            let cle = self.cle(chemin, &["couleurs", "colors"]);
+            self.signaler(false, chemin, ici, format!("{cle} : {} pour {} : il faut une couleur de plus que de seuils", nombre(couleurs.len(), "couleur"), nombre(seuils.len(), "seuil")));
+        }
+        let (a, b, _) = crate::barre::bornes(reglage, min, max, pas);
+        let cle = self.cle(chemin, &["seuils", "thresholds"]);
+        if let Some(s) = seuils.iter().find(|s| **s <= a || **s >= b) {
+            self.signaler(false, chemin, ici, format!("{cle} : {s} est hors du curseur (de {a} à {b}, bornes exclues)"));
+        } else if seuils.windows(2).any(|w| w[0] >= w[1]) {
+            self.signaler(false, chemin, ici, format!("{cle} : écris-les du plus petit au plus grand"));
+        }
+    }
+
     fn elements(&mut self, elements: &[Element], chemin: &mut Vec<(&'static str, usize)>, lieu: &str) {
         for (i, element) in elements.iter().enumerate() {
             chemin.push(("element", i));
@@ -637,7 +795,7 @@ impl Controle<'_> {
             let (symbole, couleurs, image, actions) = match element {
                 Element::Bouton { symbole, couleur, couleur_texte, image, action, appui_long, .. } => (symbole, vec![couleur, couleur_texte], image, vec![action, appui_long]),
                 Element::Slider { symbole, .. } | Element::Groupe { symbole, .. } => (symbole, vec![], &None, vec![]),
-                Element::Script { action, .. } => (&None, vec![], &None, vec![action]),
+                Element::Script { action, .. } | Element::Choix { action, .. } => (&None, vec![], &None, vec![action]),
                 Element::Lanceur { appui_long, .. } => (&None, vec![], &None, vec![appui_long]),
                 _ => (&None, vec![], &None, vec![]),
             };
@@ -680,6 +838,18 @@ impl Controle<'_> {
             for v in gabarit.into_iter().flat_map(crate::sources::variables).filter(|v| crate::sources::variable_impossible(v)) {
                 let possibles = "variables possibles : {texte} ou {text} (sortie qui n'est pas du JSON), sinon le chemin d'un champ du JSON, comme {current.temperature_2m}";
                 self.signaler(false, chemin, &ici, format!("{{{v}}} n'existe pas ; {possibles}"));
+            }
+            self.curseur(chemin, &ici, element);
+            if let Element::Choix { options, action, toutes_les, .. } = element {
+                if options.is_empty() {
+                    self.signaler(false, chemin, &ici, "aucune option : le choix sera vide ; écris options = [\"1×\", \"2×\"]".into());
+                }
+                if let Some(Action::Shell(c) | Action::Applescript(c)) = action
+                    && !crate::barre::contient_valeur(c)
+                {
+                    self.signaler(false, chemin, &ici, "l'action ne contient pas {valeur} : chaque option lancera la même chose".into());
+                }
+                self.lecture(chemin, &ici, *toutes_les);
             }
             if let Element::Texte { source, gabarit, symbole_selon, couleur_selon, .. } = element {
                 if source.is_none() && gabarit.is_some() {
@@ -852,6 +1022,29 @@ largeur = 120
 action = "echap"
 
 [[element]]
+type = "slider"
+symbole = "music.note"
+lire = "osascript -e 'tell application \"Spotify\" to sound volume'"
+regler = "osascript -e 'tell application \"Spotify\" to set sound volume to {valeur}'"
+min = 0
+max = 100
+pas = 5
+toutes_les = 2
+style = "grille"
+crans = 12
+couleurs = ["#30D158", "#FFD60A", "#FF453A"]
+seuils = [60, 85]
+haptique = true
+
+[[element]]
+type = "choix"
+options = ["1×", "1,5×", "2×"]
+action = { shell = "echo {valeur} > /tmp/vitesse" }
+lire = "cat /tmp/vitesse"
+toutes_les = 10
+largeur = 150
+
+[[element]]
 type = "groupe"
 texte = "Export"
 largeur = 100
@@ -975,14 +1168,8 @@ mod tests {
             masquer_control_strip: true,
             elements: vec![
                 bouton_symbole(Some("apple.logo"), Some(56.0), Action::BarreApple),
-                Element::Slider {
-                    reglage: Reglage::Luminosite,
-                    symbole: Some("sun.max.fill".into()),
-                },
-                Element::Slider {
-                    reglage: Reglage::Volume,
-                    symbole: Some("speaker.wave.2.fill".into()),
-                },
+                Element::slider(Reglage::Luminosite, Some("sun.max.fill".into())),
+                Element::slider(Reglage::Volume, Some("speaker.wave.2.fill".into())),
                 Element::Souple,
                 bouton_symbole(Some("backward.fill"), None, Action::Precedent),
                 Element::EnCours {
@@ -1165,6 +1352,63 @@ type = "slider"
 reglage = "volume"
 
 [[element]]
+type = "choix"
+options = ["1×", "1,5×", "2×"]
+action = { shell = "echo {valeur}" }
+lire = "echo 1×"
+toutes_les = 10
+largeur = 150
+
+[[element]]
+type = "groupe"
+symbole = "slider.horizontal.3"
+
+  [[element.element]]
+  type = "curseur"
+  symbole = "music.note"
+  lire = "echo 40"
+  regler = "echo {valeur}"
+  min = 0
+  max = 100
+  pas = 5
+  toutes_les = 2
+  style = "classique"
+  crans = 12
+  couleurs = ["#30D158", "#FFD60A", "#FF453A"]
+  seuils = [60, 85]
+  haptique = true
+
+  [[element.element]]
+  type = "slider"
+  regler = "echo {valeur}"
+  style = "grille"
+
+  [[element.element]]
+  type = "slider"
+  regler = "echo {valeur}"
+  style = "jauge"
+
+  [[element.element]]
+  type = "slider"
+  regler = "echo {valeur}"
+  style = "points"
+
+  [[element.element]]
+  type = "slider"
+  regler = "echo {valeur}"
+  style = "egaliseur"
+
+  [[element.element]]
+  type = "slider"
+  regler = "echo {valeur}"
+  style = "pas_a_pas"
+
+  [[element.element]]
+  type = "slider"
+  regler = "echo {valeur}"
+  style = "cadran"
+
+[[element]]
 type = "heure"
 format = "HH:mm"
 
@@ -1341,6 +1585,63 @@ type = "slider"
 setting = "volume"
 
 [[item]]
+type = "choice"
+options = ["1×", "1,5×", "2×"]
+action = { shell = "echo {valeur}" }
+read = "echo 1×"
+every = 10
+width = 150
+
+[[item]]
+type = "group"
+symbol = "slider.horizontal.3"
+
+  [[item.item]]
+  type = "slider"
+  symbol = "music.note"
+  read = "echo 40"
+  set = "echo {valeur}"
+  min = 0
+  max = 100
+  step = 5
+  every = 2
+  style = "classic"
+  notches = 12
+  colors = ["#30D158", "#FFD60A", "#FF453A"]
+  thresholds = [60, 85]
+  haptic = true
+
+  [[item.item]]
+  type = "slider"
+  set = "echo {valeur}"
+  style = "grid"
+
+  [[item.item]]
+  type = "slider"
+  set = "echo {valeur}"
+  style = "gauge"
+
+  [[item.item]]
+  type = "slider"
+  set = "echo {valeur}"
+  style = "dots"
+
+  [[item.item]]
+  type = "slider"
+  set = "echo {valeur}"
+  style = "equalizer"
+
+  [[item.item]]
+  type = "slider"
+  set = "echo {valeur}"
+  style = "stepper"
+
+  [[item.item]]
+  type = "slider"
+  set = "echo {valeur}"
+  style = "dial"
+
+[[item]]
 type = "clock"
 format = "HH:mm"
 
@@ -1414,7 +1715,7 @@ command = "uptime"
     fn alias_anglais_donnent_la_meme_barre() {
         let fr = lire(TOUT_FR).unwrap();
         assert_eq!(lire(TOUT_EN), Ok(fr.clone()));
-        assert_eq!((fr.elements.len(), fr.sources.len()), (25, 4));
+        assert_eq!((fr.elements.len(), fr.sources.len()), (27, 4));
         assert_eq!((fr.applications.len(), fr.applications[0].herite), (1, true));
         assert_eq!(lire(include_str!("../exemples/barre.en.toml")), lire(PAR_DEFAUT));
         // Une erreur dans un [[item]] garde sa ligne.
@@ -1478,6 +1779,42 @@ command = "uptime"
         );
         // La clé elle-même n'apparaît dans aucun avis.
         assert!(avis.iter().all(|a| !a.contains("sk_live")));
+    }
+
+    /// Curseurs libres et choix : un slider règle une chose (luminosité, volume ou commande), et `controler` signale
+    /// bornes, pas, seuils, couleurs et `{valeur}` absents.
+    #[test]
+    fn curseurs_et_choix_controles() {
+        let erreur = lire("[[element]]\ntype = \"bouton\"\n\n[[element]]\ntype = \"curseur\"\nsymbole = \"music.note\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 4 : slider sans réglage"), "{erreur}");
+        let erreur = lire("[[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"slider\"\n  reglage = \"volume\"\n  regler = \"x {valeur}\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 3 : slider : écris reglage"), "{erreur}");
+        assert!(lire("[[element]]\ntype = \"slider\"\nsetting = \"volume\"\nread = \"echo 3\"\n").unwrap_err().contains("lire ne sert qu'avec regler"));
+        assert!(lire("[[element]]\ntype = \"slider\"\nreglage = \"volume\"\nstyle = \"vague\"\n").unwrap_err().starts_with("ligne 1 : valeur inconnue «vague»"));
+        let texte = "[[element]]\ntype = \"slider\"\nregler = \"echo 1\"\nmin = 10\nmax = 5\n\n[[element]]\ntype = \"slider\"\nset = \"echo {value}\"\nstep = 200\nthresholds = [50, 120]\ncolors = [\"vert\", \"#FFD60A\"]\nnotches = 99\nevery = 0.1\n\n[[element]]\ntype = \"slider\"\nreglage = \"volume\"\nstyle = \"grille\"\nseuils = [80, 60]\n\n[[element]]\ntype = \"choix\"\noptions = []\naction = { shell = \"echo fixe\" }\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).collect();
+        assert_eq!(
+            avis,
+            [
+                "ligne 1 : min (10) doit être plus petit que max (5) : le curseur ira de 0 à 100",
+                "ligne 1 : regler ne contient pas {valeur} : « echo 1 » recevra toujours la même chose",
+                "ligne 7 : step doit être plus grand que 0 et pas plus grand que max − min (100) : il sera ignoré",
+                "ligne 7 : every est ramené à 0.5 seconde, le minimum",
+                "ligne 7 : notches = 99 est ramené entre 2 et 40",
+                "ligne 7 : la couleur « vert » doit s'écrire #RRGGBB : elle sera ignorée",
+                "ligne 7 : colors : 2 couleurs pour 2 seuils : il faut une couleur de plus que de seuils",
+                "ligne 7 : thresholds : 120 est hors du curseur (de 0 à 100, bornes exclues)",
+                "ligne 16 : seuils : écris-les du plus petit au plus grand",
+                "ligne 22 : aucune option : le choix sera vide ; écris options = [\"1×\", \"2×\"]",
+                "ligne 22 : l'action ne contient pas {valeur} : chaque option lancera la même chose",
+            ]
+        );
+        // Le modèle d'exemple passe sans avis, et traverse TOML ⇄ JSON.
+        let exemple = include_str!("../exemples/curseurs.toml");
+        let barre = lire(exemple).unwrap();
+        assert_eq!(controler(&barre, Some(exemple)).iter().filter(|a| !a.message.contains("introuvable")).count(), 0);
+        let json = serde_json::to_string(&barre).unwrap();
+        assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre);
     }
 
     /// Une variable qu'aucune valeur ne peut avoir, dans le gabarit d'un `texte` ou le texte d'un bouton lié (Sam, B2).
@@ -1749,10 +2086,7 @@ symbole = "speaker.wave.2.fill"
                 largeur: None,
                 elements: vec![
                     bouton_symbole(Some("speaker.slash.fill"), None, Action::BasculerMuet),
-                    Element::Slider {
-                        reglage: Reglage::Volume,
-                        symbole: None
-                    },
+                    Element::slider(Reglage::Volume, None),
                 ],
             }
         );
@@ -1827,6 +2161,7 @@ symbole = "speaker.wave.2.fill"
             include_str!("../exemples/meteo.toml"),
             include_str!("../exemples/mcp.toml"),
             include_str!("../exemples/vitrine.toml"),
+            include_str!("../exemples/curseurs.toml"),
             BARRE_COMPLETE,
         ] {
             let barre = lire(texte).unwrap();

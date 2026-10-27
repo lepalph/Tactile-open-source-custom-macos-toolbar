@@ -22,6 +22,9 @@ pub(super) enum Rafraichi {
     Batterie { bouton: Id, symbole: bool, prochain: Instant, en_cours: bool },
     /// Élément `texte`, ou bouton avec `source` (`lien.style` : sa couleur de texte et sa taille, à remettre après le titre).
     Source { bouton: Id, lien: Lien, derniere_erreur: String },
+    /// Curseur (`lire` relu quand sa sous-barre est montrée) et choix (`lire` relu toutes les `toutes_les` s).
+    Curseur(Box<super::curseurs::Curseur>),
+    Choix(Box<super::curseurs::Choix>),
 }
 
 /// Ce qu'un élément affiche d'une `[[source]]`.
@@ -307,6 +310,7 @@ pub(super) fn rafraichir() {
                     appliquer(*bouton, &riche, "batterie");
                 }
                 Some(Rafraichi::EnCours { bouton }) => titre(*bouton, &sortie.texte),
+                Some(r @ (Rafraichi::Curseur(_) | Rafraichi::Choix(_))) => super::curseurs::valeur_lue(r, sortie),
                 _ => {}
             }
         }
@@ -316,6 +320,14 @@ pub(super) fn rafraichir() {
             etat.prochain_media = maintenant + Duration::from_secs(2);
         }
         for (i, r) in etat.rafraichis.iter_mut().enumerate() {
+            if let Some(commande) = super::curseurs::a_lire(r, &etat.barres, maintenant) {
+                super::curseurs::lecture_lancee(r, maintenant);
+                let (envoi, processus) = (etat.envoi.clone(), etat.processus.clone());
+                std::thread::spawn(move || {
+                    let _ = envoi.send((i, executer_script(&commande, Duration::from_secs(5), &processus)));
+                });
+                continue;
+            }
             match r {
                 Rafraichi::Heure { bouton, formateur } => unsafe {
                     let date: Id = msg_send![class!(NSDate), date];

@@ -6,6 +6,7 @@
 
 mod autotest;
 mod batterie;
+mod curseurs;
 mod elements;
 mod plateau;
 mod rafraichi;
@@ -26,6 +27,8 @@ use std::time::Instant;
 use vues::{barre_touch, texte};
 /// Pour le validateur de `config::controler` : il juge comme la barre.
 pub(crate) use elements::{debordement, largeur_barre};
+/// Pour `config::controler` et l'export : bornes, `{valeur}` et lecture des curseurs et des choix.
+pub(crate) use curseurs::{bornes, contient_valeur, LECTURE_DEFAUT, LECTURE_MIN};
 pub(crate) use vues::{controler_image, icone_app, image, reduire, symbole};
 #[cfg(test)]
 pub(crate) use vues::{memoire_max, png_annonce};
@@ -117,10 +120,12 @@ define_class!(
 
         #[unsafe(method(glisse:))]
         fn glisse(&self, item: Id) {
-            let slider: Id = unsafe { msg_send![item, slider] };
-            let valeur: f64 = unsafe { msg_send![slider, doubleValue] };
-            let action = if etiquette(slider) == 0 { Action::Luminosite(valeur as f32) } else { Action::Volume(valeur as f32) };
-            signaler(actions::executer(&action));
+            curseurs::glisse(item);
+        }
+
+        #[unsafe(method(choix:))]
+        fn choix(&self, controle: Id) {
+            curseurs::choisi(controle);
         }
 
         #[unsafe(method(afficherBarre:))]
@@ -201,7 +206,10 @@ fn declencher(index: isize, long: bool) {
     match trouve {
         Some((Commande::Systeme(Action::BarreApple), _)) => masquer(),
         Some((Commande::Systeme(action), _)) => signaler(actions::executer(&action)),
-        Some((Commande::Ouvrir(k), barres)) => mesurer("appui → sous-barre montrée", || montrer(barres[k])),
+        Some((Commande::Ouvrir(k), barres)) => {
+            mesurer("appui → sous-barre montrée", || montrer(barres[k]));
+            curseurs::ouvert(k);
+        }
         Some((Commande::Fermer, barres)) => mesurer("✕ → base montrée", || montrer(base().unwrap_or(barres[0]))),
         None => {}
     }
