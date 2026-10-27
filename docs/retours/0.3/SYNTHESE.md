@@ -96,3 +96,7 @@ Rapport complet : `fonctionnel.md` (écran verrouillé toute la session : ce qui
 ## Reportés
 
 Barre d'Apple automatique par app (`barre = "apple"`), liste d'apps (`app = [...]`), éditeur des barres par app et des sources (prévu au chantier éditeur), import BTT, essai sur Mac Intel.
+
+## Vérification finale écran déverrouillé (2026-10-27, Tactile 0.3.0 installée)
+
+`scripts/verifier.sh` : « AUTOTEST fin 0 échec(s) », « Tout est vérifié », code 0, aucune étape simulée (`grep -c simulé` = 0). Pour la première fois, la barre d'Apple (étapes 7-8 : barre native avec ✳ dans le Control Strip, puis ✳ ramène la barre Tactile) et la vraie bascule d'app (étape 27 : TextEdit réellement au premier plan, « com.apple.TextEdit », barre d'application présentée, sous-barre gardée) sont vues en capture. L'app de l'utilisateur est relancée après, config intacte.
