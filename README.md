@@ -78,7 +78,7 @@ If you want to help, the [good first issues](https://github.com/lepalph/tactile-
 If you have used [BetterTouchTool](https://folivora.ai) or [MTMR](https://github.com/Toxblh/MTMR), you know the idea. Tactile does less, on purpose:
 
 - It's free and MIT licensed, with no license to renew and no account, and it sends nothing anywhere. BetterTouchTool is a paid app that also handles gestures, window snapping and more; Tactile only does the Touch Bar.
-- It's small. The bar is native Rust and runs no Electron or web runtime. With the default bar it idles at 0.0 to 0.2 % CPU and 14 MB of memory (measured with `top` on a 13-inch M1 running macOS 15.8). The v0.3.0 download is a 3 MB zip.
+- It's small. The bar is native Rust and runs no Electron or web runtime. With the default bar it idles at 0.0 to 0.2 % CPU and 14 MB of memory (measured with `top` on a 13-inch M1 running macOS 15.8). The v0.4.0 download is a 3 MB zip.
 - Your bar is a text file you can keep in version control: `~/.config/tactile/barre.toml`. Save it and the bar updates within a second. If you make a mistake, your current bar stays and the error tells you which line to fix.
 - If you'd rather not edit a file, the "Customize my bar" window shows your Touch Bar at real size, lets you drag items around, and writes the same file.
 - A group or a slider opens a real sub-bar with a ✕ to close it. MTMR uses popovers, which don't open in a system-wide bar ([why](docs/DECISIONS.md)).
