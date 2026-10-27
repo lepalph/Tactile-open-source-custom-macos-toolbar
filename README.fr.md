@@ -480,6 +480,19 @@ Exemple complet (YouTube : lecture/pause `k`, avance `l`, recul `j`, plein écra
 
 Un bouton ✳ Claude : tu parles, Claude Code te répond à voix haute. La transcription (whisper.cpp) et la voix (Piper) tournent sur ton Mac ; seule la réponse passe par Claude Code et ton compte Claude. La première fois, macOS demande l'accès au micro pour Tactile. Installation : [extras/claude-voix](extras/claude-voix/README.md) ; éléments à ajouter à ta barre : [exemples/claude-vocal.toml](exemples/claude-vocal.toml).
 
+## Pour les agents (MCP)
+
+`tactile --mcp` fait de Tactile un serveur MCP (stdio) : un agent comme Claude Code peut écrire sur ta Touch Bar. L'app Tactile doit tourner : le serveur lui parle par une socket privée (`~/Library/Application Support/Tactile/agent.sock`, dossier en 0700) et répond « Tactile n'est pas lancé » sinon.
+
+```
+claude mcp add tactile -- ~/Applications/Tactile.app/Contents/MacOS/tactile --mcp
+```
+
+- `afficher {texte, duree_s = 5}` (1 à 60 s) : un message par-dessus ta barre, puis ta barre revient. N'attend pas.
+- `demander {question, choix, delai_s = 120}` (5 à 600 s) : une question avec 1 à 4 boutons ; attend et renvoie le libellé touché, ou `aucun` (délai écoulé, ou ✕ touché).
+
+Les textes sont coupés à 80 caractères, les libellés à 20. Une demande à la fois : tant qu'une est sur la barre, la suivante reçoit tout de suite une erreur d'outil `occupé` et l'agent réessaie. Rien de ce qui passe par la socket n'exécute de commande.
+
 ## Ligne de commande
 
 Le binaire de l'app est `/Applications/Tactile.app/Contents/MacOS/tactile`.
@@ -491,6 +504,7 @@ Le binaire de l'app est `/Applications/Tactile.app/Contents/MacOS/tactile`.
 | `tactile --verifier [fichier]` | Vérifie un fichier de barre sans toucher la Touch Bar (voir plus bas). Alias anglais : `--check`. Sans fichier, vérifie ta `barre.toml`. |
 | `tactile --exporter <fichier>` | Exporte ta barre : un `.toml`, ou un `.zip` avec ses logos (`barre.toml` + `icones/`). Sans extension, choisit la bonne. Un `.toml` demandé pour une barre qui a des logos est écrit avec un avertissement : les logos y restent des chemins de ce Mac. Alias anglais : `--export`. |
 | `tactile --importer <fichier> [--oui]` | Lit un `.toml` ou un `.zip`, le vérifie comme `--verifier`, affiche un résumé et tout ce que la barre peut lancer, puis demande avant de remplacer ta barre (l'actuelle passe dans l'historique). Sans terminal, refuse sans `--oui`. Alias anglais : `--import`, `--yes`. |
+| `tactile --mcp` | Serveur MCP sur stdin/stdout, pour les agents (voir plus haut). L'app doit tourner. |
 | `tactile --version` | Affiche la version. |
 | `tactile --help` | Affiche l'aide, en français si la langue du système l'est (`LC_ALL`, `LANG`, puis la langue de macOS), sinon en anglais. |
 

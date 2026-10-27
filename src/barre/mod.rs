@@ -4,6 +4,7 @@
 //! est donc une sous-barre (✕ + contenu) dont le contenu remplace celui de la principale
 //! dans l'unique barre système.
 
+mod agent;
 mod animation;
 mod autotest;
 mod batterie;
@@ -34,6 +35,7 @@ pub(crate) use elements::{debordement, largeur_barre};
 pub(crate) use curseurs::{bornes, contient_valeur, LECTURE_DEFAUT, LECTURE_MIN};
 pub(crate) use vues::{animation_image, controler_image, icone_app, image, reduire, symbole};
 pub(crate) use onglet::navigateurs_refuses;
+pub(crate) use agent::soumettre;
 #[cfg(test)]
 pub(crate) use vues::{memoire_max, png_annonce};
 /// Pour `sources` : ses processus (`curl`, commandes, serveurs MCP) meurent avec la barre, comme les scripts.
@@ -149,6 +151,12 @@ define_class!(
             afficher();
         }
 
+        /// Un bouton de la barre de l'agent (tag 0 = ✕, k = k-ième choix).
+        #[unsafe(method(agentChoix:))]
+        fn agent_choix(&self, envoyeur: Id) {
+            agent::choisi(etiquette(envoyeur));
+        }
+
         #[unsafe(method(finDemarrage:))]
         fn fin_demarrage(&self, _envoyeur: Id) {
             if EN_SPLASH.replace(false)
@@ -193,6 +201,7 @@ define_class!(
 
         #[unsafe(method(quitter:))]
         fn quitter(&self, _notification: Id) {
+            crate::agent::nettoyer();
             ETAT.with_borrow(|e| e.iter().for_each(|e| rafraichi::tuer_tous(&e.processus)));
         }
 
@@ -218,6 +227,7 @@ define_class!(
                 }
                 None => {}
             }
+            agent::pas();
             rafraichir();
         }
     }

@@ -4,6 +4,10 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- Tactile as an MCP server for agents: `tactile --mcp` (stdio, JSON-RPC 2.0) with two tools, `afficher` (a temporary message over the bar) and `demander` (a question with 1 to 4 buttons, returns the touched label or `aucun`). It talks to the running app through a Unix socket in `~/Library/Application Support/Tactile/agent.sock` (folder 0700, socket 0600, recreated at launch); one request at a time (the next gets `occupé`); nothing sent through the socket runs a command. `TACTILE_AGENT_APPUI=n` presses the n-th choice 2 s after it appears (test aid).
+
 ## [0.4.1] - 2026-10-27
 
 ### Added
