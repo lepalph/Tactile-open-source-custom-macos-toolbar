@@ -127,6 +127,8 @@ fn appliquer(bouton: Id, riche: &Riche, element: &str) {
     });
     unsafe {
         let _: () = msg_send![bouton, setImage: image.unwrap_or(std::ptr::null_mut())];
+        let anim = riche.image.as_deref().filter(|_| image.is_some() && riche.symbole.is_none()).and_then(|c| super::vues::animation_image(c, false));
+        super::animation::animer(bouton, anim);
         // 2 = image à gauche du texte, 1 = image seule, 0 = texte seul.
         let position: isize = match (image.is_some(), riche.texte.is_empty()) { (true, false) => 2, (true, true) => 1, (false, _) => 0 };
         let _: () = msg_send![bouton, setImagePosition: position];

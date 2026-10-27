@@ -115,7 +115,7 @@ fn deplier(chemin: &str) -> PathBuf {
 /// Chaque type et chaque champ est nommé, sans `..` ni `_ =>` : un élément, une action, une source ou un champ
 /// ajouté plus tard ne compile pas tant qu'il n'est pas classé ici.
 pub(super) fn commandes(barre: &Barre) -> Vec<Commande> {
-    let Barre { masquer_control_strip: _, elements, applications, sites, sources } = barre;
+    let Barre { masquer_control_strip: _, animation_demarrage: _, elements, applications, sites, sources } = barre;
     let mut liste = Vec::new();
     parcourir(elements, &tx("Barre principale", "Main bar"), "", &mut liste);
     for Application { app, herite: _, elements } in applications {

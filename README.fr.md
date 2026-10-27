@@ -179,6 +179,8 @@ Les clés françaises sont la forme de référence, celle qu'écrit l'éditeur e
 
 ### Réglage général
 
+`animation_demarrage` / `startup_animation` (`true` par défaut) joue une animation de 0,8 s au démarrage de Tactile, pas à chaque rechargement : un bref ✳ Tactile, puis les éléments apparaissent en fondu de gauche à droite. Elle est sautée si « Réduire les animations » est coché dans macOS, et se désactive par l'interrupteur en haut de l'éditeur. Un GIF animé (`image = "~/x.gif"`, 60 images et 2 Mo au plus) s'anime sur la barre ; un GIF en gabarit n'est pas teinté.
+
 `masquer_control_strip`, en tête de fichier, vaut `true` par défaut. `true` donne toute la largeur à ta barre (1004 points) ; `false` garde le Control Strip d'Apple à droite (il reste 685 points, et une ✕ système à gauche).
 
 Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 points (le texte est coupé avec …). Ce qui ne tient pas dans la barre n'est pas affiché : le journal le dit (« la barre principale déborde … n éléments seront cachés »).
@@ -299,6 +301,7 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | Français | Anglais |
 |---|---|
 | `masquer_control_strip` | `hide_control_strip` |
+| `animation_demarrage` | `startup_animation` |
 | `element` | `item` |
 | `bouton` | `button` |
 | `heure` | `clock` |

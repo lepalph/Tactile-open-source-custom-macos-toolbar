@@ -4,9 +4,11 @@
 //! est donc une sous-barre (✕ + contenu) dont le contenu remplace celui de la principale
 //! dans l'unique barre système.
 
+mod animation;
 mod autotest;
 mod batterie;
 mod curseurs;
+mod demarrage;
 mod elements;
 pub(super) mod onglet;
 mod plateau;
@@ -30,7 +32,7 @@ use vues::{barre_touch, texte};
 pub(crate) use elements::{debordement, largeur_barre};
 /// Pour `config::controler` et l'export : bornes, `{valeur}` et lecture des curseurs et des choix.
 pub(crate) use curseurs::{bornes, contient_valeur, LECTURE_DEFAUT, LECTURE_MIN};
-pub(crate) use vues::{controler_image, icone_app, image, reduire, symbole};
+pub(crate) use vues::{animation_image, controler_image, icone_app, image, reduire, symbole};
 pub(crate) use onglet::navigateurs_refuses;
 #[cfg(test)]
 pub(crate) use vues::{memoire_max, png_annonce};
@@ -96,6 +98,10 @@ thread_local! {
     static CIBLE: RefCell<Option<Retained<Cible>>> = const { RefCell::new(None) };
     static PLEIN_ECRAN: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
     static COURANTE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
+    /// Vrai jusqu'à la première installation : l'animation de démarrage n'a lieu qu'au lancement, pas aux rechargements.
+    static PREMIERE: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+    /// Le ✳ Tactile est présenté et `finDemarrage:` doit encore montrer la vraie barre.
+    static EN_SPLASH: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
     static MODALE: std::cell::Cell<Id> = const { std::cell::Cell::new(std::ptr::null_mut()) };
     /// Autotest écran verrouillé : `loginwindow` garde le premier plan, l'app active est alors simulée.
     static APP_SIMULEE: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
@@ -143,6 +149,16 @@ define_class!(
             afficher();
         }
 
+        #[unsafe(method(finDemarrage:))]
+        fn fin_demarrage(&self, _envoyeur: Id) {
+            if EN_SPLASH.replace(false)
+                && let Some(barre) = base()
+            {
+                montrer(barre);
+                demarrage::apparition(modale());
+            }
+        }
+
         #[unsafe(method(masquerBarre:))]
         fn masquer_barre(&self, _envoyeur: Id) {
             masquer();
@@ -178,6 +194,11 @@ define_class!(
         #[unsafe(method(quitter:))]
         fn quitter(&self, _notification: Id) {
             ETAT.with_borrow(|e| e.iter().for_each(|e| rafraichi::tuer_tous(&e.processus)));
+        }
+
+        #[unsafe(method(anime:))]
+        fn anime(&self, minuteur: Id) {
+            animation::pas(minuteur);
         }
 
         #[unsafe(method(tic:))]
@@ -514,6 +535,7 @@ fn afficher_erreur(message: &str) {
 }
 
 fn installer(config: &Barre) {
+    animation::vider();
     let (config, vide) = config_affichee(config);
     let config = &config;
     // Le placement n'est lu qu'à une nouvelle présentation : s'il change, on retire la barre d'abord.
@@ -566,7 +588,16 @@ fn installer(config: &Barre) {
         *place = Some(etat);
     });
     suivre_navigateur();
-    presenter(a_presenter.or(base()).unwrap_or(principale));
+    EN_SPLASH.set(false);
+    let premiere = PREMIERE.replace(false);
+    // Les autotests et TACTILE_OUVRIR attendent la barre tout de suite ; « Réduire les animations » est respecté.
+    if premiere && config.animation_demarrage && a_presenter.is_none() && std::env::var_os("TACTILE_AUTOTEST").is_none() && !demarrage::mouvement_reduit() {
+        presenter(demarrage::splash());
+        EN_SPLASH.set(true);
+        demarrage::programmer_fin();
+    } else {
+        presenter(a_presenter.or(base()).unwrap_or(principale));
+    }
     // Les sources ne lisent rien (réseau, serveurs MCP) avant que la barre soit présentée.
     ETAT.with_borrow_mut(|etat| {
         if let Some(etat) = etat.as_mut() {

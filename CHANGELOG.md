@@ -4,6 +4,11 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- Animated GIFs on the bar: `image = "~/x.gif"` (also a script's `image`) animates at the file's own pace (frames reduced to 20 pt × 2, at most 60 frames and 2 MB, checked by `controler_image`; about 0.6 % CPU at 12 frames/s). The editor keeps the GIF as is in `icones/` and its preview animates.
+- Startup animation (`animation_demarrage`, alias `startup_animation`, `true` by default, switch in the editor): at launch only, a brief ✳ Tactile, then the items fade and slide in from left to right within 0.8 s. Skipped with macOS "Reduce motion". Non-blocking (Core Animation).
+
 ## [0.4.0] - 2026-10-27
 
 ### Added

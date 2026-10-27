@@ -6,6 +6,7 @@ use objc2::{class, msg_send};
 use objc2_foundation::{NSPoint, NSRect, NSSize, NSString};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 use std::time::SystemTime;
 
 use super::Id;
@@ -43,8 +44,14 @@ const HAUTEUR_IMAGE: f64 = 20.0;
 /// Densité de l'écran de la Touch Bar : une image est gardée à 2 pixels par point.
 const ECHELLE: f64 = 2.0;
 
-/// Chemin et gabarit (ou `app:chemin` et ouverte) → date du fichier et image réduite.
-type Cache = HashMap<(String, bool), (Option<SystemTime>, Retained<AnyObject>)>;
+/// Un GIF de plusieurs images, chacune réduite comme une image fixe : `fins[k]` = instant (s) où l'image `k` laisse la place.
+pub(crate) struct Animation {
+    pub(super) cadres: Vec<Retained<AnyObject>>,
+    pub(super) fins: Vec<f64>,
+}
+
+/// Chemin et gabarit (ou `app:chemin` et ouverte) → date du fichier, image réduite (la première, pour un GIF) et son animation.
+type Cache = HashMap<(String, bool), (Option<SystemTime>, Retained<AnyObject>, Option<Rc<Animation>>)>;
 
 thread_local! {
     /// Images de fichier déjà lues et réduites, par chemin et gabarit, avec la date du fichier : un script qui renvoie
@@ -57,11 +64,24 @@ thread_local! {
 /// `None` si le fichier n'existe pas ou n'est pas une image. `~` est étendu ; `gabarit` teinte l'image comme un symbole.
 /// L'image est réduite à 20 pt de haut (40 px) dès la lecture : un PNG de 10 000 px gardait 400 Mo par bouton.
 pub(crate) fn image(chemin: &str, gabarit: bool) -> Option<Id> {
-    let chemin = match chemin.strip_prefix("~/") {
+    let chemin = developper(chemin);
+    en_cache(&chemin, (chemin.clone(), gabarit), || {
+        let fixe = reduire(&chemin, gabarit).map_err(|e| eprintln!("tactile : {e}")).ok()?;
+        let anim = cadres(&chemin, gabarit).map(Rc::new);
+        Some((anim.as_ref().map_or(fixe, |a| a.cadres[0].clone()), anim))
+    })
+}
+
+fn developper(chemin: &str) -> String {
+    match chemin.strip_prefix("~/") {
         Some(suite) => format!("{}/{suite}", std::env::var("HOME").unwrap_or_default()),
         None => chemin.to_string(),
-    };
-    en_cache(&chemin, (chemin.clone(), gabarit), || reduire(&chemin, gabarit).map_err(|e| eprintln!("tactile : {e}")).ok())
+    }
+}
+
+/// L'animation de l'image de fichier `chemin` si c'est un GIF de plusieurs images (déjà passée par `image`).
+pub(crate) fn animation_image(chemin: &str, gabarit: bool) -> Option<Rc<Animation>> {
+    IMAGES.with_borrow(|c| c.get(&(developper(chemin), gabarit)).and_then(|(_, _, a)| a.clone()))
 }
 
 /// L'icône du `.app` à `chemin` (celle du Finder et du Dock), réduite comme une image de fichier et gardée dans le même
@@ -72,7 +92,7 @@ pub(crate) fn icone_app(chemin: &str, ouverte: bool) -> Option<Id> {
         let icone: Id = msg_send![espace, iconForFile: &*texte(chemin)];
         let cote = HAUTEUR_IMAGE - POINT;
         let cadre = NSRect::new(NSPoint::new(POINT / 2.0, POINT), NSSize::new(cote, cote));
-        redessiner(&*icone, NSSize::new(HAUTEUR_IMAGE, HAUTEUR_IMAGE), cadre, ouverte, false)
+        redessiner(&*icone, NSSize::new(HAUTEUR_IMAGE, HAUTEUR_IMAGE), cadre, ouverte, false).map(|i| (i, None))
     })
 }
 
@@ -80,15 +100,15 @@ pub(crate) fn icone_app(chemin: &str, ouverte: bool) -> Option<Id> {
 const POINT: f64 = 2.5;
 
 /// L'image de `cle` tant que `fichier` n'a pas changé de date, sinon `creer` la refait. `None` si `fichier` n'existe pas.
-fn en_cache(fichier: &str, cle: (String, bool), creer: impl FnOnce() -> Option<Retained<AnyObject>>) -> Option<Id> {
+fn en_cache(fichier: &str, cle: (String, bool), creer: impl FnOnce() -> Option<(Retained<AnyObject>, Option<Rc<Animation>>)>) -> Option<Id> {
     let date = std::fs::metadata(fichier).ok()?.modified().ok();
     IMAGES.with_borrow_mut(|cache| {
-        if let Some((_, i)) = cache.get(&cle).filter(|(d, _)| *d == date) {
+        if let Some((_, i, _)) = cache.get(&cle).filter(|(d, _, _)| *d == date) {
             return Some(Retained::as_ptr(i) as Id);
         }
-        let image = creer()?;
+        let (image, anim) = creer()?;
         let id = Retained::as_ptr(&image) as Id;
-        cache.insert(cle, (date, image));
+        cache.insert(cle, (date, image, anim));
         Some(id)
     })
 }
@@ -116,6 +136,95 @@ pub(crate) fn reduire(chemin: &str, gabarit: bool) -> Result<Retained<AnyObject>
     }
 }
 
+use std::ffi::c_void;
+#[link(name = "ImageIO", kind = "framework")]
+unsafe extern "C" {
+    fn CGImageSourceCreateWithURL(url: *const c_void, options: *const c_void) -> *const c_void;
+    fn CGImageSourceGetType(source: *const c_void) -> *const c_void;
+    fn CGImageSourceGetCount(source: *const c_void) -> usize;
+    fn CGImageSourceCopyPropertiesAtIndex(source: *const c_void, index: usize, options: *const c_void) -> *const c_void;
+    fn CGImageSourceCreateImageAtIndex(source: *const c_void, index: usize, options: *const c_void) -> *const c_void;
+}
+#[link(name = "CoreFoundation", kind = "framework")]
+unsafe extern "C" {
+    fn CFRelease(objet: *const c_void);
+}
+
+/// Un GIF refusé au-delà de ces bornes : chaque image est gardée en mémoire et redessinée toutes les 40 ms.
+pub(crate) const GIF_IMAGES_MAX: usize = 60;
+pub(crate) const GIF_OCTETS_MAX: u64 = 2 << 20;
+
+/// Les images d'un GIF de plusieurs images, réduites comme `reduire` (ImageIO les compose déjà), avec leur durée.
+/// `None` pour tout autre fichier, un GIF d'une image ou un GIF refusé par `controler_image`.
+fn cadres(chemin: &str, gabarit: bool) -> Option<Animation> {
+    controler_image(chemin).ok()?;
+    unsafe {
+        let url: Id = msg_send![class!(NSURL), fileURLWithPath: &*texte(chemin)];
+        let source = CGImageSourceCreateWithURL(url as *const c_void, std::ptr::null());
+        if source.is_null() {
+            return None;
+        }
+        let type_ = CGImageSourceGetType(source) as *const NSString;
+        let n = CGImageSourceGetCount(source);
+        let mut anim = Animation { cadres: Vec::new(), fins: Vec::new() };
+        if type_.as_ref().is_some_and(|t| t.to_string() == GIF) && n > 1 {
+            let mut total = 0.0;
+            for i in 0..n {
+                let Some((cadre, duree)) = cadre(source, i, gabarit) else { break };
+                total += duree;
+                anim.cadres.push(cadre);
+                anim.fins.push(total);
+            }
+        }
+        CFRelease(source);
+        (anim.cadres.len() == n && n > 1).then_some(anim)
+    }
+}
+
+/// Pour que `msg_send!` reconnaisse le type `^{CGImage=}`.
+#[repr(C)]
+struct CGImage([u8; 0]);
+unsafe impl objc2::RefEncode for CGImage {
+    const ENCODING_REF: objc2::Encoding = objc2::Encoding::Pointer(&objc2::Encoding::Struct("CGImage", &[]));
+}
+
+const GIF: &str = "com.compuserve.gif";
+
+unsafe fn cadre(source: *const c_void, i: usize, gabarit: bool) -> Option<(Retained<AnyObject>, f64)> {
+    unsafe {
+        let proprietes = CGImageSourceCopyPropertiesAtIndex(source, i, std::ptr::null()) as Id;
+        let mut duree = 0.1;
+        if !proprietes.is_null() {
+            let gif: Id = msg_send![proprietes, objectForKey: &*texte("{GIF}")];
+            let nombre = |cle: &str| -> f64 {
+                let n: Id = if gif.is_null() { gif } else { msg_send![gif, objectForKey: &*texte(cle)] };
+                if n.is_null() { 0.0 } else { msg_send![n, doubleValue] }
+            };
+            let d = nombre("UnclampedDelayTime");
+            // Comme les navigateurs : un délai nul ou de 10 ms ou moins vaut 100 ms ; jamais sous 20 ms.
+            duree = if d > 0.01 { d.max(0.02) } else if nombre("DelayTime") > 0.01 { nombre("DelayTime") } else { 0.1 };
+            CFRelease(proprietes as *const c_void);
+        }
+        let cg = CGImageSourceCreateImageAtIndex(source, i, std::ptr::null());
+        if cg.is_null() {
+            return None;
+        }
+        let ns: Id = msg_send![class!(NSImage), alloc];
+        let ns: Option<Retained<AnyObject>> = Retained::from_raw(msg_send![ns, initWithCGImage: cg as *const CGImage, size: NSSize::ZERO]);
+        CFRelease(cg);
+        let ns = ns?;
+        let taille: NSSize = msg_send![&*ns, size];
+        if taille.height <= 0.0 || taille.width <= 0.0 {
+            return None;
+        }
+        let points = NSSize::new(taille.width * HAUTEUR_IMAGE / taille.height, HAUTEUR_IMAGE);
+        if (points.width * ECHELLE).ceil() > COTE_MAX as f64 {
+            return None;
+        }
+        redessiner(&ns, points, NSRect::new(NSPoint::new(0.0, 0.0), points), false, gabarit).map(|c| (c, duree))
+    }
+}
+
 /// Côté maximal, en pixels, d'une image qu'on accepte de décoder (4096 × 4096 × 4 octets = 64 Mo au pire).
 pub(crate) const COTE_MAX: u64 = 4096;
 
@@ -124,18 +233,6 @@ pub(crate) const COTE_MAX: u64 = 4096;
 /// allouer 3,6 Go au décodage. À appeler avant tout décodage d'un fichier venu de l'utilisateur ou d'un import ; `reduire`
 /// le fait. Un format vectoriel (SVG, PDF) n'a pas de taille en pixels : `reduire` borne son rendu.
 pub(crate) fn controler_image(chemin: &str) -> Result<(), String> {
-    use std::ffi::c_void;
-    #[link(name = "ImageIO", kind = "framework")]
-    unsafe extern "C" {
-        fn CGImageSourceCreateWithURL(url: *const c_void, options: *const c_void) -> *const c_void;
-        fn CGImageSourceGetType(source: *const c_void) -> *const c_void;
-        fn CGImageSourceGetCount(source: *const c_void) -> usize;
-        fn CGImageSourceCopyPropertiesAtIndex(source: *const c_void, index: usize, options: *const c_void) -> *const c_void;
-    }
-    #[link(name = "CoreFoundation", kind = "framework")]
-    unsafe extern "C" {
-        fn CFRelease(objet: *const c_void);
-    }
     let trop = |l: u64, h: u64| if l > COTE_MAX || h > COTE_MAX { Err(format!("image trop grande : {l} × {h} px, maximum {COTE_MAX}")) } else { Ok(()) };
     // ImageIO ne dit rien d'un PNG trop grand pour lui ou sans données : son en-tête IHDR (octets 16 à 24) donne la taille annoncée.
     let mut entete = [0u8; 24];
@@ -156,6 +253,17 @@ pub(crate) fn controler_image(chemin: &str) -> Result<(), String> {
         // Pas de type : pas une image pour ImageIO (SVG, texte), NSImage dira s'il la lit. PDF : vectoriel.
         let matriciel = type_.as_ref().is_some_and(|t| t.to_string() != "com.adobe.pdf");
         let mut resultat = Ok(());
+        if type_.as_ref().is_some_and(|t| t.to_string() == GIF) {
+            let images = CGImageSourceGetCount(source);
+            if images > GIF_IMAGES_MAX {
+                CFRelease(source);
+                return Err(format!("GIF trop long : {images} images, maximum {GIF_IMAGES_MAX}"));
+            }
+            if std::fs::metadata(chemin).is_ok_and(|m| m.len() > GIF_OCTETS_MAX) {
+                CFRelease(source);
+                return Err("GIF trop lourd : 2 Mo au plus".into());
+            }
+        }
         for i in 0..if matriciel { CGImageSourceGetCount(source) } else { 0 } {
             let proprietes = CGImageSourceCopyPropertiesAtIndex(source, i, std::ptr::null()) as Id;
             let cote = |cle: &str| -> Option<u64> {
@@ -438,5 +546,43 @@ mod tests {
         };
         assert!(bas(ouverte) > 0.9 && bas(fermee) < 0.1, "{} {}", bas(ouverte), bas(fermee));
         assert!(icone_app("/Applications/Nexiste.app", false).is_none());
+    }
+
+    /// Un GIF de `n` images de 1 × 1 px, 100 ms chacune (octets écrits à la main).
+    fn gif(n: usize) -> Vec<u8> {
+        let mut o = b"GIF89a\x01\x00\x01\x00\x80\x00\x00\x00\x00\x00\xff\xff\xff".to_vec();
+        for _ in 0..n {
+            o.extend(b"\x21\xf9\x04\x00\x0a\x00\x00\x00\x2c\x00\x00\x00\x00\x01\x00\x01\x00\x00\x02\x02\x44\x01\x00");
+        }
+        o.push(0x3b);
+        o
+    }
+
+    #[test]
+    #[cfg_attr(ci, ignore = "AppKit rendering into a bitmap context: no graphical session on a CI runner")]
+    fn gif_anime_garde_ses_images() {
+        let d = std::env::temp_dir().join(format!("tactile-gif-{}", std::process::id()));
+        std::fs::create_dir_all(&d).unwrap();
+        let (trois, une, longue) = (d.join("trois.gif"), d.join("une.gif"), d.join("longue.gif"));
+        std::fs::write(&trois, gif(3)).unwrap();
+        std::fs::write(&une, gif(1)).unwrap();
+        std::fs::write(&longue, gif(GIF_IMAGES_MAX + 1)).unwrap();
+        let (trois, une, longue) = (trois.to_string_lossy(), une.to_string_lossy(), longue.to_string_lossy());
+        assert!(image(&trois, false).is_some());
+        let a = animation_image(&trois, false).expect("3 images gardées");
+        assert_eq!(a.cadres.len(), 3);
+        assert!((a.fins[2] - 0.3).abs() < 1e-9, "{:?}", a.fins);
+        let taille: NSSize = unsafe { msg_send![&*a.cadres[1], size] };
+        assert_eq!(taille.height, HAUTEUR_IMAGE);
+        assert!(image(&une, false).is_some() && animation_image(&une, false).is_none(), "une image : fixe");
+        assert_eq!(controler_image(&longue), Err("GIF trop long : 61 images, maximum 60".into()));
+        assert!(image(&longue, false).is_none());
+        // Plus de 2 Mo : refusé (le fichier est complété par des zéros après le marqueur de fin).
+        let lourd = d.join("lourd.gif");
+        let mut o = gif(2);
+        o.resize(GIF_OCTETS_MAX as usize + 1, 0);
+        std::fs::write(&lourd, o).unwrap();
+        assert_eq!(controler_image(&lourd.to_string_lossy()), Err("GIF trop lourd : 2 Mo au plus".into()));
+        std::fs::remove_dir_all(&d).unwrap();
     }
 }

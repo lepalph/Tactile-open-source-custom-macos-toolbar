@@ -70,6 +70,8 @@ Tout ce qui touche AppKit tourne sur le fil principal. Le travail lent (une comm
 | `src/barre/rafraichi.rs` | Éléments vivants : heure, titre en cours, scripts (texte brut ou JSON `Riche`), batterie. |
 | `src/barre/batterie.rs` | Lecture et analyse de `pmset -g batt`, symbole de pile selon le niveau. |
 | `src/barre/vues.rs` | Outils AppKit (texte, symbole SF, image de fichier et icône d'app réduites et gardées en cache par chemin, couleur, style du titre, largeur, barre, `lacher`). |
+| `src/barre/animation.rs` | GIF animés : une vue à calque posée sur le bouton, dont le contenu change au minuteur (durée d'image la plus courte), vide quand plus rien n'est animé. `vues::cadres` lit les images (ImageIO). |
+| `src/barre/demarrage.rs` | Animation de démarrage : barre ✳ Tactile 0,2 s puis animations Core Animation retardées par élément ; « Réduire les animations » respecté. |
 | `src/barre/plateau.rs` | Icône ✳ du Control Strip. |
 | `src/barre/onglet.rs` | Barre par site : navigateurs connus (bundle id, `current tab` pour Safari, `active tab` pour les Chromium), fil de lecture de l'onglet actif (`NSAppleScript`), `page` (URL → « hôte/chemin »), autorisation Automatisation (`AEDeterminePermissionToAutomateTarget`). La correspondance adresse ⇄ page est dans `config.rs` (`Site::correspond`, `Barre::base_pour`). |
 | `src/menu.rs` | Icône de la barre des menus, lancement au démarrage (`SMAppService`). |

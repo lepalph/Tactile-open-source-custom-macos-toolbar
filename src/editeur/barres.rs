@@ -307,7 +307,7 @@ mod tests {
         let Element::Texte { source: Some(s), symbole_selon: Some(sym), couleur_selon: Some(_), .. } = &element else { panic!("{element:?}") };
         assert_eq!(s, "Météo Lyon");
         assert_eq!(sym.valeurs.get("0").map(String::as_str), Some("sun.max.fill"));
-        let b = Barre { masquer_control_strip: true, elements: vec![element], applications: vec![], sites: vec![], sources: vec![source] };
+        let b = Barre { masquer_control_strip: true, animation_demarrage: true, elements: vec![element], applications: vec![], sites: vec![], sources: vec![source] };
         assert!(config::controler(&b, None).is_empty(), "{:?}", config::controler(&b, None));
         assert!(meteo("m", 91.0, 0.0).is_err());
         assert!(meteo("m", f64::NAN, 0.0).is_err());
@@ -318,7 +318,7 @@ mod tests {
     #[test]
     fn barre_meteo_importee_liste_sa_source_http() {
         let (source, element) = meteo("Météo Lyon", 45.74846, 4.84671).unwrap();
-        let b = Barre { masquer_control_strip: true, elements: vec![element], applications: vec![], sites: vec![], sources: vec![source] };
+        let b = Barre { masquer_control_strip: true, animation_demarrage: true, elements: vec![element], applications: vec![], sites: vec![], sources: vec![source] };
         let paquet = super::super::partage::ouvrir_octets(config::ecrire(&b).unwrap().into_bytes(), None).unwrap();
         let http = paquet.commandes.iter().find(|c| c.valeur.starts_with("https://api.open-meteo.com/")).expect("source http listée");
         assert_eq!(http.ou.fr, "Source « Météo Lyon »");

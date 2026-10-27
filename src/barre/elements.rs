@@ -71,6 +71,9 @@ pub(super) fn bouton(titre: Option<&str>, icone: Option<Icone>, index: usize, av
             let _: () = msg_send![b, setImagePosition: 2isize];
         }
         let _: () = msg_send![b, setTag: index as isize];
+        if let Some(Icone::Image(chemin, gabarit)) = icone.filter(|_| image.is_some()) {
+            super::animation::animer(b, super::vues::animation_image(chemin, gabarit));
+        }
         if avec_appui_long {
             let r: Id = msg_send![class!(NSPressGestureRecognizer), alloc];
             let r: Id = msg_send![r, initWithTarget: cible(), action: sel!(appuiLong:)];

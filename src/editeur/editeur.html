@@ -360,6 +360,7 @@ button[aria-pressed="true"].enregistreur { background: var(--accent-plein); colo
       <div class="strip" aria-hidden="true" data-i18n="controlStrip"></div>
     </div>
     <div class="ligne bascule-strip"><label class="nom" for="masquer" data-i18n="masquerCS"></label><div class="ctrl"><input type="checkbox" class="interrupteur" role="switch" id="masquer"></div></div>
+    <div class="ligne bascule-strip"><label class="nom" for="anim-demarrage" data-i18n="animDemarrage"></label><div class="ctrl"><input type="checkbox" class="interrupteur" role="switch" id="anim-demarrage"></div></div>
   </div>
   <p class="aide-clavier" id="aide-clavier" data-i18n="aideClavier"></p>
   <p class="deborde" id="deborde" hidden></p>
@@ -455,6 +456,7 @@ const T = {
     enregistrer: 'Enregistrer', revenir: 'Revenir à la version précédente', ajouter: 'Ajouter', preregles: 'Barres toutes faites',
     simple: 'Simple', musique: 'Musique', developpeur: 'Développeur', controlStrip: 'Bande de boutons d’Apple',
     masquerCS: 'Cacher la bande de boutons d’Apple, à droite',
+    animDemarrage: 'Animation au démarrage de Tactile',
     bouton: 'Bouton', lanceur: 'Lanceur d’app', slider: 'Curseur', heure: 'Heure', en_cours: 'Musique en cours', script: 'Résultat d’une commande', espace: 'Espace fixe', souple: 'Espace souple', groupe: 'Groupe', batterie: 'Batterie',
     vide: 'Ta barre est vide. Ajoute un élément à gauche, ou pars d’une barre toute faite.',
     rien: 'Choisis un élément dans la barre pour le régler, ou ajoutes-en un à gauche.',
@@ -555,6 +557,7 @@ const T = {
     enregistrer: 'Save', revenir: 'Go back to the previous version', ajouter: 'Add', preregles: 'Ready-made bars',
     simple: 'Simple', musique: 'Music', developpeur: 'Developer', controlStrip: 'Apple’s Control Strip',
     masquerCS: 'Hide Apple’s Control Strip on the right',
+    animDemarrage: 'Animation when Tactile starts',
     bouton: 'Button', lanceur: 'App launcher', slider: 'Slider', heure: 'Clock', en_cours: 'Now playing', script: 'Command output', espace: 'Fixed space', souple: 'Flexible space', groupe: 'Group', batterie: 'Battery',
     vide: 'Your bar is empty. Add an item on the left, or start from a ready-made bar.',
     rien: 'Pick an item in the bar to edit it, or add one on the left.',
@@ -673,7 +676,7 @@ const ACCES = new Set(['touche', 'echap', 'spotlight', 'capture_ecran', 'capture
 const DECOR = new Set([...Object.values(ICONES_SF), 'chevron.left', 'chevron.right', 'exclamationmark.triangle.fill', 'checkmark.circle.fill', 'hand.point.up.left', 'arrow.uturn.backward']);
 
 /* ---------- État ---------- */
-let barre = { masquer_control_strip: true, element: [] };
+let barre = { masquer_control_strip: true, animation_demarrage: true, element: [] };
 let cible = null;          // la barre éditée : null = la principale, sinon { t: 'application' | 'site', k }
 let sel = null;            // { i } ou { i, j } (sous-élément d'un groupe)
 let modifie = false;
@@ -728,7 +731,7 @@ function symbolesDe(elements) {
 window.tactile = {
   charger(b, precedent) {
     // Le reste (les [[application]], que la fenêtre ne règle pas) traverse l'enregistrement intact.
-    barre = { ...b, masquer_control_strip: !!b.masquer_control_strip, element: b.element || [] };
+    barre = { ...b, masquer_control_strip: !!b.masquer_control_strip, animation_demarrage: b.animation_demarrage !== false, element: b.element || [] };
     aPrecedent = !!precedent; sel = null; illisible = null; vue = null; annulable = null;
     marquer(prereglageAttendu);
     etat(prereglageAttendu ? () => t('charge') : '');
@@ -764,7 +767,7 @@ window.tactile = {
   /* Le fichier ne se lit pas : pas de barre vide à enregistrer par-dessus, seulement l'erreur et deux issues. */
   illisible(message, extrait, precedent) {
     illisible = { message, extrait }; aPrecedent = !!precedent; sel = null; cible = null; prereglageAttendu = false;
-    barre = { masquer_control_strip: true, element: [] };
+    barre = { masquer_control_strip: true, animation_demarrage: true, element: [] };
     marquer(false); etat('');
     tout();
   },
@@ -1137,6 +1140,7 @@ function dessinerBarre() {
   const avaitFocus = b.contains(document.activeElement);
   b.classList.toggle('courte', !barre.masquer_control_strip);
   $('masquer').checked = barre.masquer_control_strip;
+  $('anim-demarrage').checked = barre.animation_demarrage !== false;
   const propres = els(), h = heritees();
   const nom = !cible ? t('barrePrincipale') : t('barreDe').replace('{n}', cible.t === 'application' ? nomApp(courante().app) : courante().adresse);
   $('barre-titre').innerHTML = esc(nom) + (h.avant.length || h.apres.length ? `<span class="legende">${esc(t('heriteApercu'))}</span>` : '');
@@ -1151,7 +1155,7 @@ function boutons() {
   $('revenir').disabled = !aPrecedent;
   $('enregistrer').disabled = !!illisible;
   $('exporter').disabled = !!illisible;
-  $('masquer').disabled = !!illisible;
+  $('masquer').disabled = $('anim-demarrage').disabled = !!illisible;
   document.querySelectorAll('#ajouts button, #barres button').forEach(b => { b.disabled = !!illisible; });
 }
 /* Icône SF décorative, ou son remplaçant tant que le glyphe n'est pas là (ou s'il n'existe pas sur ce Mac). */
@@ -1973,6 +1977,7 @@ menuPlus.addEventListener('keydown', ev => {
 $('importer').addEventListener('click', () => { partage = 'import'; envoyer({ type: 'importer' }); });
 $('exporter').addEventListener('click', () => { partage = 'export'; envoyer({ type: 'exporter', barre }); });
 $('masquer').addEventListener('change', ev => { barre.masquer_control_strip = ev.target.checked; changer(); });
+$('anim-demarrage').addEventListener('change', ev => { barre.animation_demarrage = ev.target.checked; changer(); });
 $('enregistrer').addEventListener('click', () => enregistrer(false));
 $('revenir').addEventListener('click', async () => {
   const r = await confirmer(t('confRevenir'), t('confRevenirTexte') + (modifie ? ' ' + t('perdues') : ''), [['annuler', t('annuler')], ['oui', t('revenirCourt'), 'primaire']], true);

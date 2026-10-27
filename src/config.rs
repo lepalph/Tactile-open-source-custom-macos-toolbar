@@ -19,6 +19,9 @@ pub struct Barre {
     /// `true` par défaut : toute la largeur pour la barre, sans le Control Strip d'Apple.
     #[serde(default = "vrai", alias = "hide_control_strip")]
     pub masquer_control_strip: bool,
+    /// `true` par défaut : au démarrage de Tactile (pas à chaque rechargement), les éléments apparaissent un à un en 0,8 s.
+    #[serde(default = "vrai", alias = "startup_animation", skip_serializing_if = "est_vrai")]
+    pub animation_demarrage: bool,
     #[serde(rename = "element", alias = "item", default)]
     pub elements: Vec<Element>,
     /// Barres propres à une app, montrées quand elle passe au premier plan.
@@ -446,6 +449,10 @@ pub enum Reglage {
 
 fn vrai() -> bool {
     true
+}
+
+fn est_vrai(b: &bool) -> bool {
+    *b
 }
 
 /// `TACTILE_CONFIG=chemin` remplace ~/.config/tactile/barre.toml (essais sans toucher sa vraie barre).
@@ -1320,6 +1327,7 @@ mod tests {
     fn exemple_donne_la_barre_attendue() {
         let attendu = Barre {
             masquer_control_strip: true,
+            animation_demarrage: true,
             elements: vec![
                 bouton_symbole(Some("apple.logo"), Some(56.0), Action::BarreApple),
                 Element::slider(Reglage::Luminosite, Some("sun.max.fill".into())),
@@ -1390,6 +1398,7 @@ mod tests {
                 lire(&texte),
                 Ok(Barre {
                     masquer_control_strip: true,
+                    animation_demarrage: true,
                     elements: vec![bouton(action)],
                     applications: vec![],
                     sites: vec![],
@@ -1403,6 +1412,7 @@ mod tests {
     /// Tout le vocabulaire, une fois en français et une fois en anglais : les deux doivent donner la même barre.
     const TOUT_FR: &str = r##"
 masquer_control_strip = false
+animation_demarrage = false
 
 [[element]]
 type = "bouton"
@@ -1644,6 +1654,7 @@ commande = "uptime"
 
     const TOUT_EN: &str = r##"
 hide_control_strip = false
+startup_animation = false
 
 [[item]]
 type = "button"
@@ -2244,6 +2255,9 @@ command = "uptime"
     #[test]
     fn control_strip_masque_par_defaut() {
         assert!(lire("").unwrap().masquer_control_strip);
+        assert!(lire("").unwrap().animation_demarrage, "animation au démarrage : vrai par défaut");
+        assert!(!lire("animation_demarrage = false\n").unwrap().animation_demarrage);
+        assert!(!lire("startup_animation = false\n").unwrap().animation_demarrage);
         assert!(!lire("masquer_control_strip = false\n").unwrap().masquer_control_strip);
     }
 

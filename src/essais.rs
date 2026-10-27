@@ -181,6 +181,7 @@ impl Hasard {
     pub fn barre(&mut self) -> Barre {
         Barre {
             masquer_control_strip: self.pile(),
+            animation_demarrage: self.pile(),
             elements: (0..self.jusqua(7)).map(|_| self.element(0)).collect(),
             applications: (0..self.jusqua(3))
                 .map(|_| Application { app: self.texte(), herite: self.pile(), elements: (0..1 + self.jusqua(3)).map(|_| self.element(0)).collect() })

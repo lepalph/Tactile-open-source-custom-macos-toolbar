@@ -138,6 +138,11 @@ pub(super) fn importer_depot(nom: &str, base64: &str, dossier: &Path) -> Result<
 /// L'image telle que la barre l'affiche (réduite à 40 px de haut), en data URL PNG. `None` si introuvable ou illisible.
 pub(super) fn apercu(chemin: &str) -> Option<String> {
     let image = crate::barre::image(chemin, false)?;
+    // Un GIF animé reste un GIF : l'aperçu l'anime comme la barre.
+    if crate::barre::animation_image(chemin, false).is_some() {
+        let octets = std::fs::read(chemin.strip_prefix("~/").map_or(chemin.to_string(), |s| format!("{}/{s}", std::env::var("HOME").unwrap_or_default()))).ok()?;
+        return Some(format!("data:image/gif;base64,{}", base64(&octets)));
+    }
     let png = unsafe { png(image) }?;
     Some(format!("data:image/png;base64,{}", base64(&png)))
 }

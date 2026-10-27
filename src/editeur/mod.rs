@@ -556,7 +556,7 @@ fn mettre_de_cote(chemin: &Path) -> Result<PathBuf, String> {
 
 /// Le fichier a-t-il des commentaires autres que l'en-tête que l'éditeur écrit lui-même ?
 fn ecrit_a_la_main(texte: &str) -> bool {
-    let barre = Barre { masquer_control_strip: true, elements: vec![Element::Souple], applications: vec![], sites: vec![], sources: vec![] };
+    let barre = Barre { masquer_control_strip: true, animation_demarrage: true, elements: vec![Element::Souple], applications: vec![], sites: vec![], sources: vec![] };
     let entete = config::ecrire(&barre).unwrap_or_default();
     let entete: Vec<&str> = entete.lines().filter(|l| l.starts_with('#')).collect();
     texte.lines().filter(|l| !entete.contains(&l.trim_end())).any(a_un_commentaire)
@@ -1354,7 +1354,7 @@ mod tests {
     #[test]
     fn un_nombre_traverse_le_json_au_bit_pres() {
         for largeur in [508.278_594_479_536_37_f64, 0.1, 59.761, 1e6 / 3.0] {
-            let barre = Barre { masquer_control_strip: true, elements: vec![Element::Espace { largeur }], applications: vec![], sites: vec![], sources: vec![] };
+            let barre = Barre { masquer_control_strip: true, animation_demarrage: true, elements: vec![Element::Espace { largeur }], applications: vec![], sites: vec![], sources: vec![] };
             let json = serde_json::to_string(&barre).unwrap();
             assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre, "{json}");
         }
