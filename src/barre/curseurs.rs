@@ -825,17 +825,20 @@ mod tests {
         let journal = fichier.with_extension("log");
         let processus: Processus = Arc::new(Mutex::new(Some(Vec::new())));
         let ecriture = Arc::new(Mutex::new(Ecriture::default()));
+        let glisse = Instant::now();
         for v in 0..30 {
             ecrire(&ecriture, format!("echo {v} > {0}; echo {v} >> {1}", fichier.display(), journal.display()), &processus);
             std::thread::sleep(Duration::from_millis(10));
         }
+        // Une machine lente allonge le glissé : la limite suit la durée réelle (une écriture par 0,1 s, plus la dernière).
+        let permises = (glisse.elapsed().as_secs_f64() / 0.1).ceil() as usize + 2;
         let debut = Instant::now();
         while ecriture.lock().unwrap().en_cours && debut.elapsed() < Duration::from_secs(5) {
             std::thread::sleep(Duration::from_millis(20));
         }
         assert_eq!(std::fs::read_to_string(&fichier).unwrap().trim(), "29");
         let lancees = std::fs::read_to_string(&journal).unwrap().lines().count();
-        assert!(lancees <= 6, "{lancees} lancements pour 0,3 s de glissé");
+        assert!(lancees <= permises, "{lancees} lancements, {permises} permis pour ce glissé");
         let _ = (std::fs::remove_file(&fichier), std::fs::remove_file(&journal));
     }
 }
