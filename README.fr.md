@@ -120,7 +120,7 @@ L'icône de la barre des menus donne accès à tout :
 
 | Entrée | Effet |
 |---|---|
-| Personnaliser ma barre… | Ouvre la fenêtre de réglage (ci-dessous) : pas besoin de toucher au fichier. |
+| Personnaliser ma barre… | Ouvre la fenêtre de réglage (ci-dessous) : pas besoin de toucher au fichier. Rouvrir Tactile alors qu’il tourne (double-clic, Spotlight) l’ouvre aussi. |
 | Afficher ma barre | Remet ta barre (si elle a disparu, c'est ici). |
 | Barre d'Apple | Rend la barre d'Apple ; l'icône ✳ du Control Strip ramène la tienne. |
 | Ouvrir la configuration | Ouvre ton fichier de barre (il est créé s'il n'existe pas). |
@@ -179,7 +179,7 @@ Les clés françaises sont la forme de référence, celle qu'écrit l'éditeur e
 
 ### Réglage général
 
-`animation_demarrage` / `startup_animation` (`true` par défaut) joue une animation d’environ 0,9 s au démarrage de Tactile, pas à chaque rechargement : le logo apparaît à gauche et traverse la barre comme une fusée, puis les éléments apparaissent dans son sillage, de gauche à droite. Elle est sautée si « Réduire les animations » est coché dans macOS, et se désactive par l'interrupteur en haut de l'éditeur. Un GIF animé (`image = "~/x.gif"`, 60 images et 2 Mo au plus) s'anime sur la barre ; un GIF en gabarit n'est pas teinté.
+`animation_demarrage` / `startup_animation` (`true` par défaut) joue une animation d’environ 3 s au démarrage de Tactile, pas à chaque rechargement : le logo apparaît à gauche et traverse la barre comme une fusée, puis les éléments apparaissent dans son sillage, de gauche à droite. Elle est sautée si « Réduire les animations » est coché dans macOS, et se désactive par l'interrupteur en haut de l'éditeur. Un GIF animé (`image = "~/x.gif"`, 60 images et 2 Mo au plus) s'anime sur la barre ; un GIF en gabarit n'est pas teinté.
 
 `masquer_control_strip`, en tête de fichier, vaut `true` par défaut. `true` donne toute la largeur à ta barre (1004 points) ; `false` garde le Control Strip d'Apple à droite (il reste 685 points, et une ✕ système à gauche).
 

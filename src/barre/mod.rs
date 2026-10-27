@@ -199,6 +199,23 @@ define_class!(
             });
         }
 
+        /// Après `finishLaunching` (qui pose les gestionnaires d'AppKit) : le nôtre remplace celui de « rouvrir ».
+        #[unsafe(method(ecouterReouverture:))]
+        fn ecouter_reouverture(&self, _envoyeur: Id) {
+            unsafe {
+                let gestionnaire: Id = msg_send![class!(NSAppleEventManager), sharedAppleEventManager];
+                // kCoreEventClass 'aevt', kAEReopenApplication 'rapp'.
+                let _: () = msg_send![gestionnaire, setEventHandler: self, andSelector: sel!(rouvrir:reponse:), forEventClass: 0x6165_7674u32, andEventID: 0x7261_7070u32];
+            }
+        }
+
+        /// L'app déjà lancée est rouverte (double-clic dans le Finder, Spotlight, `open`) : on montre l'éditeur,
+        /// sinon rien de visible ne se passe (pas d'icône dans le Dock, la barre tourne déjà).
+        #[unsafe(method(rouvrir:reponse:))]
+        fn rouvrir(&self, _evenement: Id, _reponse: Id) {
+            crate::editeur::ouvrir();
+        }
+
         #[unsafe(method(quitter:))]
         fn quitter(&self, _notification: Id) {
             crate::agent::nettoyer();
@@ -679,6 +696,7 @@ pub fn lancer(config: Barre, recharges: Receiver<Result<Barre, String>>) {
             let _: () = msg_send![cible(), performSelector: sel!(afficherBarre:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 4.0f64];
         }
 
+        let _: () = msg_send![cible(), performSelector: sel!(ecouterReouverture:), withObject: std::ptr::null_mut::<AnyObject>(), afterDelay: 0.0f64];
         let _: Id = msg_send![class!(NSTimer), scheduledTimerWithTimeInterval: 0.1f64, target: cible(), selector: sel!(tic:), userInfo: std::ptr::null_mut::<AnyObject>(), repeats: Bool::YES];
         rafraichir();
         let _: () = msg_send![app, run];

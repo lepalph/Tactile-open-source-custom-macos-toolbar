@@ -120,7 +120,7 @@ Everything starts from the menu bar icon. The menu is in French for now; here is
 
 | Menu item | What it does |
 |---|---|
-| Personnaliser ma barre… (*Customize my bar*) | Opens the editor window below. No need to touch the file. |
+| Personnaliser ma barre… (*Customize my bar*) | Opens the editor window below. No need to touch the file. Opening Tactile again while it runs (double-click, Spotlight) opens it too. |
 | Afficher ma barre (*Show my bar*) | Brings your bar back if it went away. |
 | Barre d'Apple (*Apple's bar*) | Shows Apple's bar; the ✳ icon in the Control Strip brings yours back. |
 | Ouvrir la configuration (*Open the configuration*) | Opens your bar file (created if it doesn't exist). |
@@ -179,7 +179,7 @@ The French keys are the canonical form, the one the editor writes and the error 
 
 ### Top-level setting
 
-`animation_demarrage` / `startup_animation` (`true` by default) plays a short animation (about 0.9 s) when Tactile starts, not on each reload: the logo appears on the left and shoots across the bar like a rocket, then the items appear in its wake from left to right. It is skipped when macOS "Reduce motion" is on, and can be turned off with the switch at the top of the editor. An animated GIF (`image = "~/x.gif"`, at most 60 frames and 2 MB) animates on the bar; a GIF used as a template is not tinted.
+`animation_demarrage` / `startup_animation` (`true` by default) plays an animation (about 3 s) when Tactile starts, not on each reload: the logo appears on the left and shoots across the bar like a rocket, then the items appear in its wake from left to right. It is skipped when macOS "Reduce motion" is on, and can be turned off with the switch at the top of the editor. An animated GIF (`image = "~/x.gif"`, at most 60 frames and 2 MB) animates on the bar; a GIF used as a template is not tinted.
 
 `masquer_control_strip` / `hide_control_strip`, at the top of the file, `true` by default. `true` gives your bar the full width (1004 points). `false` keeps Apple's Control Strip on the right, which leaves 685 points and adds a system ✕ on the left.
 

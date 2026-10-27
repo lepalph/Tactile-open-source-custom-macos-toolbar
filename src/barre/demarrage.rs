@@ -1,4 +1,4 @@
-//! Animation de démarrage (≈ 1 s) : le logo (les trois pastilles de l'icône) apparaît à gauche, recule pour prendre
+//! Animation de démarrage (≈ 3 s) : le logo (les trois pastilles de l'icône) apparaît à gauche, recule pour prendre
 //! son élan, puis file comme une fusée jusqu'au bord droit en laissant une traînée orange ; la barre apparaît ensuite
 //! dans son sillage, de gauche à droite. Rien ne bloque : le logo est une barre présentée `SPLASH` secondes
 //! (`performSelector:afterDelay:`), tout le reste est en animations Core Animation avec retard (`fillMode`
@@ -28,13 +28,13 @@ unsafe impl RefEncode for CGColor {
 }
 
 /// Logo : entrée avec recul, puis vol ; la vraie barre arrive à `SPLASH`.
-const ENTREE: f64 = 0.2;
-const VOL: f64 = 0.45;
+const ENTREE: f64 = 1.0;
+const VOL: f64 = 2.1;
 pub(super) const SPLASH: f64 = ENTREE + VOL;
-/// Fondu de chaque élément et écart maximal entre deux éléments (de gauche à droite, total ≤ 0,4 s).
-const FONDU: f64 = 0.2;
-const ECART: f64 = 0.035;
-const RESTE: f64 = 0.4;
+/// Fondu de chaque élément et écart maximal entre deux éléments (de gauche à droite, total ≤ 1 s).
+const FONDU: f64 = 0.45;
+const ECART: f64 = 0.09;
+const RESTE: f64 = 1.0;
 /// Pastilles du logo (points) et leurs couleurs : celles de l'icône (scripts/icone.sh).
 const PASTILLE: (f64, f64) = (18.0, 10.0);
 const ESPACE: f64 = 4.0;
@@ -100,17 +100,17 @@ pub(super) fn splash(largeur: f64) -> Id {
             let _: () = msg_send![pastille, setCornerRadius: 3.0f64];
             let _: () = msg_send![pastille, setBackgroundColor: couleur(hex, 1.0)];
             // Entrée : les pastilles arrivent l'une après l'autre en grossissant.
-            let retard = k as f64 * 0.03;
-            ajouter(pastille, "opacity", 0.0, 1.0, retard, ENTREE - 0.06, "backwards", SNAPPY);
-            ajouter(pastille, "transform.scale", 0.5, 1.0, retard, ENTREE - 0.06, "backwards", SNAPPY);
+            let retard = k as f64 * 0.12;
+            ajouter(pastille, "opacity", 0.0, 1.0, retard, 0.3, "backwards", SNAPPY);
+            ajouter(pastille, "transform.scale", 0.5, 1.0, retard, 0.3, "backwards", SNAPPY);
             // En vol, elles se resserrent vers l'avant (l'orange au centre reste en place).
             ajouter(pastille, "transform.translation.x", 0.0, (k as f64 - 2.0) * -3.0, ENTREE, VOL * 0.5, "both", SNAPPY);
             let _: () = msg_send![fusee, addSublayer: pastille];
         }
         // Élan : un petit recul, puis le vol jusqu'au-delà du bord droit, en accélérant.
-        ajouter(fusee, "transform.translation.x", 0.0, -6.0, 0.08, ENTREE - 0.08, "backwards", SNAPPY);
+        ajouter(fusee, "transform.translation.x", 0.0, -8.0, 0.6, ENTREE - 0.6, "backwards", SNAPPY);
         // Assez loin pour que la traînée (allongée par l'étirement) sorte aussi de la barre.
-        ajouter(fusee, "transform.translation.x", -6.0, largeur - depart + long * 1.6, ENTREE, VOL, "both", DECOLLAGE);
+        ajouter(fusee, "transform.translation.x", -8.0, largeur - depart + long * 1.6, ENTREE, VOL, "both", DECOLLAGE);
         ajouter(fusee, "transform.scale.x", 1.0, 1.25, ENTREE, VOL, "both", DECOLLAGE);
         let _: () = msg_send![fond, addSublayer: fusee];
 

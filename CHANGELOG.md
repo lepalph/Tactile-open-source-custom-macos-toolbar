@@ -10,7 +10,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ### Changed
 
-- Startup animation: the ✳ Tactile text gives way to the logo (the icon’s three pills): it appears on the left, backs up, then shoots across the bar like a rocket with an orange trail; the items then appear in its wake from left to right (about 1 s).
+- Startup animation: the ✳ Tactile text gives way to the logo (the icon’s three pills): it appears on the left, backs up, then shoots across the bar like a rocket with an orange trail; the items then appear in its wake from left to right (about 3 s).
+- Opening Tactile again while it runs (double-click in the Finder, Spotlight, `open`) shows the editor window; before, nothing visible happened.
 
 ## [0.4.1] - 2026-10-27
 
