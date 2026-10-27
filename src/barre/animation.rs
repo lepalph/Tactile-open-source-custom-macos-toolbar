@@ -4,6 +4,7 @@
 //! (0,6 %). Limite : un GIF en gabarit n'est pas teinté.
 //! Le minuteur (durée d'image la plus courte) n'existe que tant qu'un bouton est animé ; à vide il s'arrête seul.
 
+use objc2::encode::{Encoding, RefEncode};
 use objc2::runtime::{AnyObject, Bool};
 use objc2::{class, msg_send, sel};
 use objc2_foundation::{NSRect, NSSize};
@@ -113,9 +114,21 @@ pub(super) fn pas(minuteur: Id) {
     });
 }
 
+/// `CGImageRef` opaque, pour que `msg_send!` vérifie le bon type (un `Id` est refusé en debug).
+#[repr(C)]
+struct CGImage {
+    _opaque: [u8; 0],
+}
+
+unsafe impl RefEncode for CGImage {
+    const ENCODING_REF: Encoding = Encoding::Pointer(&Encoding::Struct("CGImage", &[]));
+}
+
 /// La `CGImage` d'une image réduite (un seul bitmap), posée telle quelle comme contenu du calque.
+/// `setContents:` attend un `id` : la référence passe telle quelle.
 unsafe fn cg(image: &AnyObject) -> Id {
-    unsafe { msg_send![image, CGImageForProposedRect: std::ptr::null_mut::<NSRect>(), context: std::ptr::null_mut::<AnyObject>(), hints: std::ptr::null_mut::<AnyObject>()] }
+    let cg: *const CGImage = unsafe { msg_send![image, CGImageForProposedRect: std::ptr::null_mut::<NSRect>(), context: std::ptr::null_mut::<AnyObject>(), hints: std::ptr::null_mut::<AnyObject>()] };
+    cg as Id
 }
 
 /// Indice de l'image affichée à l'instant `t` d'un GIF qui tourne en boucle (`fins` cumulées).
