@@ -61,7 +61,7 @@ Tactile est d'abord fait pour l'usage de son auteur : l'ordre ci-dessous suit se
 | Importer et exporter une barre (`.toml`, ou `.zip` avec ses logos) | Fait (0.3.0) |
 | Tes propres logos sur les boutons | Fait (0.3.0) |
 | Sources de données pour les éléments vivants : HTTP, commandes, serveurs MCP | Fait (0.3.0) |
-| Styles de curseur, et un curseur libre | Prévu |
+| Styles de curseur, curseur libre et sélecteur à choix | Fait (non publié) |
 | Une barre par site web | Prévu |
 | Régler les barres par app dans l'éditeur | Prévu |
 | Modules : un widget est un programme, dans n'importe quel langage, qui parle JSON avec Tactile | Prévu |
@@ -184,7 +184,8 @@ Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 point
 | `type` | Champs | Ce que ça affiche |
 |---|---|---|
 | `bouton` | `texte`, `symbole` (nom d'un symbole SF) ou `image` (chemin d'un PNG, PDF, icns… ; `~` accepté ; `gabarit = true` pour une image monochrome teintée comme un symbole), `couleur` (fond, `"#RRGGBB"`), `couleur_texte`, `taille` (police, en points), `affichage` (`"icone"`, `"texte"` ou `"les_deux"`, défaut), `largeur` (points), `action`, `appui_long` (action, après 0,5 s) | Un bouton. Tous les champs sont facultatifs. Avec un symbole et une image, c'est l'image qui s'affiche. Une image introuvable s'affiche en texte, comme un symbole inconnu. |
-| `slider` | `reglage` (obligatoire : `"luminosite"` ou `"volume"`), `symbole` | Un bouton qui ouvre une sous-barre avec un curseur ; ✕ la referme. |
+| `slider` (ou `curseur`) | `reglage` (`"luminosite"` ou `"volume"`) **ou** `regler` (une commande avec `{valeur}`), `symbole`, `style`, `couleurs` et `seuils`, `crans`, `haptique` ; avec `regler` : `lire`, `min`, `max`, `pas`, `toutes_les` (voir [Curseurs](#curseurs)) | Un bouton qui ouvre une sous-barre avec un curseur ; ✕ la referme. |
+| `choix` | `options` (liste de textes), `action`, `lire`, `toutes_les` (5 s par défaut), `largeur` | Un sélecteur à segments. L'option touchée remplace `{valeur}` dans l'action, entre apostrophes pour le shell (entre guillemets dans un AppleScript) : `action = { shell = "echo {valeur} > ~/vitesse" }`. `lire` affiche l'option actuelle, qui est alors sélectionnée. |
 | `heure` | `format` (format de date Apple, `"HH:mm"` par défaut) | L'heure, mise à jour en continu. |
 | `en_cours` | `largeur` | Le titre et l'artiste en cours de lecture (44 caractères au plus, rafraîchi toutes les 2 s) ; un appui met en pause ou relance. Demande `media-control`. |
 | `script` | `commande` (obligatoire), `intervalle` (secondes, obligatoire ; en dessous de 0,1, ramené à 0,1), `delai` (secondes, 5 par défaut), `largeur` (120 par défaut), `action` | La sortie de la commande, lancée avec `zsh -c` à chaque intervalle et tuée au-delà de `delai`. Un texte plus large que l'élément est coupé. Code de retour non nul ou texte sur stderr : une ligne dans le journal. Si la sortie commence par `{`, elle est lue comme du JSON : `{"texte": "12°", "symbole": "cloud.rain.fill", "image": "~/pluie.png", "couleur": "#1F3A5F", "couleur_texte": "#FFFFFF"}`, chaque clé facultative ; le script règle ainsi son icône et ses couleurs. |
@@ -194,6 +195,44 @@ Un bouton, l'heure ou le titre en cours sans `largeur` ne dépasse pas 200 point
 | `souple` | aucun | Un vide qui prend toute la place libre : deux `souple` centrent ce qui est entre eux. |
 | `groupe` | `texte`, `symbole`, `largeur` (72 par défaut), puis des sous-éléments `[[element.element]]` | Un bouton qui ouvre une sous-barre avec ses éléments ; ✕ la referme. |
 | `lanceur` | `app` (obligatoire : le nom du dossier `.app`, un bundle id ou un chemin, comme l'action `app`), `texte`, `affichage` (comme un bouton), `largeur`, `appui_long` | L'icône de l'app. Un appui l'ouvre ou la met au premier plan ; un petit point sous l'icône dit qu'elle est ouverte, comme dans le Dock. Une app introuvable affiche son nom en texte, et `tactile --verifier` le signale. |
+
+#### Curseurs
+
+Un curseur règle la luminosité de l'écran intégré ou le volume (`reglage`), ou n'importe quoi d'autre qu'une commande sait régler (`regler`) :
+
+- `regler` est lancée avec `zsh -c` quand le doigt bouge, au plus toutes les 0,1 s, puis une dernière fois au lâcher. `{valeur}` (ou `{value}`) y devient le nombre choisi, écrit avec autant de décimales que `pas` : jamais de texte, donc rien d'autre ne peut entrer dans la commande.
+- `lire` affiche la valeur actuelle (un nombre). Tactile la lance à l'ouverture du curseur, puis toutes les `toutes_les` secondes (5 par défaut, 0,5 au minimum) tant qu'il reste ouvert.
+- `min` (0), `max` (100) et `pas` (1) bornent la valeur. Luminosité et volume vont de 0 à 100 %.
+- `style` : `classique` (le curseur d'Apple, par défaut), `grille` (des barres qui s'allument), `jauge`, `points`, `egaliseur` (des barres de plus en plus hautes), `pas_a_pas` (gros chiffres, − et +, un appui long répète) ou `cadran` (un anneau compact ; glisse à gauche ou à droite).
+- `couleurs` et `seuils` : une couleur par niveau, une de plus que de seuils, dans les unités du curseur. `couleurs = ["#30D158", "#FFD60A", "#FF453A"]` et `seuils = [60, 85]` donnent vert, jaune à partir de 60, rouge à partir de 85. Une seule couleur : tout le curseur. Sans `couleurs`, blanc.
+- `crans` : le nombre de barres ou de points (10 par défaut, de 2 à 40). `haptique = true` : un petit clic du trackpad à chaque cran.
+
+| | |
+|---|---|
+| `classique` | ![classique](docs/curseurs/classique.png) |
+| `grille` | ![grille](docs/curseurs/grille.png) |
+| `jauge` | ![jauge](docs/curseurs/jauge.png) |
+| `points` | ![points](docs/curseurs/points.png) |
+| `egaliseur` | ![égaliseur](docs/curseurs/egaliseur.png) |
+| `pas_a_pas` | ![pas à pas](docs/curseurs/pas_a_pas.png) |
+| `cadran` | ![cadran](docs/curseurs/cadran.png) |
+
+```toml
+# Le volume de Spotify, sans toucher à celui du Mac.
+[[element]]
+type = "slider"
+symbole = "music.note"
+lire = "osascript -e 'if application \"Spotify\" is running then tell application \"Spotify\" to get sound volume'"
+regler = "osascript -e 'if application \"Spotify\" is running then tell application \"Spotify\" to set sound volume to {valeur}'"
+pas = 5
+style = "egaliseur"
+couleurs = ["#30D158", "#FFD60A", "#FF453A"]
+seuils = [60, 85]
+```
+
+D'autres modèles (volume de Music, écran externe par `m1ddc`, un `choix`) : [exemples/curseurs.toml](exemples/curseurs.toml). Dans l'éditeur, le panneau d'un curseur montre les styles en vignettes animées, les couleurs par niveau et ces modèles.
+
+![Le panneau d'un curseur dans l'éditeur](docs/editeur-curseurs-sombre.png)
 
 #### Un tiroir d'apps
 
@@ -331,12 +370,26 @@ Le fichier s'écrit en français (c'est la forme de référence, celle de l'édi
 | `defaut` | `default` |
 | `seuils` | `thresholds` |
 | `couleurs` | `colors` |
+| `curseur` | `slider` |
+| `lire` | `read` |
+| `regler` | `set` |
+| `pas` | `step` |
+| `crans` | `notches` |
+| `haptique` | `haptic` |
+| `classique` | `classic` |
+| `grille` | `grid` |
+| `jauge` | `gauge` |
+| `points` | `dots` |
+| `egaliseur` | `equalizer` |
+| `pas_a_pas` | `stepper` |
+| `cadran` | `dial` |
+| `choix` | `choice` |
 
 Dans la sortie JSON d'un `script` aussi : `text`, `symbol`, `color`, `text_color`.
 
 ### Un exemple complet en anglais
 
-[exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut écrite avec les clés anglaises ; [exemples/barre.toml](exemples/barre.toml), la même en français. Les autres exemples de [exemples/](exemples/) : [simple.toml](exemples/simple.toml) et [developpeur.toml](exemples/developpeur.toml), les barres Simple et Développeur de l'éditeur ; [lanceur.toml](exemples/lanceur.toml), des lanceurs, un tiroir d'apps et des raccourcis système. Pour partir de l'un d'eux, copie-le vers `~/.config/tactile/barre.toml`.
+[exemples/barre.en.toml](exemples/barre.en.toml) est la barre par défaut écrite avec les clés anglaises ; [exemples/barre.toml](exemples/barre.toml), la même en français. Les autres exemples de [exemples/](exemples/) : [simple.toml](exemples/simple.toml) et [developpeur.toml](exemples/developpeur.toml), les barres Simple et Développeur de l'éditeur ; [lanceur.toml](exemples/lanceur.toml), des lanceurs, un tiroir d'apps et des raccourcis système ; [curseurs.toml](exemples/curseurs.toml), des curseurs libres et un choix. Pour partir de l'un d'eux, copie-le vers `~/.config/tactile/barre.toml`.
 
 ## Sources de données
 

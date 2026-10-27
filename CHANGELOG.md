@@ -4,6 +4,15 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+### Added
+
+- Free-standing sliders: a `slider` (also `curseur`) can drive anything a command can set, with `set` (`regler`, `{valeur}` becomes the number, run at most every 0.1 s while dragging and once more on release) and `read` (`lire`, run when the slider opens and every `every` seconds while open), `min`, `max`, `step`. `{valeur}` is always a number formatted by Tactile. Templates in `exemples/curseurs.toml`: Spotify and Music volume (AppleScript), an external display through `m1ddc`.
+- Slider styles for every slider (brightness, volume, free): `classic` (Apple's), and six drawn by Tactile that follow the finger without rebuilding the bar: `grid`, `gauge`, `dots`, `equalizer`, `stepper` (big digits, − and +, long press repeats), `dial` (compact ring). Per-level `colors` with `thresholds`, `notches`, `haptic` feedback at each notch.
+- `choice` element (`choix`): a segmented picker; the tapped option replaces `{valeur}` in the action, single-quoted for the shell or double-quoted for AppleScript; optional `read` selects the current option.
+- `--check` warns about `min` ≥ `max`, an impossible `step`, thresholds outside the slider or out of order, invalid or miscounted colors, notches out of 2-40, a `set` command without `{valeur}`, a choice without options or whose action ignores `{valeur}`. A slider with neither `setting` nor `set`, or with both, is refused.
+- Import lists a slider's `set` and `read` commands and a choice's action and `read` command.
+- Editor: a slider panel with what it controls (brightness, volume or a command, with Spotify / Music / external display templates), a gallery of the seven styles as live thumbnails drawn like the Touch Bar, notches, haptics and per-level colors; a Choice item with its options.
+
 ## [0.3.0] - 2026-10-26
 
 ### Added

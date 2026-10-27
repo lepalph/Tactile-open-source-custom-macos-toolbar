@@ -292,6 +292,23 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
 .villes button::after { content: "›"; margin-left: auto; color: var(--texte2); font-size: 1rem; }
 .villes button:hover:not(:disabled) { background: var(--survol); }
 
+/* Curseurs : galerie de styles (aperçu animé, dessiné comme sur la barre), couleurs par niveau, options d'un choix */
+.styles { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.styles button { display: flex; flex-direction: column; align-items: stretch; gap: 6px; height: auto; padding: 6px 6px 7px; border-radius: 8px; text-align: left; white-space: normal; }
+.styles button[aria-checked="true"] { border-color: transparent; box-shadow: 0 0 0 2px var(--accent); }
+.styles canvas { display: block; width: 100%; height: 36px; border-radius: 5px; background: var(--tb-fond); }
+.styles .nom-style { padding: 0 2px; font-weight: 500; }
+.styles .nom-style small { display: block; font-weight: 400; font-size: 0.6875rem; color: var(--texte2); }
+.niveaux { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 6px 8px; }
+.niveaux .seuil { display: inline-flex; align-items: center; gap: 6px; color: var(--texte2); font-size: 0.75rem; }
+.niveaux input[type="number"] { width: 64px; text-align: right; font-variant-numeric: tabular-nums; }
+.options-choix { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.options-choix .cote { flex-wrap: nowrap; }
+.modeles { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.face.segments { padding: 0 3px; gap: 2px; }
+.face.segments span { padding: 0 10px; border-radius: 4px; }
+.face.segments span:first-child { background: #5a5a5e; }
+
 @media (prefers-reduced-motion: no-preference) {
   .face, button, select, input.interrupteur, input.interrupteur::after, .segmente button { transition: background-color var(--vite), transform var(--vite), box-shadow var(--vite); }
 }
@@ -444,6 +461,19 @@ const T = {
     exporte: 'Barre exportée dans {f}.', exporteLogos: 'Barre exportée dans {f}, avec ses logos ({n}).',
     expAvertir: 'Ta barre a des logos. L’exporter en .zip ?', expAvertirTexte: 'Un .toml n’emporte pas les images : sur un autre Mac, ces boutons afficheraient leur texte. Le .zip contient la barre et ses logos.',
     manuelGarde: 'Ton fichier d’origine, avec ses commentaires, est gardé sous le nom {f}.', expGarderToml: 'Garder le .toml', expZip: 'Exporter en .zip', trop: 'plus de 10 Mo',
+    choix: 'Choix', reglageMode: 'Règle', modeCommande: 'autre chose, par une commande',
+    cmdRegler: 'Commande pour régler', cmdReglerAide: 'Lancée quand le doigt bouge. {valeur} devient le nombre choisi.',
+    cmdLire: 'Commande qui lit la valeur', cmdLireAide: 'Elle doit afficher le nombre actuel. Tactile la relance à chaque ouverture du curseur.', toutes_les: 'Relue toutes les (secondes)',
+    modeles: 'Modèles', modSpotify: 'Volume Spotify', modMusic: 'Volume Music', modEcran: 'Écran externe', modEcranAide: 'Écran externe : il faut m1ddc (brew install m1ddc).',
+    styleTitre: 'Style', classique: 'Classique', grille: 'Grille', jauge: 'Jauge', points: 'Points', egaliseur: 'Égaliseur', pas_a_pas: 'Pas à pas', cadran: 'Cadran',
+    classiqueAide: 'Le curseur d’Apple', grilleAide: 'Des barres qui s’allument', jaugeAide: 'Une barre qui se remplit', pointsAide: 'Des points qui s’allument',
+    egaliseurAide: 'Des barres de plus en plus hautes', pas_a_pasAide: 'Gros chiffres, − et +', cadranAide: 'Un anneau compact',
+    min: 'Minimum', max: 'Maximum', pas: 'Pas', crans: 'Crans', cransAide: 'Nombre de barres ou de points (10 par défaut).',
+    haptique: 'Retour haptique', haptiqueAide: 'Un petit clic sur le trackpad à chaque cran.',
+    niveaux: 'Une couleur par niveau', niveauxAide: 'Par exemple vert, puis jaune, puis rouge quand ça monte.', couleurUnie: 'Couleur', couleurUnieAuto: 'blanc',
+    aPartirDe: 'à partir de', niveauAjouter: 'Ajouter un niveau', niveauRetirer: 'Retirer un niveau',
+    options: 'Options', optionAjouter: 'Ajouter une option', optionRetirer: 'Retirer', optionNom: 'Option {n}',
+    choixAide: 'L’option touchée remplace {valeur} dans l’action, entre apostrophes.', choixLire: 'Commande qui lit l’option actuelle',
   },
   en: {
     titre: 'Customize my bar', sousTitre: 'Click an item to edit it, drag it to move it. Save updates your Touch Bar right away.',
@@ -517,6 +547,19 @@ const T = {
     exporte: 'Bar exported to {f}.', exporteLogos: 'Bar exported to {f}, with its logos ({n}).',
     expAvertir: 'Your bar has logos. Export it as a .zip?', expAvertirTexte: 'A .toml doesn’t carry images: on another Mac, these buttons would show their text instead. The .zip holds the bar and its logos.',
     manuelGarde: 'Your original file, with its comments, is kept as {f}.', expGarderToml: 'Keep the .toml', expZip: 'Export as .zip', trop: 'larger than 10 MB',
+    choix: 'Choice', reglageMode: 'Controls', modeCommande: 'something else, with a command',
+    cmdRegler: 'Command that sets it', cmdReglerAide: 'Runs as your finger moves. {valeur} becomes the chosen number.',
+    cmdLire: 'Command that reads it', cmdLireAide: 'It should print the current number. Tactile runs it each time the slider opens.', toutes_les: 'Read every (seconds)',
+    modeles: 'Templates', modSpotify: 'Spotify volume', modMusic: 'Music volume', modEcran: 'External display', modEcranAide: 'External display: needs m1ddc (brew install m1ddc).',
+    styleTitre: 'Style', classique: 'Classic', grille: 'Grid', jauge: 'Gauge', points: 'Dots', egaliseur: 'Equalizer', pas_a_pas: 'Stepper', cadran: 'Dial',
+    classiqueAide: 'Apple’s slider', grilleAide: 'Bars that light up', jaugeAide: 'A bar that fills', pointsAide: 'Dots that light up',
+    egaliseurAide: 'Bars that grow taller', pas_a_pasAide: 'Big digits, − and +', cadranAide: 'A compact ring',
+    min: 'Minimum', max: 'Maximum', pas: 'Step', crans: 'Notches', cransAide: 'How many bars or dots (10 by default).',
+    haptique: 'Haptic feedback', haptiqueAide: 'A small click on the trackpad at each notch.',
+    niveaux: 'One color per level', niveauxAide: 'For example green, then yellow, then red as it goes up.', couleurUnie: 'Color', couleurUnieAuto: 'white',
+    aPartirDe: 'from', niveauAjouter: 'Add a level', niveauRetirer: 'Remove a level',
+    options: 'Options', optionAjouter: 'Add an option', optionRetirer: 'Remove', optionNom: 'Option {n}',
+    choixAide: 'The option you tap replaces {valeur} in the action, quoted.', choixLire: 'Command that reads the current option',
   },
 };
 let langue = 'fr';
@@ -548,9 +591,9 @@ const CLE_ACTION = { luminosite_plus: 'actLuminositePlus', luminosite_moins: 'ac
 const ACTIONS_SYSTEME = { mission_control: 'actMissionControl', fenetres_app: 'actFenetresApp', launchpad: 'actLaunchpad', bureau: 'actBureau', spotlight: 'actSpotlight',
   capture_ecran: 'actCaptureEcran', capture_zone: 'actCaptureZone', capture_options: 'actCaptureOptions', verrouiller: 'actVerrouiller', emojis: 'actEmojis', forcer_quitter: 'actForcerQuitter' };
 // Les types qu'on peut ajouter depuis la barre latérale ; `meteo` pose un `texte` et sa [[source]] (panneau Météo).
-const ICONES = { bouton: '▢', lanceur: '◰', texte: 'T', meteo: '☀', slider: '⇆', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
+const ICONES = { bouton: '▢', lanceur: '◰', texte: 'T', meteo: '☀', slider: '⇆', choix: '◫', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
 /* Les mêmes en symboles SF (rendus par Rust) ; les caractères ci-dessus servent tant qu'ils ne sont pas arrivés. */
-const ICONES_SF = { bouton: 'hand.tap.fill', lanceur: 'app.fill', slider: 'slider.horizontal.3', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', texte: 'text.bubble.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
+const ICONES_SF = { bouton: 'hand.tap.fill', lanceur: 'app.fill', slider: 'slider.horizontal.3', choix: 'rectangle.split.3x1.fill', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', texte: 'text.bubble.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
   meteo: 'cloud.sun.fill', sources: 'arrow.triangle.2.circlepath', simple: 'star.fill', musique: 'music.note.list', developpeur: 'chevron.left.forwardslash.chevron.right' };
 /* Actions qui simulent le clavier : sans l'autorisation Accessibilité, elles ne font rien. */
 const ACCES = new Set(['touche', 'echap', 'spotlight', 'capture_ecran', 'capture_zone', 'emojis', 'verrouiller', 'forcer_quitter']);
@@ -788,6 +831,7 @@ function neuf(type) {
     case 'lanceur': return { type, app: 'Safari' };
     case 'texte': return { type, ...(barre.source?.length ? { source: barre.source[0].nom } : {}), gabarit: '{texte}', largeur: 120 };
     case 'slider': return { type, reglage: 'volume', symbole: 'speaker.wave.2.fill' };
+    case 'choix': return { type, options: ['1×', '1,5×', '2×'], action: { shell: 'echo {valeur}' } };
     case 'heure': return { type, format: 'HH:mm' };
     case 'en_cours': return { type, largeur: 250 };
     case 'script': return { type, commande: 'date +%d/%m', intervalle: 60, largeur: 120 };
@@ -936,7 +980,8 @@ function face(e) {
       const mot = u ? (e.affichage === 'icone' ? '' : e.texte) : (e.texte || nomApp(e.app));
       return `<span class="face"${style}>${icone}${mot ? `<span>${esc(mot)}</span>` : ''}${!icone && !mot ? '&nbsp;' : ''}</span>`;
     }
-    case 'slider': return `<span class="face" style="width:72px;min-width:0">${sf(e.symbole || (e.reglage === 'luminosite' ? 'sun.max.fill' : 'speaker.wave.2.fill'))}<span class="chevron">›</span></span>`;
+    case 'slider': return `<span class="face" style="width:72px;min-width:0">${sf(e.symbole || ({ luminosite: 'sun.max.fill', volume: 'speaker.wave.2.fill' }[e.reglage] || 'slider.horizontal.3'))}<span class="chevron">›</span></span>`;
+    case 'choix': return `<span class="face segments"${style}>${(e.options || []).map(o => `<span>${esc(o)}</span>`).join('') || '&nbsp;'}</span>`;
     case 'groupe': return `<span class="face" style="width:${e.largeur || 72}px;min-width:0">${sf(e.symbole)}${e.texte ? `<span>${esc(e.texte)}</span>` : ''}<span class="chevron">›</span></span>`;
     case 'heure': return `<span class="face plat" style="font-variant-numeric:tabular-nums">${esc(heure(e.format || 'HH:mm'))}</span>`;
     case 'en_cours': return `<span class="face plat"${style}>▶&nbsp;&nbsp;${langue === 'fr' ? 'Titre' : 'Title'}&nbsp;&nbsp;·&nbsp;&nbsp;${langue === 'fr' ? 'Artiste' : 'Artist'}</span>`;
@@ -1221,6 +1266,125 @@ function couleurChamp(cle, valeur, defaut, libelleAuto) {
 function nombreChamp(cle, valeur, min, step, aide, optionnel) {
   return ligne(t(cle), `<input type="number" class="court" id="n-${cle}" data-champ="${cle}" data-nombre="${optionnel ? 'opt' : 'req'}" value="${valeur ?? ''}" min="${min}" step="${step}" placeholder="${optionnel ? esc(t('auto')) : ''}">`, 'n-' + cle, { aide });
 }
+/* ---------- Curseurs : réglage, galerie de styles, couleurs par niveau ---------- */
+const STYLES = ['classique', 'grille', 'jauge', 'points', 'egaliseur', 'pas_a_pas', 'cadran'];
+const NIVEAUX = ['#30D158', '#FFD60A', '#FF453A'];
+/* Les modèles de exemples/curseurs.toml : volume d'une app par AppleScript, luminosité d'un écran externe par m1ddc. */
+const volumeApp = app => ({ symbole: app === 'Spotify' ? 'music.note' : 'music.note.list',
+  lire: `osascript -e 'if application "${app}" is running then tell application "${app}" to get sound volume'`,
+  regler: `osascript -e 'if application "${app}" is running then tell application "${app}" to set sound volume to {valeur}'` });
+const MODELES = { spotify: { ...volumeApp('Spotify'), pas: 5 }, music: volumeApp('Music'),
+  ecran: { symbole: 'display', lire: 'm1ddc get luminance', regler: 'm1ddc set luminance {valeur}', pas: 5, style: 'pas_a_pas' } };
+/* Comme `curseurs::bornes` : 0 à 100 pour luminosité et volume ; sinon min (0), max (100), pas (1). */
+function bornesCurseur(e) {
+  if (e.reglage) return [0, 100, 1];
+  let a = e.min ?? 0, b = e.max ?? 100;
+  if (!(a < b)) [a, b] = [0, 100];
+  const p = e.pas > 0 && e.pas <= b - a ? e.pas : (b - a >= 10 ? 1 : (b - a) / 100);
+  return [a, b, p];
+}
+function couleurNiveau(e, v) {
+  const c = (e.couleurs || []).filter(x => /^#[0-9a-f]{6}$/i.test(x)), s = e.seuils || [];
+  if (!c.length) return '#F5F5F7';
+  if (c.length === 1) return c[0];
+  return c.length === s.length + 1 ? c[s.filter(x => v >= x).length] : c[0];
+}
+/* Le dessin de `curseurs::peindre_curseur` (Rust), réduit à la vignette : même géométrie, mêmes couleurs. */
+function peindreCurseur(cv, e, style, f) {
+  const r = window.devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight;
+  if (!W) return;
+  if (cv.width !== Math.round(W * r)) { cv.width = Math.round(W * r); cv.height = Math.round(H * r); }
+  const g = cv.getContext('2d');
+  g.setTransform(r, 0, 0, r, 0, 0); g.clearRect(0, 0, W, H);
+  const [a, b, p] = bornesCurseur(e), v = a + Math.round(f * (b - a) / p) * p, frac = (v - a) / (b - a);
+  const dec = (String(p).split('.')[1] || '').length;
+  const texte = v.toFixed(Math.min(dec, 6)) + (e.reglage ? ' %' : '');
+  const plein = (c, x, y, w, h, rr) => { g.fillStyle = c; g.beginPath(); g.roundRect(x, y, w, h, rr); g.fill(); };
+  const ecrire = (s, x, taille, poids, c, ancre) => { g.font = `${poids} ${taille}px -apple-system, system-ui`; g.fillStyle = c; g.textAlign = ancre; g.textBaseline = 'middle'; g.fillText(s, x, H / 2 + 0.5); };
+  const eteint = 'rgb(245 245 247 / 0.16)', actuelle = couleurNiveau(e, v);
+  const x0 = 8, x1 = W - 34, n = Math.max(2, Math.min(40, e.crans || 10)), cas = (x1 - x0) / n, allumes = Math.round(frac * n);
+  switch (style) {
+    case 'grille': case 'points': case 'egaliseur':
+      for (let k = 0; k < n; k++) {
+        const c = k < allumes ? couleurNiveau(e, a + (k + 1) / n * (b - a)) : eteint, m = x0 + cas * (k + 0.5);
+        if (style === 'grille') { const l = Math.max(2, Math.min(5, cas * 0.42)); plein(c, m - l / 2, (H - 18) / 2, l, 18, l / 2); }
+        else if (style === 'points') { const d = Math.max(3, Math.min(9, cas * 0.55)); plein(c, m - d / 2, (H - d) / 2, d, d, d / 2); }
+        else { const l = Math.max(3, Math.min(12, cas * 0.6)), h = 4 + (k + 1) / n * (H - 14); plein(c, m - l / 2, H - 5 - h, l, h, 1.5); }
+      }
+      ecrire(texte, W - 6, 11, 500, 'rgb(245 245 247 / 0.85)', 'right');
+      break;
+    case 'jauge':
+      plein(eteint, x0, (H - 8) / 2, x1 - x0, 8, 4);
+      if (frac > 0) plein(actuelle, x0, (H - 8) / 2, Math.max(8, (x1 - x0) * frac), 8, 4);
+      (e.seuils || []).filter(s => s > a && s < b).forEach(s => plein('rgb(245 245 247 / 0.45)', x0 + (s - a) / (b - a) * (x1 - x0) - 0.5, (H - 16) / 2, 1, 16, 0.5));
+      ecrire(texte, W - 6, 11, 500, 'rgb(245 245 247 / 0.85)', 'right');
+      break;
+    case 'cadran': {
+      const cx = 20, cy = H / 2, rayon = Math.min(H / 2 - 5, 10);
+      g.lineWidth = 3.5; g.lineCap = 'round';
+      g.strokeStyle = eteint; g.beginPath(); g.arc(cx, cy, rayon, 0, Math.PI * 2); g.stroke();
+      if (frac > 0) { g.strokeStyle = actuelle; g.beginPath(); g.arc(cx, cy, rayon, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(frac, 0.9999)); g.stroke(); }
+      ecrire(texte, 38, 14, 600, actuelle, 'left');
+      ecrire('‹ ›', W - 6, 11, 400, 'rgb(245 245 247 / 0.4)', 'right');
+      break;
+    }
+    case 'pas_a_pas': {
+      const l = Math.min(40, W / 4);
+      plein('#363636', 3, 3, l, H - 6, 5); plein('#363636', W - 3 - l, 3, l, H - 6, 5);
+      ecrire('−', 3 + l / 2, 16, 400, '#F5F5F7', 'center'); ecrire('+', W - 3 - l / 2, 16, 400, '#F5F5F7', 'center');
+      ecrire(texte, W / 2, 15, 600, actuelle, 'center');
+      break;
+    }
+    default: {
+      // Le curseur d'Apple : un fond gris, un rail fin, une poignée blanche.
+      plein('#363636', 3, 3, W - 6, H - 6, 5);
+      plein('rgb(245 245 247 / 0.3)', 12, H / 2 - 1.5, W - 24, 3, 1.5);
+      plein(e.couleurs?.length ? actuelle : '#F5F5F7', 12, H / 2 - 1.5, (W - 24) * frac, 3, 1.5);
+      plein('#FFFFFF', 12 + (W - 24) * frac - 7, 6, 14, H - 12, 4);
+    }
+  }
+}
+/* Les vignettes bougent doucement entre 30 et 90 % (une image fixe à 70 % si le Mac réduit les animations) ; la boucle
+   s'arrête d'elle-même quand le panneau n'a plus de vignette. */
+let animation = null;
+const calme = matchMedia('(prefers-reduced-motion: reduce)');
+function animerStyles() {
+  if (animation) return;
+  const tic = ts => {
+    const cvs = document.querySelectorAll('canvas[data-apercu]'), e = elem();
+    if (!cvs.length || !e || e.type !== 'slider') { animation = null; return; }
+    const f = calme.matches ? 0.7 : 0.6 + 0.3 * Math.sin(ts / 1100);
+    cvs.forEach(cv => peindreCurseur(cv, e, cv.dataset.apercu, f));
+    animation = calme.matches ? null : requestAnimationFrame(tic);
+  };
+  animation = requestAnimationFrame(tic);
+}
+function panneauCurseur(e) {
+  const mode = e.reglage || 'commande', style = e.style || 'classique', [a, b] = bornesCurseur(e);
+  const parDefaut = v => t('parDefaut').replace('{v}', v);
+  let html = encart(ligne(t('reglageMode'), `<select id="f-mode">${[['luminosite', t('luminosite')], ['volume', t('volume')], ['commande', t('modeCommande')]].map(([v, l]) => `<option value="${v}"${v === mode ? ' selected' : ''}>${esc(l)}</option>`).join('')}</select>`, 'f-mode')
+    + (mode === 'commande'
+      ? ligne(t('modeles'), `<div class="modeles">${['spotify', 'music', 'ecran'].map(m => `<button type="button" data-modele="${m}">${esc(t({ spotify: 'modSpotify', music: 'modMusic', ecran: 'modEcran' }[m]))}</button>`).join('')}</div>`, '', { aide: t('modEcranAide'), haute: true })
+        + ligne(t('cmdRegler'), `<textarea id="f-regler" data-champ="regler" rows="2" spellcheck="false" placeholder="m1ddc set luminance {valeur}">${esc(e.regler || '')}</textarea>`, 'f-regler', { aide: t('cmdReglerAide'), haute: true })
+        + ligne(t('cmdLire'), `<textarea id="f-lire" data-champ="lire" rows="2" spellcheck="false" placeholder="m1ddc get luminance">${esc(e.lire || '')}</textarea>`, 'f-lire', { aide: t('cmdLireAide'), haute: true })
+        + nombreChamp('min', e.min, '', 1, parDefaut('0'), true) + nombreChamp('max', e.max, '', 1, parDefaut('100'), true)
+        + nombreChamp('pas', e.pas, 0, 1, parDefaut('1'), true) + nombreChamp('toutes_les', e.toutes_les, 0.5, 1, parDefaut('5'), true)
+      : '')
+    + champSymbole(e));
+  html += `<h3>${esc(t('styleTitre'))}</h3>` + encart(`<div class="ligne pleine"><div class="ctrl"><div class="styles" role="radiogroup" aria-label="${esc(t('styleTitre'))}">${STYLES.map(s =>
+    `<button type="button" role="radio" data-style="${s}" aria-checked="${s === style}"><canvas data-apercu="${s}" aria-hidden="true"></canvas><span class="nom-style">${esc(t(s))}<small>${esc(t(s + 'Aide'))}</small></span></button>`).join('')}</div></div></div>`
+    + (['grille', 'points', 'egaliseur'].includes(style) ? nombreChamp('crans', e.crans, 2, 1, t('cransAide'), true) : '')
+    + (style === 'classique' ? '' : ligne(t('haptique'), `<input type="checkbox" class="interrupteur" role="switch" id="f-haptique" ${e.haptique ? 'checked' : ''}>`, 'f-haptique', { aide: t('haptiqueAide') })));
+  const couleurs = e.couleurs || [], seuils = e.seuils || [], parNiveau = couleurs.length > 1;
+  html += encart(ligne(t('niveaux'), `<input type="checkbox" class="interrupteur" role="switch" id="f-niveaux" ${parNiveau ? 'checked' : ''}>`, 'f-niveaux', { aide: t('niveauxAide') })
+    + (parNiveau
+      ? `<div class="ligne pleine"><div class="ctrl"><div class="niveaux">${couleurs.map((c, k) => `<input type="color" data-niveau-couleur="${k}" value="${esc(c)}" aria-label="${esc(t('couleur'))} ${k + 1}">`
+          + (k < seuils.length ? `<label class="seuil">${esc(t('aPartirDe'))}<input type="number" data-seuil="${k}" value="${seuils[k]}" min="${a}" max="${b}" step="1"></label>` : '')).join('')}</div>
+          <div class="modeles"><button type="button" data-niveaux="retirer" ${couleurs.length <= 2 ? 'disabled' : ''}>${esc(t('niveauRetirer'))}</button><button type="button" data-niveaux="ajouter" ${couleurs.length >= 6 ? 'disabled' : ''}>${esc(t('niveauAjouter'))}</button></div></div></div>`
+      : ligne(t('couleurUnie'), `<div class="cote"><label class="bascule">${esc(t('couleurUnieAuto'))}<input type="checkbox" class="interrupteur" role="switch" id="f-unie-auto" ${couleurs.length ? '' : 'checked'}></label><input type="color" id="f-unie" value="${esc(couleurs[0] || '#0A84FF')}" aria-label="${esc(t('couleurUnie'))}"></div>`, 'f-unie')));
+  return html;
+}
+
 function dessinerProprietes(reconstruire) {
   const p = $('proprietes');
   const e = elem();
@@ -1252,9 +1416,17 @@ function dessinerProprietes(reconstruire) {
           + nombreChamp('largeur', e.largeur, 20, 4, t('largeurAide'), true))
         + encart(champAction('appui_long', t('appuiLong')));
       break;
-    case 'slider':
-      html += encart(ligne(t('reglage'), `<select id="f-reglage" data-champ="reglage"><option value="luminosite"${e.reglage === 'luminosite' ? ' selected' : ''}>${t('luminosite')}</option><option value="volume"${e.reglage === 'volume' ? ' selected' : ''}>${t('volume')}</option></select>`, 'f-reglage') + champSymbole(e));
+    case 'slider': html += panneauCurseur(e); break;
+    case 'choix': {
+      const options = e.options || [];
+      html += encart(ligne(t('options'), `<div class="options-choix">${options.map((o, k) => `<div class="cote"><input type="text" class="moyen" id="opt-${k}" data-option="${k}" value="${esc(o)}" aria-label="${esc(t('optionNom').replace('{n}', k + 1))}" spellcheck="false"><button type="button" data-option-suppr="${k}" aria-label="${esc(t('optionRetirer'))} ${esc(o)}">${esc(t('optionRetirer'))}</button></div>`).join('')}
+          <button type="button" id="option-ajouter">${esc(t('optionAjouter'))}</button></div>`, '', { haute: true, aide: t('choixAide') })
+          + nombreChamp('largeur', e.largeur, 40, 4, t('largeurAide'), true))
+        + encart(champAction('action', t('action'))
+          + ligne(t('choixLire'), `<textarea id="f-lire" data-champ="lire" rows="2" spellcheck="false" placeholder="cat /tmp/vitesse">${esc(e.lire || '')}</textarea>`, 'f-lire', { haute: true })
+          + nombreChamp('toutes_les', e.toutes_les, 0.5, 1, parDefaut('5'), true));
       break;
+    }
     case 'heure': html += encart(texteChamp('f-format', 'format', e.format, 'HH:mm', t('formatAide'))); break;
     case 'en_cours': html += encart(nombreChamp('largeur', e.largeur, 60, 10, '', true)); break;
     case 'script':
@@ -1284,17 +1456,18 @@ function dessinerProprietes(reconstruire) {
             const quoi = `${esc(t(s.type))}${s.texte ? ' · ' + esc(s.texte) : s.type === 'lanceur' ? ' · ' + esc(nomApp(s.app)) : s.symbole ? ' · ' + esc(s.symbole) : ''}`;
             return `<li>${s.type === 'lanceur' ? `<span class="tuile app" aria-hidden="true">${vignetteApp(s.app)}</span>` : `<span class="tuile" aria-hidden="true">${ico(ICONES_SF[s.type], ICONES[s.type])}</span>`}<span class="quoi">${quoi}${absente ? ` <span class="attention-texte">· ${esc(t('pasInstallee'))}</span>` : ''}</span><button type="button" data-sous="${j}" aria-label="${esc(t('regler'))} ${quoi.replace(/<[^>]*>/g, '')}">${t('regler')}</button></li>`;
           }).join('')}</ul>`
-          + ligne(t('ajouterDans'), `<select id="f-ajout-groupe"><option value="">${t('choisir')}</option>${['bouton', 'lanceur', 'slider', 'heure', 'en_cours', 'script', 'batterie', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select>`, 'f-ajout-groupe'));
+          + ligne(t('ajouterDans'), `<select id="f-ajout-groupe"><option value="">${t('choisir')}</option>${['bouton', 'lanceur', 'slider', 'choix', 'heure', 'en_cours', 'script', 'batterie', 'espace', 'souple'].map(ty => `<option value="${ty}">${esc(t(ty))}</option>`).join('')}</select>`, 'f-ajout-groupe'));
       break;
   }
   p.innerHTML = html;
   ['action', 'appui_long', 'lanceur'].forEach(verifierApp);
+  animerStyles();
   rendreFocus(focus);
 }
 /* Le focus survit au redessin du panneau : même contrôle retrouvé par son id, sinon par ses attributs data-. */
 function cleFocus(el) {
   if (el.id) return '#' + CSS.escape(el.id);
-  const attr = ['data-symbole', 'data-sous', 'data-choisir-app', 'data-app-suggestion', 'data-source-champ', 'data-source-type', 'data-source-suppr', 'data-ville', 'data-reglages'].find(a => el.hasAttribute(a));
+  const attr = ['data-symbole', 'data-sous', 'data-choisir-app', 'data-app-suggestion', 'data-source-champ', 'data-source-type', 'data-source-suppr', 'data-ville', 'data-reglages', 'data-style', 'data-modele', 'data-niveaux', 'data-niveau-couleur', 'data-seuil', 'data-option'].find(a => el.hasAttribute(a));
   if (!attr) return null;
   const k = el.dataset.k != null ? `[data-k="${el.dataset.k}"]` : '';
   return (el.closest('.grille') ? '.grille ' : '') + `[${attr}="${CSS.escape(el.getAttribute(attr))}"]${k}`;
@@ -1370,9 +1543,27 @@ $('proprietes').addEventListener('input', ev => {
   }
   if (c.id === 'ville') { ville.requete = c.value; return; }
   const e = elem(); if (!e) return;
+  if (c.id === 'f-mode') {
+    ['reglage', 'regler', 'lire', 'min', 'max', 'pas', 'toutes_les'].forEach(k => delete e[k]);
+    if (c.value === 'commande') { e.regler = ''; if (!e.symbole || ['sun.max.fill', 'speaker.wave.2.fill'].includes(e.symbole)) e.symbole = 'slider.horizontal.3'; }
+    else e.reglage = c.value;
+    demanderGlyphes([e.symbole]); changer(); dessinerProprietes(true); return;
+  }
+  if (c.dataset.option != null) { e.options[+c.dataset.option] = c.value; changer(); return; }
+  if (c.dataset.niveauCouleur != null) { e.couleurs[+c.dataset.niveauCouleur] = c.value; changer(); return; }
+  if (c.dataset.seuil != null) { const v = parseFloat(c.value); if (!isNaN(v)) { e.seuils[+c.dataset.seuil] = v; changer(); } return; }
+  if (c.id === 'f-haptique') { if (c.checked) e.haptique = true; else delete e.haptique; changer(); return; }
+  if (c.id === 'f-niveaux') {
+    const [a, b] = bornesCurseur(e);
+    if (c.checked) { e.couleurs = [...NIVEAUX]; e.seuils = [a + 0.6 * (b - a), a + 0.85 * (b - a)].map(x => +x.toFixed(2)); }
+    else { delete e.couleurs; delete e.seuils; }
+    changer(); dessinerProprietes(true); return;
+  }
+  if (c.id === 'f-unie') { e.couleurs = [c.value]; delete e.seuils; $('f-unie-auto').checked = false; changer(); return; }
+  if (c.id === 'f-unie-auto') { if (c.checked) delete e.couleurs; else e.couleurs = [$('f-unie').value]; changer(); return; }
   if (c.dataset.champ) {
     if (c.dataset.nombre) { const v = parseFloat(c.value); if (c.dataset.nombre === 'opt' && c.value === '') delete e[c.dataset.champ]; else if (!isNaN(v)) e[c.dataset.champ] = v; }
-    else if (c.value === '' && c.dataset.champ !== 'commande' && c.dataset.champ !== 'app') delete e[c.dataset.champ];
+    else if (c.value === '' && !['commande', 'app', 'regler'].includes(c.dataset.champ)) delete e[c.dataset.champ];
     else e[c.dataset.champ] = c.value;
     changer();
     if (c.dataset.champ === 'app') { verifierApp('lanceur'); $('app-vignette').innerHTML = vignetteApp(e.app); if ($('f-texte')) $('f-texte').placeholder = nomApp(e.app); }
@@ -1417,6 +1608,16 @@ $('proprietes').addEventListener('click', ev => {
   if (b.id === 'i-repartir') return prereglage('musique');
   const e = elem(); if (!e) return;
   if (b.dataset.appSuggestion) { if (b.dataset.appSuggestion === 'lanceur') e.app = b.dataset.nom; else e[b.dataset.appSuggestion] = { app: b.dataset.nom }; changer(); dessinerProprietes(true); return; }
+  if (b.dataset.style) { if (b.dataset.style === 'classique') delete e.style; else e.style = b.dataset.style; changer(); dessinerProprietes(true); return; }
+  if (b.dataset.modele) { Object.assign(e, MODELES[b.dataset.modele]); demanderGlyphes([e.symbole]); changer(); dessinerProprietes(true); return; }
+  if (b.dataset.niveaux) {
+    const [, max] = bornesCurseur(e), dernier = e.seuils[e.seuils.length - 1];
+    if (b.dataset.niveaux === 'ajouter') { e.couleurs.push('#BF5AF2'); e.seuils.push(+((dernier + max) / 2).toFixed(2)); }
+    else { e.couleurs.pop(); e.seuils.pop(); }
+    changer(); dessinerProprietes(true); return;
+  }
+  if (b.id === 'option-ajouter') { e.options = [...(e.options || []), '']; changer(); dessinerProprietes(true); $(`opt-${e.options.length - 1}`)?.focus(); return; }
+  if (b.dataset.optionSuppr != null) { e.options.splice(+b.dataset.optionSuppr, 1); changer(); dessinerProprietes(true); ($(`opt-${Math.min(+b.dataset.optionSuppr, e.options.length - 1)}`) || $('option-ajouter'))?.focus(); return; }
   if (b.id === 'p-supprimer') supprimer();
   else if (b.id === 'p-gauche') deplacer(-1);
   else if (b.id === 'p-droite') deplacer(1);
