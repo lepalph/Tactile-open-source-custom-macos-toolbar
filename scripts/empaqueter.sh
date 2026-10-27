@@ -48,10 +48,20 @@ cat > $app/Contents/Info.plist <<PLIST
 	<string>13.0</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Tactile utilise le micro quand un bouton de ta barre lance une commande vocale.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Tactile lit l'adresse de l'onglet actif de ton navigateur pour montrer la barre du site ([[site]]). Elle reste sur ce Mac.</string>
 </dict>
 </plist>
 PLIST
 plutil -lint -s $app/Contents/Info.plist
+# La question d'Automatisation de macOS, dans la langue du système (sans fichier .lproj, la chaîne française ci-dessus).
+for langue texte in \
+  fr "Tactile lit l'adresse de l'onglet actif de ton navigateur pour montrer la barre du site ([[site]]). Elle reste sur ce Mac." \
+  en "Tactile reads the address of your browser's active tab to show that site's bar ([[site]]). It never leaves this Mac."; do
+  mkdir -p $app/Contents/Resources/$langue.lproj
+  print -r -- "\"NSAppleEventsUsageDescription\" = \"$texte\";" > $app/Contents/Resources/$langue.lproj/InfoPlist.strings
+  plutil -lint -s $app/Contents/Resources/$langue.lproj/InfoPlist.strings
+done
 
 codesign --force --deep -s - $app
 ditto -c -k --keepParent $app target/Tactile.zip

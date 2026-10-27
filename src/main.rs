@@ -168,6 +168,9 @@ fn verifier(chemin: &std::path::Path) -> i32 {
     let applis = match barre.applications.len() {
         0 => String::new(),
         n => format!(", {} d'application", config::nombre(n, "barre")),
+    } + &match barre.sites.len() {
+        0 => String::new(),
+        n => format!(", {} de site", config::nombre(n, "barre")),
     };
     println!("OK : {}{applis}", config::nombre(barre.elements.len(), "élément"));
     0

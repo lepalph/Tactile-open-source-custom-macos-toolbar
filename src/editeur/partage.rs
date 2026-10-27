@@ -7,7 +7,7 @@
 
 use super::icones;
 use crate::actions::Action;
-use crate::config::{self, Application, Barre, Element, Source, SourceMcp};
+use crate::config::{self, Application, Barre, Element, Site, Source, SourceMcp};
 use serde::Serialize;
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
@@ -82,8 +82,8 @@ fn chaque_image(barre: &mut Barre, f: &mut impl FnMut(&mut String)) {
         }
     }
     dans(&mut barre.elements, f);
-    for app in &mut barre.applications {
-        dans(&mut app.elements, f);
+    for elements in barre.applications.iter_mut().map(|a| &mut a.elements).chain(barre.sites.iter_mut().map(|s| &mut s.elements)) {
+        dans(elements, f);
     }
 }
 
@@ -115,11 +115,18 @@ fn deplier(chemin: &str) -> PathBuf {
 /// Chaque type et chaque champ est nommé, sans `..` ni `_ =>` : un élément, une action, une source ou un champ
 /// ajouté plus tard ne compile pas tant qu'il n'est pas classé ici.
 pub(super) fn commandes(barre: &Barre) -> Vec<Commande> {
-    let Barre { masquer_control_strip: _, elements, applications, sources } = barre;
+    let Barre { masquer_control_strip: _, elements, applications, sites, sources } = barre;
     let mut liste = Vec::new();
     parcourir(elements, &tx("Barre principale", "Main bar"), "", &mut liste);
     for Application { app, herite: _, elements } in applications {
         parcourir(elements, &tx(format!("Barre de « {app} »"), format!("“{app}” bar")), "", &mut liste);
+    }
+    // Une barre de site fait lire à Tactile l'adresse de l'onglet actif : c'est dit avant ses éléments.
+    for Site { adresse, herite: _, elements } in sites {
+        let ou = tx(format!("Barre du site « {adresse} »"), format!("“{adresse}” site bar"));
+        let quoi = tx(format!("Change la barre sur {adresse} ; lit l’adresse de l’onglet actif de tes navigateurs"), format!("Changes the bar on {adresse}; reads the address of your browsers’ active tab"));
+        liste.push(ligne(&ou, quoi, adresse.clone()));
+        parcourir(elements, &ou, "", &mut liste);
     }
     for source in sources {
         lister_source(source, &mut liste);
@@ -624,6 +631,9 @@ fn preparer(texte: &str, copies: Vec<(String, PathBuf)>, temporaire: Option<Path
     for app in &paquet.barre.applications {
         super::verifier(&app.elements).map_err(|e| fr_seul(format!("application « {} », {e}", app.app)))?;
     }
+    for site in &paquet.barre.sites {
+        super::verifier(&site.elements).map_err(|e| fr_seul(format!("site « {} », {e}", site.adresse)))?;
+    }
     if !absentes.is_empty() {
         let liste = absentes.join(", ");
         paquet.avis.push(tx(format!("logo absent du fichier importé : {liste}"), format!("logo missing from the imported file: {liste}")));
@@ -659,8 +669,8 @@ fn retirer_images_hors_barre(barre: &mut Barre) -> Vec<String> {
     }
     let mut retirees = Vec::new();
     dans(&mut barre.elements, &mut retirees);
-    for app in &mut barre.applications {
-        dans(&mut app.elements, &mut retirees);
+    for elements in barre.applications.iter_mut().map(|a| &mut a.elements).chain(barre.sites.iter_mut().map(|s| &mut s.elements)) {
+        dans(elements, &mut retirees);
     }
     retirees
 }
@@ -1018,6 +1028,12 @@ mod tests {
         assert_eq!(liste[7], ("Barre de « Safari », élément 1".into(), "Commande shell".into(), "open -a Mail".into()));
         assert_eq!(liste.len(), 8);
         assert_eq!(commandes(&barre)[0].ou.en, "Main bar, item 1 “Build”");
+        // Un [[site]] est listé (il lit l'adresse de l'onglet actif), même sans élément qui lance quoi que ce soit, puis ses éléments.
+        let barre = config::lire("[[element]]\ntype = \"souple\"\n\n[[site]]\nadresse = \"youtube.com\"\n[[site.element]]\ntype = \"bouton\"\naction = { touche = \"k\" }\n").unwrap();
+        let liste: Vec<(String, String, String)> = commandes(&barre).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect();
+        assert_eq!(liste[0], ("Barre du site « youtube.com »".into(), "Change la barre sur youtube.com ; lit l’adresse de l’onglet actif de tes navigateurs".into(), "youtube.com".into()));
+        assert_eq!(liste[1], ("Barre du site « youtube.com », élément 1".into(), "Raccourci clavier".into(), "k".into()));
+        assert_eq!(liste.len(), 2);
         // Un lanceur ouvre son app ; les actions système lancent une app d'Apple ou simulent des touches.
         let barre = config::lire(
             "[[element]]\ntype = \"lanceur\"\napp = \"Safari\"\nappui_long = \"forcer_quitter\"\n\n\

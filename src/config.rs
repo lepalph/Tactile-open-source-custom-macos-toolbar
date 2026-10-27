@@ -24,6 +24,9 @@ pub struct Barre {
     /// Barres propres à une app, montrées quand elle passe au premier plan.
     #[serde(rename = "application", default, skip_serializing_if = "Vec::is_empty")]
     pub applications: Vec<Application>,
+    /// Barres propres à un site web, montrées quand l'onglet actif d'un navigateur au premier plan est sur ce site.
+    #[serde(rename = "site", default, skip_serializing_if = "Vec::is_empty")]
+    pub sites: Vec<Site>,
     /// Sources de données (`[[source]]`) qu'un élément `texte` ou un bouton affiche par leur `nom`.
     #[serde(rename = "source", default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<Source>,
@@ -98,7 +101,105 @@ pub struct Application {
     pub elements: Vec<Element>,
 }
 
+/// `[[site]]` : la barre montrée quand l'onglet actif du navigateur au premier plan est sur ce site (avant celle de l'app).
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Site {
+    /// `youtube.com` (le domaine et ses sous-domaines, éventuellement suivi d'un début de chemin : `github.com/lepalph`),
+    /// ou un motif avec `*` sur « domaine/chemin » : `*.google.com/maps*`. Sans casse, sans `https://`, ni `?…` ni `#…`.
+    #[serde(alias = "address")]
+    pub adresse: String,
+    /// Comme pour `[[application]]` : les éléments remplacent la zone entre les `souple` de la principale.
+    #[serde(default, alias = "inherit")]
+    pub herite: bool,
+    #[serde(rename = "element", alias = "item", default)]
+    pub elements: Vec<Element>,
+}
+
+impl Site {
+    /// Les éléments de sa barre, avec `herite` comme une `[[application]]`.
+    pub fn elements_avec(&self, principale: &[Element]) -> Vec<Element> {
+        Application { app: String::new(), herite: self.herite, elements: self.elements.clone() }.elements_avec(principale)
+    }
+
+    /// L'adresse vise-t-elle la page `page` (« hôte/chemin », déjà sans schéma, port, `?…` ni `#…`) ?
+    pub fn correspond(&self, page: &str) -> bool {
+        let (motif, page) = (self.adresse.trim().to_lowercase(), page.to_lowercase());
+        if self.adresse_invalide().is_some() {
+            return false;
+        }
+        if motif.contains('*') {
+            return glob(motif.as_bytes(), page.as_bytes());
+        }
+        let (domaine, chemin) = motif.split_once('/').unwrap_or((&motif, ""));
+        let (hote, reste) = page.split_once('/').unwrap_or((&page, ""));
+        let domaine_ok = hote == domaine || hote.strip_suffix(domaine).is_some_and(|h| h.ends_with('.'));
+        domaine_ok && reste.starts_with(chemin)
+    }
+
+    /// Pourquoi l'adresse ne peut rien désigner, le cas échéant (pour `controler`).
+    pub fn adresse_invalide(&self) -> Option<&'static str> {
+        let a = self.adresse.trim();
+        if a.is_empty() {
+            Some("adresse vide : écris un domaine comme youtube.com, ou un motif comme *.google.com/maps*")
+        } else if a.contains("://") {
+            Some("écris l'adresse sans https:// : youtube.com, ou *.google.com/maps*")
+        } else if a.contains(char::is_whitespace) || a.contains(['?', '#']) {
+            Some("motif invalide : ni espace, ni ? ni # (la fin d'une adresse après ? ou # n'est jamais lue) ; écris un domaine ou un motif comme *.google.com/maps*")
+        } else if a.trim_matches(['*', '.', '/']).is_empty() || a.starts_with(['/', '.']) {
+            Some("motif invalide : il doit nommer un domaine, comme youtube.com ou *.google.com/maps*")
+        } else {
+            None
+        }
+    }
+}
+
+/// `*` vaut n'importe quelle suite de caractères (vide comprise) ; le reste se compare tel quel.
+fn glob(motif: &[u8], texte: &[u8]) -> bool {
+    let (mut m, mut t, mut etoile, mut reprise) = (0, 0, None, 0);
+    while t < texte.len() {
+        if m < motif.len() && motif[m] == b'*' {
+            etoile = Some(m);
+            reprise = t;
+            m += 1;
+        } else if m < motif.len() && motif[m] == texte[t] {
+            m += 1;
+            t += 1;
+        } else if let Some(e) = etoile {
+            m = e + 1;
+            reprise += 1;
+            t = reprise;
+        } else {
+            return false;
+        }
+    }
+    motif[m..].iter().all(|&c| c == b'*')
+}
+
+/// La barre de base à montrer : site, sinon application, sinon principale.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Base {
+    Site(usize),
+    Application(usize),
+    Principale,
+}
+
 impl Barre {
+    /// Priorité : le `[[site]]` de la page de l'onglet actif (`page` n'est connue que si un navigateur est au premier
+    /// plan), puis l'`[[application]]` de l'app au premier plan, puis la principale.
+    pub fn base_pour(&self, bundle: &str, nom: &str, page: Option<&str>) -> Base {
+        match (page.and_then(|p| self.site_pour(p)), self.application_pour(bundle, nom)) {
+            (Some(k), _) => Base::Site(k),
+            (None, Some(k)) => Base::Application(k),
+            (None, None) => Base::Principale,
+        }
+    }
+
+    /// Index du premier `[[site]]` qui désigne la page (« hôte/chemin ») de l'onglet actif.
+    pub fn site_pour(&self, page: &str) -> Option<usize> {
+        self.sites.iter().position(|s| s.correspond(page))
+    }
+
     /// Index de la première `[[application]]` qui désigne l'app active (bundle id ou nom, sans casse).
     pub fn application_pour(&self, bundle: &str, nom: &str) -> Option<usize> {
         let (bundle, nom) = (bundle.to_lowercase(), nom.to_lowercase());
@@ -388,6 +489,10 @@ pub fn lire(texte: &str) -> Result<Barre, String> {
         let debut = position(&document, &[("application", k)]);
         return Err(situer(debut, format!("[[application]] « {} » sans élément : ajoute au moins un [[application.element]]", barre.applications[k].app)));
     }
+    if let Some(k) = barre.sites.iter().position(|s| s.elements.is_empty()) {
+        let debut = position(&document, &[("site", k)]);
+        return Err(situer(debut, format!("[[site]] « {} » sans élément : ajoute au moins un [[site.element]]", barre.sites[k].adresse)));
+    }
     for (k, source) in barre.sources.iter().enumerate() {
         let sortes = [source.http.is_some(), source.commande.is_some(), source.mcp.is_some()].iter().filter(|&&s| s).count();
         let mcp = source.mcp.as_ref().is_none_or(|m| m.commande.is_some() != m.url.is_some());
@@ -492,7 +597,7 @@ fn fusionner(table: &mut DeTable) {
             table.insert(cle, Spanned::new(span, DeValue::Array(tous)));
         }
     }
-    for cle in ["element", "item", "application"] {
+    for cle in ["element", "item", "application", "site"] {
         if let Some(DeValue::Array(liste)) = table.get_mut(cle).map(Spanned::get_mut) {
             for valeur in liste.iter_mut() {
                 if let DeValue::Table(t) = valeur.get_mut() {
@@ -544,9 +649,10 @@ fn premiere_erreur<T: DeserializeOwned>(valeur: &Spanned<DeValue>) -> Option<(us
     let DeValue::Table(table) = valeur.get_ref() else { return Some(situee(erreur)) };
     let mut erreurs: Vec<(usize, String)> = tables(table, "element").iter().filter_map(premiere_erreur::<Element>).collect();
     erreurs.extend(tables(table, "application").iter().filter_map(premiere_erreur::<Application>));
+    erreurs.extend(tables(table, "site").iter().filter_map(premiere_erreur::<Site>));
     erreurs.extend(tables(table, "source").iter().filter_map(premiere_erreur::<Source>));
     let mut seule = table.clone();
-    for cle in ["element", "item", "application", "source"] {
+    for cle in ["element", "item", "application", "site", "source"] {
         seule.remove(cle);
     }
     if let Err(e) = T::deserialize(ValueDeserializer::from(Spanned::new(valeur.span(), DeValue::Table(seule)))) {
@@ -635,20 +741,21 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
         c.signaler(true, &[], "", "aucun élément : la barre principale serait vide, ajoute au moins un [[element]]".into());
     }
     // Avec l'en-tête tel qu'écrit : `[[item]]` et `[[element]]` peuvent se mêler dans la même liste.
-    let egares: Vec<(usize, &str)> = match &c.document {
-        Some((t, d)) => match tables(d, "application").first() {
-            Some(app) => tables(d, "element")
+    let egares: Vec<(usize, &str, &str)> = match &c.document {
+        // Le premier `[[application]]` ou `[[site]]` du fichier : tout `[[element]]` écrit après lui est égaré.
+        Some((t, d)) => match ["application", "site"].into_iter().filter_map(|cle| Some((tables(d, cle).first()?.span().start, cle))).min() {
+            Some((debut, conteneur)) => tables(d, "element")
                 .iter()
                 .enumerate()
-                .filter(|(_, e)| e.span().start > app.span().start)
-                .map(|(i, e)| (i, if t.get(e.span().start..).is_some_and(|l| l.starts_with("[[item]]")) { "item" } else { "element" }))
+                .filter(|(_, e)| e.span().start > debut)
+                .map(|(i, e)| (i, if t.get(e.span().start..).is_some_and(|l| l.starts_with("[[item]]")) { "item" } else { "element" }, conteneur))
                 .collect(),
             None => vec![],
         },
         None => vec![],
     };
-    for (i, entete) in egares {
-        c.signaler(false, &[("element", i)], &format!("élément {}", i + 1), format!("cet [[{entete}]] est écrit après un [[application]] : il va dans la barre principale ; voulais-tu [[application.{entete}]] ?"));
+    for (i, entete, conteneur) in egares {
+        c.signaler(false, &[("element", i)], &format!("élément {}", i + 1), format!("cet [[{entete}]] est écrit après un [[{conteneur}]] : il va dans la barre principale ; voulais-tu [[{conteneur}.{entete}]] ?"));
     }
     c.elements(&barre.elements, &mut Vec::new(), "");
     let largeur = crate::barre::largeur_barre(barre.masquer_control_strip);
@@ -671,9 +778,30 @@ pub fn controler(barre: &Barre, texte: Option<&str>) -> Vec<Avis> {
         c.deborde(&app.elements_avec(&barre.elements), largeur, &[("application", k)], &format!("la barre de « {} »", app.app));
         c.rapides(&app.elements, &[("application", k)], &format!("la barre de « {} »", app.app));
     }
+    for (k, site) in barre.sites.iter().enumerate() {
+        let (ici, lieu, nom) = ([("site", k)], format!("site « {} »", site.adresse), format!("la barre de « {} »", site.adresse));
+        let normale = |s: &crate::config::Site| s.adresse.trim().to_lowercase();
+        if let Some(raison) = site.adresse_invalide() {
+            c.signaler(false, &ici, &lieu, format!("{raison} ; sa barre ne sera jamais montrée"));
+        } else if let Some(j) = barre.sites[..k].iter().position(|s| normale(s) == normale(site)) {
+            let ou = c.ligne(&[("site", j)]).map_or(format!("le site n° {}", j + 1), |n| format!("ligne {n}"));
+            c.signaler(false, &ici, &lieu, format!("« {} » a déjà sa barre ({ou}) : celle-ci ne sera jamais montrée", site.adresse.trim()));
+        }
+        c.elements(&site.elements, &mut vec![("site", k)], &format!("{lieu}, "));
+        c.deborde(&site.elements_avec(&barre.elements), largeur, &ici, &nom);
+        c.rapides(&site.elements, &ici, &nom);
+    }
+    if !barre.sites.is_empty() {
+        for navigateur in crate::barre::navigateurs_refuses() {
+            c.signaler(false, &[], "", format!("{AUTORISATION} {navigateur}"));
+        }
+    }
     c.avis.sort_by_key(|a| a.ligne.unwrap_or(usize::MAX));
     c.avis
 }
+
+/// Début de l'avis d'un navigateur dont macOS refuse l'onglet actif à Tactile (suivi de son nom).
+pub const AUTORISATION: &str = "les barres de site restent cachées : macOS refuse à Tactile de lire l'onglet actif ; autorise-le dans Réglages Système → Confidentialité et sécurité → Automatisation → Tactile, pour";
 
 /// L'avis d'une app introuvable, suivi de `suite` (ce qui se passera). Un bundle id bien formé (deux points au moins,
 /// sans espace) est sans doute juste, pour une app pas encore installée : pas de conseil d'écriture.
@@ -962,8 +1090,9 @@ fn traduire(message: &str) -> String {
         })
         .collect();
     // Un champ manquant n'a pas d'écriture à reprendre : ses deux noms (les champs obligatoires qui ont un alias).
-    const REQUIS: [(&str, &str); 9] = [
+    const REQUIS: [(&str, &str); 10] = [
         ("nom", "name"),
+        ("adresse", "address"),
         ("outil", "tool"),
         ("reglage", "setting"),
         ("commande", "command"),
@@ -1135,6 +1264,31 @@ type = "groupe"
 texte = "Plus"
   [[application.element.element]]
   type = "heure"
+
+[[site]]
+adresse = "*.google.com/maps*"
+herite = true
+
+[[site.element]]
+type = "bouton"
+symbole = "map"
+action = { touche = "cmd+f" }
+
+[[site]]
+adresse = "mail.google.com"
+
+[[site.element]]
+type = "bouton"
+texte = "Nouveau"
+action = { touche = "c" }
+
+[[site.element]]
+type = "groupe"
+texte = "Plus"
+  [[site.element.element]]
+  type = "texte"
+  source = "meteo"
+  gabarit = "{current.temperature_2m} °C"
 "##;
 
 #[cfg(test)]
@@ -1182,6 +1336,7 @@ mod tests {
                 },
             ],
             applications: vec![],
+            sites: vec![],
             sources: vec![],
         };
         assert_eq!(lire(PAR_DEFAUT), Ok(attendu));
@@ -1237,6 +1392,7 @@ mod tests {
                     masquer_control_strip: true,
                     elements: vec![bouton(action)],
                     applications: vec![],
+                    sites: vec![],
                     sources: vec![],
                 }),
                 "{ecrit}"
@@ -1458,6 +1614,14 @@ herite = true
   texte = "{heure}"
   source = "horloge"
   action = { touche = "cmd+t" }
+
+[[site]]
+adresse = "youtube.com"
+herite = true
+  [[site.element]]
+  type = "bouton"
+  symbole = "playpause.fill"
+  action = { touche = "k" }
 
 [[source]]
 nom = "meteo"
@@ -1692,6 +1856,14 @@ inherit = true
   source = "horloge"
   action = { key = "cmd+t" }
 
+[[site]]
+address = "youtube.com"
+inherit = true
+  [[site.item]]
+  type = "button"
+  symbol = "playpause.fill"
+  action = { key = "k" }
+
 [[source]]
 name = "meteo"
 http = "https://example.org/meteo.json"
@@ -1717,6 +1889,7 @@ command = "uptime"
         assert_eq!(lire(TOUT_EN), Ok(fr.clone()));
         assert_eq!((fr.elements.len(), fr.sources.len()), (27, 4));
         assert_eq!((fr.applications.len(), fr.applications[0].herite), (1, true));
+        assert_eq!((fr.sites.len(), fr.sites[0].herite, fr.sites[0].adresse.as_str()), (1, true, "youtube.com"));
         assert_eq!(lire(include_str!("../exemples/barre.en.toml")), lire(PAR_DEFAUT));
         // Une erreur dans un [[item]] garde sa ligne.
         assert!(lire("[[item]]\ntype = \"clock\"\n\n[[item]]\ntype = \"button\"\naction = \"dance\"\n").unwrap_err().starts_with("ligne 4 : valeur inconnue «dance»"));
@@ -1882,6 +2055,69 @@ command = "uptime"
         assert_eq!(barre.application_pour("com.apple.Preview", "APERÇU"), Some(1));
         assert_eq!(barre.application_pour("com.apple.finder", "Finder"), None);
         assert_eq!(barre.application_pour("", ""), None);
+    }
+
+    #[test]
+    fn site_domaine_sous_domaines_et_motifs() {
+        let site = |a: &str| Site { adresse: a.into(), herite: false, elements: vec![Element::Souple] };
+        let yt = site("YouTube.com");
+        for oui in ["youtube.com/", "www.youtube.com/watch", "m.youtube.com/", "YOUTUBE.COM/x"] {
+            assert!(yt.correspond(oui), "{oui}");
+        }
+        for non in ["notyoutube.com/", "youtube.com.evil.org/", "youtube.co/", "evil.org/youtube.com", ""] {
+            assert!(!yt.correspond(non), "{non}");
+        }
+        let chemin = site("github.com/lepalph");
+        assert!(chemin.correspond("github.com/lepalph/tactile") && !chemin.correspond("github.com/autre") && !chemin.correspond("gist.github.org/lepalph"));
+        let motif = site("*.google.com/maps*");
+        assert!(motif.correspond("www.google.com/maps/place/x") && motif.correspond("maps.google.com/maps"));
+        assert!(!motif.correspond("google.com/maps") && !motif.correspond("www.google.com/search"));
+        assert!(site("localhost").correspond("localhost/") && !site("localhost").correspond("127.0.0.1/"));
+        assert!(site("*/docs*").correspond("exemple.org/docs/a"));
+        for invalide in ["", "  ", "https://youtube.com", "you tube.com", "youtube.com/watch?v=1", "*", "*.*", "/chemin", ".com"] {
+            assert!(site(invalide).adresse_invalide().is_some(), "« {invalide} »");
+            assert!(!site(invalide).correspond("youtube.com/"), "« {invalide} » ne désigne rien");
+        }
+        assert_eq!(site("*.google.com/maps*").adresse_invalide(), None);
+        assert!(super::glob(b"a*b*c", b"aXXbYc"));
+        assert!(!super::glob(b"a*b", b"aXXbY"));
+    }
+
+    #[test]
+    fn site_avant_application_avant_principale() {
+        let barre = lire("[[element]]\ntype = \"heure\"\n\n[[application]]\napp = \"com.google.Chrome\"\n[[application.element]]\ntype = \"souple\"\n\n[[site]]\nadresse = \"youtube.com\"\n[[site.element]]\ntype = \"souple\"\n\n[[site]]\nadresse = \"mail.google.com\"\n[[site.element]]\ntype = \"heure\"\n").unwrap();
+        assert_eq!(barre.sites.len(), 2);
+        assert_eq!(barre.base_pour("com.google.Chrome", "Google Chrome", Some("www.youtube.com/watch")), Base::Site(0));
+        assert_eq!(barre.base_pour("com.google.Chrome", "Google Chrome", Some("mail.google.com/mail/u/0/")), Base::Site(1));
+        assert_eq!(barre.base_pour("com.google.Chrome", "Google Chrome", Some("example.org/")), Base::Application(0));
+        assert_eq!(barre.base_pour("com.google.Chrome", "Google Chrome", None), Base::Application(0));
+        assert_eq!(barre.base_pour("com.apple.Safari", "Safari", Some("youtube.com/")), Base::Site(0), "un site vaut pour tout navigateur");
+        assert_eq!(barre.base_pour("com.apple.Safari", "Safari", None), Base::Principale);
+        // Un [[site]] sans élément est refusé à la lecture, avec sa ligne.
+        let erreur = lire("[[element]]\ntype = \"heure\"\n\n[[site]]\nadresse = \"youtube.com\"\n").unwrap_err();
+        assert_eq!(erreur, "ligne 4 : [[site]] « youtube.com » sans élément : ajoute au moins un [[site.element]]");
+        let erreur = lire("[[site]]\n[[site.element]]\ntype = \"souple\"\n").unwrap_err();
+        assert!(erreur.contains("champ manquant «adresse» (ou «address»)"), "{erreur}");
+        let erreur = lire("[[site]]\nadresse = \"a.com\"\n[[site.element]]\ntype = \"souple\"\n[[site.element]]\ntype = \"truc\"\n").unwrap_err();
+        assert!(erreur.starts_with("ligne 6 : valeur inconnue «truc»"), "{erreur}");
+    }
+
+    #[test]
+    fn controler_les_sites() {
+        let texte = "[[element]]\ntype = \"heure\"\n\n[[site]]\nadresse = \"\"\n[[site.element]]\ntype = \"souple\"\n\n[[site]]\nadresse = \"https://youtube.com\"\n[[site.element]]\ntype = \"souple\"\n\n[[site]]\nadresse = \"youtube.com\"\n[[site.element]]\ntype = \"souple\"\n\n[[site]]\nadresse = \"YouTube.com\"\n[[site.element]]\ntype = \"bouton\"\nsymbole = \"nexiste.pas\"\n\n[[element]]\ntype = \"souple\"\n";
+        let avis: Vec<String> = controler(&lire(texte).unwrap(), Some(texte)).iter().map(|a| a.to_string()).filter(|a| !a.contains(AUTORISATION)).collect();
+        assert_eq!(
+            avis,
+            [
+                "ligne 4 : adresse vide : écris un domaine comme youtube.com, ou un motif comme *.google.com/maps* ; sa barre ne sera jamais montrée",
+                "ligne 9 : écris l'adresse sans https:// : youtube.com, ou *.google.com/maps* ; sa barre ne sera jamais montrée",
+                "ligne 19 : « YouTube.com » a déjà sa barre (ligne 14) : celle-ci ne sera jamais montrée",
+                "ligne 21 : le symbole SF « nexiste.pas » n'existe pas : le bouton affichera son nom en texte",
+                "ligne 25 : cet [[element]] est écrit après un [[site]] : il va dans la barre principale ; voulais-tu [[site.element]] ?",
+            ]
+        );
+        let sans = controler(&lire(texte).unwrap(), None);
+        assert_eq!(sans[0].to_string(), "site «  » : adresse vide : écris un domaine comme youtube.com, ou un motif comme *.google.com/maps* ; sa barre ne sera jamais montrée");
     }
 
     #[test]
@@ -2157,6 +2393,7 @@ symbole = "speaker.wave.2.fill"
             include_str!("../exemples/simple.toml"),
             include_str!("../exemples/developpeur.toml"),
             include_str!("../exemples/par-application.toml"),
+            include_str!("../exemples/par-site.toml"),
             include_str!("../exemples/lanceur.toml"),
             include_str!("../exemples/meteo.toml"),
             include_str!("../exemples/mcp.toml"),
@@ -2310,7 +2547,7 @@ mod proprietes {
     /// jamais par une panique (la barre tournerait sans config, l'éditeur fermerait).
     #[test]
     fn lire_ne_panique_jamais_sur_un_toml_abime() {
-        let mut textes: Vec<String> = [PAR_DEFAUT, BARRE_COMPLETE, include_str!("../exemples/par-application.toml"), include_str!("../exemples/lanceur.toml")]
+        let mut textes: Vec<String> = [PAR_DEFAUT, BARRE_COMPLETE, include_str!("../exemples/par-application.toml"), include_str!("../exemples/par-site.toml"), include_str!("../exemples/lanceur.toml")]
             .map(String::from)
             .into();
         textes.extend((1000..1040).map(|g| ecrire(&Hasard::new(g).barre()).unwrap()));

@@ -8,6 +8,7 @@ mod autotest;
 mod batterie;
 mod curseurs;
 mod elements;
+pub(super) mod onglet;
 mod plateau;
 mod rafraichi;
 mod vues;
@@ -30,6 +31,7 @@ pub(crate) use elements::{debordement, largeur_barre};
 /// Pour `config::controler` et l'export : bornes, `{valeur}` et lecture des curseurs et des choix.
 pub(crate) use curseurs::{bornes, contient_valeur, LECTURE_DEFAUT, LECTURE_MIN};
 pub(crate) use vues::{controler_image, icone_app, image, reduire, symbole};
+pub(crate) use onglet::navigateurs_refuses;
 #[cfg(test)]
 pub(crate) use vues::{memoire_max, png_annonce};
 /// Pour `sources` : ses processus (`curl`, commandes, serveurs MCP) meurent avec la barre, comme les scripts.
@@ -60,6 +62,8 @@ struct Etat {
     barres: Vec<Id>,
     /// Une barre par `[[application]]` de la config, dans le même ordre.
     applis: Vec<Id>,
+    /// Une barre par `[[site]]`, dans le même ordre.
+    sites: Vec<Id>,
     rafraichis: Vec<Rafraichi>,
     /// Scripts en cours, tués quand la barre est remplacée.
     processus: Processus,
@@ -78,7 +82,7 @@ struct Etat {
 /// Les barres et formateurs créés à +1 sont à `Etat` : les remplacer libère toute l'ancienne barre (items, boutons, images).
 impl Drop for Etat {
     fn drop(&mut self) {
-        self.barres.iter().chain(&self.applis).for_each(|&b| vues::lacher(b));
+        self.barres.iter().chain(&self.applis).chain(&self.sites).for_each(|&b| vues::lacher(b));
         for r in &self.rafraichis {
             if let Rafraichi::Heure { formateur, .. } = r {
                 vues::lacher(*formateur);
@@ -96,6 +100,12 @@ thread_local! {
     /// Autotest écran verrouillé : `loginwindow` garde le premier plan, l'app active est alors simulée.
     static APP_SIMULEE: RefCell<Option<(String, String)>> = const { RefCell::new(None) };
     static RECHARGES: RefCell<Option<Receiver<Result<Barre, String>>>> = const { RefCell::new(None) };
+    /// Bundle id du navigateur au premier plan dont l'onglet est suivi (seulement avec un `[[site]]` dans la config).
+    static NAVIGATEUR: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// « hôte/chemin » de son onglet actif, en mémoire seulement.
+    static PAGE: RefCell<Option<String>> = const { RefCell::new(None) };
+    /// Navigateurs dont macOS refuse l'onglet (-1743) : badge « ⚠ site » sur la base quand l'un d'eux est devant.
+    static REFUSES: RefCell<Vec<String>> = const { RefCell::new(Vec::new()) };
 }
 
 define_class!(
@@ -150,6 +160,12 @@ define_class!(
         }
 
         /// `NSWorkspaceDidLaunchApplicationNotification` / `…DidTerminate…` : le point des lanceurs.
+        /// Le fil des onglets a lu une autre page (ou une erreur) pour le navigateur au premier plan.
+        #[unsafe(method(ongletChange:))]
+        fn onglet_change(&self, _rien: Id) {
+            onglet_lu();
+        }
+
         #[unsafe(method(appLanceeOuQuittee:))]
         fn app_lancee_ou_quittee(&self, _notification: Id) {
             ETAT.with_borrow(|e| {
@@ -290,30 +306,136 @@ pub(super) fn app_active() -> (String, String) {
     }
 }
 
-/// La barre de base : celle de l'`[[application]]` qui désigne l'app au premier plan, sinon la principale.
+/// La barre de base : celle du `[[site]]` de l'onglet actif (navigateur au premier plan), sinon celle de
+/// l'`[[application]]` qui désigne l'app au premier plan, sinon la principale.
 fn base() -> Option<Id> {
     ETAT.with_borrow(|e| {
         let e = e.as_ref()?;
-        if e.applis.is_empty() {
+        if e.applis.is_empty() && e.sites.is_empty() {
             return Some(e.barres[0]);
         }
         let (bundle, nom) = app_active();
-        Some(e.config.application_pour(&bundle, &nom).map_or(e.barres[0], |k| e.applis[k]))
+        let page = PAGE.with_borrow(Clone::clone);
+        Some(match e.config.base_pour(&bundle, &nom, page.as_deref()) {
+            crate::config::Base::Site(k) => e.sites[k],
+            crate::config::Base::Application(k) => e.applis[k],
+            crate::config::Base::Principale => e.barres[0],
+        })
     })
 }
 
 /// Montre la barre de l'app au premier plan (appelée par l'observateur de `NSWorkspace`, et par l'autotest quand il simule l'app). Une sous-barre ouverte reste jusqu'à son ✕, qui ramène alors la bonne base ;
 /// sous la barre d'Apple, seul le contenu change, sans nouvelle présentation.
 pub(super) fn suivre_app() {
-    mesurer("app activée → barre de l'app montrée", suivre);
+    mesurer("app activée → barre de l'app montrée", || {
+        suivre_navigateur();
+        suivre();
+    });
 }
 
-fn suivre() {
-    let Some(voulue) = base() else { return };
+/// Montre la base voulue si la barre montrée est une base (une sous-barre ouverte reste) ; vrai si elle a changé.
+fn suivre() -> bool {
+    let Some(voulue) = base() else { return false };
     let courante = COURANTE.get();
-    let sur_une_base = ETAT.with_borrow(|e| e.as_ref().is_some_and(|e| courante == e.barres[0] || e.applis.contains(&courante)));
+    let sur_une_base = ETAT.with_borrow(|e| e.as_ref().is_some_and(|e| courante == e.barres[0] || e.applis.contains(&courante) || e.sites.contains(&courante)));
     if courante != voulue && sur_une_base {
         montrer(voulue);
+        return true;
+    }
+    false
+}
+
+/// Suit l'onglet de l'app au premier plan si c'est un navigateur connu et que la config a un `[[site]]` ; sinon
+/// arrête la lecture (le fil dort). Appelée au changement d'app et à chaque `installer`.
+fn suivre_navigateur() {
+    let avec_sites = ETAT.with_borrow(|e| e.as_ref().is_some_and(|e| !e.config.sites.is_empty()));
+    let voulu = avec_sites.then(|| app_active().0).filter(|b| onglet::navigateur(b).is_some());
+    if NAVIGATEUR.with_borrow(|n| *n != voulu) {
+        PAGE.set(None);
+        NAVIGATEUR.set(voulu.clone());
+        onglet::suivre(voulu);
+    }
+    badge_site();
+}
+
+/// Une lecture du fil des onglets : la page (ou l'erreur) du navigateur suivi ; une lecture d'un navigateur quitté entre-temps est ignorée.
+fn onglet_lu() {
+    let Some((bundle, lecture)) = onglet::derniere().filter(|_| !onglet::SIMULE.load(Ordering::Relaxed)) else { return };
+    recevoir_page(&bundle, lecture);
+}
+
+/// Applique une lecture (le fil, ou l'autotest qui simule) : page retenue, refus noté, base suivie.
+pub(super) fn recevoir_page(bundle: &str, lecture: onglet::Lecture) {
+    if NAVIGATEUR.with_borrow(|n| n.as_deref() != Some(bundle)) {
+        return;
+    }
+    let refuse = lecture == Err(onglet::REFUSE);
+    REFUSES.with_borrow_mut(|r| {
+        r.retain(|b| b != bundle);
+        if refuse {
+            r.push(bundle.to_string());
+        }
+    });
+    PAGE.set(lecture.ok().flatten());
+    badge_site();
+    if mesurer("onglet lu → barre du site montrée", suivre) && mesure() {
+        let ms = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis();
+        eprintln!("mesure : base changée par l'onglet à {ms}");
+    }
+}
+
+/// Montre le badge « ⚠ site » sur les bases (principale, barres d'app) tant que le navigateur au premier plan refuse
+/// son onglet à Tactile, et le retire sinon (son identifiant entre ou sort des `defaultItemIdentifiers`).
+fn badge_site() {
+    let visible = NAVIGATEUR.with_borrow(|n| n.as_ref().is_some_and(|b| REFUSES.with_borrow(|r| r.contains(b))));
+    let ident = texte(&format!("{PREFIXE}.site-refuse"));
+    let change = ETAT.with_borrow(|e| {
+        let Some(e) = e.as_ref().filter(|e| !e.config.sites.is_empty()) else { return false };
+        let mut change = false;
+        for &barre in std::iter::once(&e.barres[0]).chain(&e.applis) {
+            unsafe {
+                let idents: Id = msg_send![barre, defaultItemIdentifiers];
+                let present: bool = msg_send![idents, containsObject: &*ident];
+                if present == visible {
+                    continue;
+                }
+                let liste: Id = msg_send![idents, mutableCopy];
+                if visible {
+                    let _: () = msg_send![liste, insertObject: &*ident, atIndex: 0usize];
+                } else {
+                    let _: () = msg_send![liste, removeObject: &*ident];
+                }
+                let _: () = msg_send![barre, setDefaultItemIdentifiers: liste];
+                vues::lacher(liste);
+            }
+            change = true;
+        }
+        change && (COURANTE.get() == e.barres[0] || e.applis.contains(&COURANTE.get()))
+    });
+    if change {
+        montrer(COURANTE.get());
+    }
+}
+
+/// Ajoute à chaque base (principale, barres d'app) le bouton « ⚠ site », hors de ses `defaultItemIdentifiers` :
+/// `badge_site` l'y met quand il faut. Un appui ouvre Réglages Système sur l'Automatisation.
+fn preparer_badge_site(etat: &mut Etat) {
+    let ident = format!("{PREFIXE}.site-refuse");
+    let bases: Vec<Id> = std::iter::once(etat.barres[0]).chain(etat.applis.iter().copied()).collect();
+    for barre in bases {
+        let index = elements::enregistrer(etat, Some(Commande::Systeme(Action::Url(onglet::REGLAGES.into()))), None);
+        let b = elements::bouton(Some("⚠ site"), None, index, false, "");
+        etat.controles.push(("site refusé".into(), b));
+        unsafe {
+            if let Some(orange) = vues::couleur("#8A4B00") {
+                let _: () = msg_send![b, setBezelColor: orange];
+            }
+            let item = vues::item_vue(&ident, b);
+            let items: Id = msg_send![barre, templateItems];
+            let items: Id = msg_send![items, setByAddingObject: item];
+            vues::lacher(item);
+            let _: () = msg_send![barre, setTemplateItems: items];
+        }
     }
 }
 
@@ -362,7 +484,7 @@ fn afficher_erreur(message: &str) {
             return etat.erreur.iter().for_each(|&b| vues::titre(b, &libelle));
         }
         let ident = format!("{PREFIXE}.erreur");
-        let bases: Vec<Id> = std::iter::once(etat.barres[0]).chain(etat.applis.iter().copied()).collect();
+        let bases: Vec<Id> = std::iter::once(etat.barres[0]).chain(etat.applis.iter().copied()).chain(etat.sites.iter().copied()).collect();
         for &barre in &bases {
             // Une vue n'a qu'un parent : un bouton par barre.
             let index = elements::enregistrer(etat, None, None);
@@ -411,6 +533,7 @@ fn installer(config: &Barre) {
         lanceurs: Vec::new(),
         barres: vec![std::ptr::null_mut()],
         applis: Vec::new(),
+        sites: Vec::new(),
         rafraichis: Vec::new(),
         processus: Processus::new(std::sync::Mutex::new(Some(Vec::new()))),
         prochain_media: Instant::now(),
@@ -426,6 +549,14 @@ fn installer(config: &Barre) {
         barre_touch(&prefixe, items)
     }).collect();
     etat.applis = applis;
+    etat.sites = config.sites.iter().enumerate().map(|(k, site)| {
+        let prefixe = format!("{PREFIXE}.site{}", k + 1);
+        let items = construire(&site.elements_avec(&config.elements), &prefixe, &mut etat);
+        barre_touch(&prefixe, items)
+    }).collect();
+    if !config.sites.is_empty() {
+        preparer_badge_site(&mut etat);
+    }
     let a_presenter = std::env::var("TACTILE_OUVRIR").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|k| etat.barres.get(k).copied());
     let principale = etat.barres[0];
     ETAT.with_borrow_mut(|place| {
@@ -434,6 +565,7 @@ fn installer(config: &Barre) {
         }
         *place = Some(etat);
     });
+    suivre_navigateur();
     presenter(a_presenter.or(base()).unwrap_or(principale));
     // Les sources ne lisent rien (réseau, serveurs MCP) avant que la barre soit présentée.
     ETAT.with_borrow_mut(|etat| {

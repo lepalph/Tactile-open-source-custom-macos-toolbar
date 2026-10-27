@@ -56,17 +56,24 @@ pub(super) fn fusionner(mut mienne: Barre, mut recue: Barre) -> Barre {
             None => mienne.applications.push(app),
         }
     }
+    for mut site in recue.sites {
+        chaque_source(&mut site.elements, &mut renommer);
+        match mienne.sites.iter_mut().find(|s| s.adresse.trim().to_lowercase() == site.adresse.trim().to_lowercase()) {
+            Some(deja) => deja.elements.extend(site.elements),
+            None => mienne.sites.push(site),
+        }
+    }
     mienne
 }
 
-/// Barre toute faite : elle remplace la principale ; les barres d'application de l'utilisateur restent, avec les
+/// Barre toute faite : elle remplace la principale ; les barres d'application et de site de l'utilisateur restent, avec les
 /// `[[source]]` qu'elles citent (sinon elles afficheraient « ⚠ source »). Les sources de la barre toute faite passent
 /// devant ; une source gardée au même nom qu'elle n'est pas doublée.
 pub(super) fn prereglage(actuelle: Option<Barre>, toute_faite: Barre) -> Barre {
     let Some(mut actuelle) = actuelle else { return toute_faite };
     let mut citees = Vec::new();
-    for app in &mut actuelle.applications {
-        chaque_source(&mut app.elements, &mut |s| citees.push(s.clone()));
+    for elements in actuelle.applications.iter_mut().map(|a| &mut a.elements).chain(actuelle.sites.iter_mut().map(|s| &mut s.elements)) {
+        chaque_source(elements, &mut |s| citees.push(s.clone()));
     }
     let mut sources = toute_faite.sources;
     for s in actuelle.sources {
@@ -74,7 +81,7 @@ pub(super) fn prereglage(actuelle: Option<Barre>, toute_faite: Barre) -> Barre {
             sources.push(s);
         }
     }
-    Barre { applications: actuelle.applications, sources, ..toute_faite }
+    Barre { applications: actuelle.applications, sites: actuelle.sites, sources, ..toute_faite }
 }
 
 /// Un avis de `config::controler`, dit pour quelqu'un qui n'a jamais vu le fichier : ni numéro de ligne, ni
@@ -137,6 +144,7 @@ pub(super) fn execute_du_code(barre: &Barre) -> bool {
     }
     dans(&barre.elements, &code)
         || barre.applications.iter().any(|a| dans(&a.elements, &code))
+        || barre.sites.iter().any(|s| dans(&s.elements, &code))
         || barre.sources.iter().any(|s| s.commande.is_some() || s.mcp.as_ref().is_some_and(|m| m.commande.is_some()))
 }
 
@@ -194,14 +202,17 @@ mod tests {
         let mienne = barre(
             "[[element]]\ntype = \"heure\"\n[[element]]\ntype = \"texte\"\nsource = \"meteo\"\n\
              [[source]]\nnom = \"meteo\"\nhttp = \"https://a.example/\"\n\
-             [[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n",
+             [[application]]\napp = \"Safari\"\n[[application.element]]\ntype = \"souple\"\n\
+             [[site]]\nadresse = \"youtube.com\"\n[[site.element]]\ntype = \"souple\"\n",
         );
         let recue = barre(
             "masquer_control_strip = false\n[[element]]\ntype = \"texte\"\nsource = \"meteo\"\n\
              [[element]]\ntype = \"groupe\"\n[[element.element]]\ntype = \"bouton\"\ntexte = \"{x}\"\nsource = \"disque\"\n\
              [[source]]\nnom = \"meteo\"\nhttp = \"https://b.example/\"\n[[source]]\nnom = \"disque\"\ncommande = \"df\"\n\
              [[application]]\napp = \"safari\"\n[[application.element]]\ntype = \"texte\"\nsource = \"meteo\"\n\
-             [[application]]\napp = \"Figma\"\n[[application.element]]\ntype = \"heure\"\n",
+             [[application]]\napp = \"Figma\"\n[[application.element]]\ntype = \"heure\"\n\
+             [[site]]\nadresse = \"YouTube.com\"\n[[site.element]]\ntype = \"texte\"\nsource = \"meteo\"\n\
+             [[site]]\nadresse = \"mail.google.com\"\n[[site.element]]\ntype = \"heure\"\n",
         );
         let f = fusionner(mienne.clone(), recue);
         assert!(f.masquer_control_strip, "le réglage de ma barre reste");
@@ -213,6 +224,8 @@ mod tests {
         assert!(matches!(&f.elements[3], Element::Groupe { elements, .. } if matches!(&elements[0], Element::Bouton { source: Some(s), .. } if s == "disque")));
         assert_eq!(f.applications.len(), 2, "Safari fusionnée sans casse, Figma ajoutée");
         assert!(matches!(&f.applications[0].elements[1], Element::Texte { source: Some(s), .. } if s == "meteo 2"));
+        assert_eq!(f.sites.len(), 2, "youtube.com fusionné sans casse, mail.google.com ajouté");
+        assert!(matches!(&f.sites[0].elements[1], Element::Texte { source: Some(s), .. } if s == "meteo 2"));
         assert!(config::controler(&f, None).iter().all(|a| !a.message.contains("aucune [[source]]")));
         // Une source identique n'est pas doublée.
         let deux = fusionner(mienne.clone(), mienne.clone());
@@ -227,13 +240,15 @@ mod tests {
             "[[element]]\ntype = \"texte\"\nsource = \"meteo\"\n\
              [[source]]\nnom = \"meteo\"\nhttp = \"https://a.example/\"\n[[source]]\nnom = \"disque\"\ncommande = \"df\"\n\
              [[application]]\napp = \"DaVinci Resolve\"\n[[application.element]]\ntype = \"groupe\"\n\
-             [[application.element.element]]\ntype = \"texte\"\nsource = \"disque\"\n",
+             [[application.element.element]]\ntype = \"texte\"\nsource = \"disque\"\n\
+             [[source]]\nnom = \"uptime\"\ncommande = \"uptime\"\n\
+             [[site]]\nadresse = \"youtube.com\"\n[[site.element]]\ntype = \"texte\"\nsource = \"uptime\"\n",
         );
         let simple = barre(include_str!("../../exemples/simple.toml"));
         let b = prereglage(Some(actuelle), simple.clone());
         assert_eq!(b.elements, simple.elements);
-        assert_eq!(b.applications.len(), 1);
-        assert_eq!(b.sources.iter().map(|s| s.nom.as_str()).collect::<Vec<_>>(), ["disque"], "meteo n'est plus citée");
+        assert_eq!((b.applications.len(), b.sites.len()), (1, 1));
+        assert_eq!(b.sources.iter().map(|s| s.nom.as_str()).collect::<Vec<_>>(), ["disque", "uptime"], "meteo n'est plus citée");
         assert!(config::controler(&b, None).iter().all(|a| !a.message.contains("aucune [[source]]")), "{:?}", config::controler(&b, None));
         assert_eq!(prereglage(None, simple.clone()), simple);
     }
@@ -292,7 +307,7 @@ mod tests {
         let Element::Texte { source: Some(s), symbole_selon: Some(sym), couleur_selon: Some(_), .. } = &element else { panic!("{element:?}") };
         assert_eq!(s, "Météo Lyon");
         assert_eq!(sym.valeurs.get("0").map(String::as_str), Some("sun.max.fill"));
-        let b = Barre { masquer_control_strip: true, elements: vec![element], applications: vec![], sources: vec![source] };
+        let b = Barre { masquer_control_strip: true, elements: vec![element], applications: vec![], sites: vec![], sources: vec![source] };
         assert!(config::controler(&b, None).is_empty(), "{:?}", config::controler(&b, None));
         assert!(meteo("m", 91.0, 0.0).is_err());
         assert!(meteo("m", f64::NAN, 0.0).is_err());
@@ -303,7 +318,7 @@ mod tests {
     #[test]
     fn barre_meteo_importee_liste_sa_source_http() {
         let (source, element) = meteo("Météo Lyon", 45.74846, 4.84671).unwrap();
-        let b = Barre { masquer_control_strip: true, elements: vec![element], applications: vec![], sources: vec![source] };
+        let b = Barre { masquer_control_strip: true, elements: vec![element], applications: vec![], sites: vec![], sources: vec![source] };
         let paquet = super::super::partage::ouvrir_octets(config::ecrire(&b).unwrap().into_bytes(), None).unwrap();
         let http = paquet.commandes.iter().find(|c| c.valeur.starts_with("https://api.open-meteo.com/")).expect("source http listée");
         assert_eq!(http.ou.fr, "Source « Météo Lyon »");

@@ -26,7 +26,7 @@ Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, br
 - Your bar lives in `~/.config/tactile/barre.toml`, one `[[item]]` per item. Save the file and the bar updates within a second. A mistake leaves your current bar in place, and the error names the line.
 - The editor window (`tactile --customize`) shows the Touch Bar at real size. You drag items around, pick symbols and colors, and it writes that same file.
 - A `type = "script"` item runs any shell command every `interval` seconds and shows what it prints. If the command prints JSON, it also picks its own symbol and colors.
-- An `[[application]]` table gives an app its own bar while it is in front. With `inherit = true`, the edges of your main bar (sliders, clock) stay put.
+- An `[[application]]` table gives an app its own bar while it is in front. With `inherit = true`, the edges of your main bar (sliders, clock) stay put. A `[[site]]` table does the same for a website: on YouTube, your own play and skip buttons.
 - A button can send a shortcut (`action = { key = "cmd+shift+4" }`, resolved on your keyboard layout, AZERTY included), open an app or a URL, or run AppleScript or a shell command. `long_press` gives it a second action.
 - A `launcher` shows an app's real icon, with a dot while the app runs; put a few in a `group` and you have an app drawer. A `[[source]]` feeds live text from a URL, a command or an MCP tool (the weather, a build status), and API keys stay in the macOS keychain.
 
@@ -341,6 +341,7 @@ French is the reference form, but you can write the whole file in English, which
 | `url` | `url` |
 | `applescript` | `applescript` |
 | `herite` | `inherit` |
+| `adresse` | `address` |
 | `lanceur` | `launcher` |
 | `mission_control` | `mission_control` |
 | `fenetres_app` | `app_windows` |
@@ -498,6 +499,29 @@ action = { key = "cmd+t" }
 - An open sub-bar (slider, group) stays put when you switch apps; its ✕ brings back the bar of the frontmost app. The ✳ icon also brings back the current app's bar.
 
 Full example: [exemples/par-application.toml](exemples/par-application.toml). The "Customize my bar" window only edits the main bar, but it keeps your `[[application]]` tables when it saves.
+
+## A bar per website
+
+A `[[site]]` table gives a website its own bar: while the active tab of the browser in front is on that site, its bar wins over the app's bar and over the main bar.
+
+```toml
+[[site]]
+address = "youtube.com"         # the domain and its subdomains; or a pattern: "*.google.com/maps*"
+inherit = true                  # like [[application]]
+
+[[site.item]]
+type = "button"
+symbol = "playpause.fill"
+action = { key = "k" }
+```
+
+- `address`: a domain, which also covers its subdomains (`youtube.com` matches `www.youtube.com` and `m.youtube.com`, not `notyoutube.com`), optionally followed by the start of a path (`github.com/lepalph`). With `*`, a pattern over "domain/path": `*.google.com/maps*` (`*` matches anything, even nothing). Case-insensitive; no `https://`, and what follows `?` or `#` is never read. The first matching `[[site]]` wins. `tactile --check` warns about an empty address, an invalid pattern and two `[[site]]` tables for the same address.
+- Browsers: Safari, Google Chrome, Arc, Brave, Microsoft Edge, Vivaldi and Chromium. Tactile reads the active tab only while one of them is in front and your file has a `[[site]]`: every 0.5 s, through AppleScript run inside Tactile on a thread of its own (1 s at most per read). Switching to another app stops the reads.
+- Permission: the first time, macOS asks "Tactile wants to control Safari" (Automation). Answer OK. If you said no, the site bars stay hidden in that browser, its bar shows a small "⚠ site" button that opens the right settings pane, and `tactile --check` says so: System Settings → Privacy & Security → Automation → Tactile.
+- Privacy: Tactile keeps only "domain/path" of the active tab, in memory. The address is never logged (only the domain of a refused or unreadable browser is named), never written to disk and never sent anywhere. An imported bar lists each of its `[[site]]` tables before you accept it ("changes the bar on youtube.com; reads the address of your browsers' active tab").
+- An open sub-bar stays put when the tab changes; its ✕ brings back the current site's bar.
+
+Full example (YouTube: play/pause `k`, forward `l`, back `j`, full screen `f`; Gmail: new message `c`): [exemples/par-site.toml](exemples/par-site.toml). The editor keeps your `[[site]]` tables when it saves; editing them there will come later.
 
 ## Claude voice extra
 
