@@ -10,7 +10,7 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ### Changed
 
-- Startup animation: the ✳ Tactile text gives way to the logo (the icon's three pills) in the middle of the bar, which splits apart; the items then come out from the center toward the edges (about 0.9 s, same "snappy" curve as the editor).
+- Startup animation: the ✳ Tactile text gives way to the logo (the icon’s three pills): it appears on the left, backs up, then shoots across the bar like a rocket with an orange trail; the items then appear in its wake from left to right (about 1 s).
 
 ## [0.4.1] - 2026-10-27
 

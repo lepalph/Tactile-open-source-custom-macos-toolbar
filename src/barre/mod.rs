@@ -602,7 +602,7 @@ fn installer(config: &Barre) {
     let premiere = PREMIERE.replace(false);
     // Les autotests et TACTILE_OUVRIR attendent la barre tout de suite ; « Réduire les animations » est respecté.
     if premiere && config.animation_demarrage && a_presenter.is_none() && std::env::var_os("TACTILE_AUTOTEST").is_none() && !demarrage::mouvement_reduit() {
-        presenter(demarrage::splash());
+        presenter(demarrage::splash(elements::largeur_barre(config.masquer_control_strip)));
         EN_SPLASH.set(true);
         demarrage::programmer_fin();
     } else {

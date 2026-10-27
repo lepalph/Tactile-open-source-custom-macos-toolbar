@@ -179,7 +179,7 @@ The French keys are the canonical form, the one the editor writes and the error 
 
 ### Top-level setting
 
-`animation_demarrage` / `startup_animation` (`true` by default) plays a short animation (about 0.9 s) when Tactile starts, not on each reload: the logo appears in the middle of the bar and splits apart, then the items come out from the center toward the edges. It is skipped when macOS "Reduce motion" is on, and can be turned off with the switch at the top of the editor. An animated GIF (`image = "~/x.gif"`, at most 60 frames and 2 MB) animates on the bar; a GIF used as a template is not tinted.
+`animation_demarrage` / `startup_animation` (`true` by default) plays a short animation (about 0.9 s) when Tactile starts, not on each reload: the logo appears on the left and shoots across the bar like a rocket, then the items appear in its wake from left to right. It is skipped when macOS "Reduce motion" is on, and can be turned off with the switch at the top of the editor. An animated GIF (`image = "~/x.gif"`, at most 60 frames and 2 MB) animates on the bar; a GIF used as a template is not tinted.
 
 `masquer_control_strip` / `hide_control_strip`, at the top of the file, `true` by default. `true` gives your bar the full width (1004 points). `false` keeps Apple's Control Strip on the right, which leaves 685 points and adds a system ✕ on the left.
 
