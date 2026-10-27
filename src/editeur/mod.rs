@@ -8,7 +8,7 @@
 //! (comme `choisirImage` sans le sélecteur : pour le pilote `TACTILE_EDITEUR_JS`), `images { chemins }`,
 //! `exporter { barre, zip? }` (NSSavePanel), `exporterVers { barre, chemin }`, `importer` (NSOpenPanel),
 //! `importerBarre { chemin }`, `deposerBarre { nom, donnees }`, `confirmerImport { ajouter?, barre? }`, `annulerImport`,
-//! `mesurer { barre }`, `chercherVille { nom, langue }`, `meteo { nom, latitude, longitude }`, `ouvrirReglages`. Un chemin
+//! `ajouterLien { adresse }`, `mesurer { barre }`, `chercherVille { nom, langue }`, `meteo { nom, latitude, longitude }`, `ouvrirReglages`. Un chemin
 //! venu de la page n'est suivi que s'il passe `chemin_permis` (pilote, ou fichier rendu par NSSavePanel).
 //! Rust → JS : `tactile.charger(barre, aPrecedent)`, `tactile.illisible(message, extrait, aPrecedent)`,
 //! `tactile.glyphes({nom: dataURL|null})`, `tactile.iconesApps({nom: dataURL|null})`, `tactile.enregistre(manuel, aPrecedent, avis)`, `tactile.revenu()`,
@@ -16,11 +16,12 @@
 //! `tactile.appVerifiee(nom, trouvee, suggestion, localise)`, `tactile.demanderFermeture()`, `tactile.deborde(caches)`,
 //! `tactile.villes(liste|null, erreur)`, `tactile.meteoPrete(source, element)`,
 //! `tactile.imageChoisie(chemin, dataURL)`, `tactile.imageRefusee(texte)`, `tactile.images({chemin: dataURL|null})`,
-//! `tactile.exportAvertir(logos)`, `tactile.exporte(nom, logos, avis)`, `tactile.importPret(apercu)`,
+//! `tactile.lienPret(element)`, `tactile.lienRefuse(texte)`, `tactile.exportAvertir(logos)`, `tactile.exporte(nom, logos, avis)`, `tactile.importPret(apercu)`,
 //! `tactile.importe(manuel, aPrecedent)`, `tactile.partageRefuse({fr, en})`.
 
 mod barres;
 mod icones;
+mod liens;
 mod partage;
 
 pub use partage::{exporter_cli, importer_cli};
@@ -189,6 +190,7 @@ fn recevoir(message: Value) {
                 .map_or(0, |(_, n)| n);
             js(&format!("tactile.deborde({caches})"));
         }
+        "ajouterLien" => ajouter_lien(message["adresse"].as_str().unwrap_or("")),
         "chercherVille" => chercher_ville(message["nom"].as_str().unwrap_or(""), message["langue"].as_str().unwrap_or("fr")),
         "meteo" => {
             let (lat, lon) = (message["latitude"].as_f64().unwrap_or(f64::NAN), message["longitude"].as_f64().unwrap_or(f64::NAN));
@@ -669,6 +671,21 @@ fn chercher_ville(nom: &str, langue: &str) {
         let code = match crate::sources::http::requete(&adresse, &[], None, std::time::Duration::from_secs(8), &processus).and_then(|r| r.valeur()) {
             Ok(v) => format!("tactile.villes({}, null)", Value::Array(barres::villes(&v))),
             Err(e) => format!("tactile.villes(null, {})", json!(e)),
+        };
+        let code = texte(&code);
+        unsafe { let _: () = msg_send![pont as Id, performSelectorOnMainThread: sel!(executer:), withObject: &*code, waitUntilDone: Bool::NO]; }
+    });
+}
+
+/// « Ajouter un lien » : la page et son icône sont lues sur un autre fil (jusqu'à quelques secondes),
+/// réponse `tactile.lienPret(element)` ou `tactile.lienRefuse(texte)` sur le fil principal.
+fn ajouter_lien(adresse: &str) {
+    let (adresse, dossier, pont) = (adresse.to_string(), icones::dossier(&config::chemin()), PONT.get() as usize);
+    std::thread::spawn(move || {
+        let processus = crate::barre::Processus::new(std::sync::Mutex::new(Some(Vec::new())));
+        let code = match liens::recuperer(&adresse, &dossier, &processus) {
+            Ok(element) => format!("tactile.lienPret({})", json!(element)),
+            Err(e) => format!("tactile.lienRefuse({})", json!(e)),
         };
         let code = texte(&code);
         unsafe { let _: () = msg_send![pont as Id, performSelectorOnMainThread: sel!(executer:), withObject: &*code, waitUntilDone: Bool::NO]; }
@@ -1341,6 +1358,35 @@ mod tests {
             let json = serde_json::to_string(&barre).unwrap();
             assert_eq!(serde_json::from_str::<Barre>(&json).unwrap(), barre, "{json}");
         }
+    }
+
+    /// Ce que la page envoie après avoir créé et édité une barre Chrome (avec un lien), une barre de site et un lien
+    /// ajouté à la principale : tout revient du fichier tel quel, `herite` compris.
+    #[test]
+    fn barres_d_app_et_de_site_editees_aller_retour() {
+        let lien = |url: &str, texte: &str| json!({ "type": "bouton", "texte": texte, "symbole": "globe", "action": { "url": url } });
+        let json = json!({
+            "masquer_control_strip": true,
+            "element": [{ "type": "heure" }, { "type": "souple" }, { "type": "batterie" }],
+            "application": [{ "app": "Google Chrome", "herite": true, "element": [lien("https://www.youtube.com", "YouTube"), { "type": "bouton", "texte": "Cap", "action": { "touche": "cmd+shift+4" } }] }],
+            "site": [{ "adresse": "youtube.com", "herite": false, "element": [lien("https://www.youtube.com/feed/subscriptions", "Abonnements")] }]
+        });
+        let dossier = dossier_essai("barres-editees");
+        let chemin = dossier.join("barre.toml");
+        enregistrer(&chemin, json.clone()).unwrap();
+        let relue = config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap();
+        assert_eq!((relue.applications.len(), relue.sites.len()), (1, 1));
+        assert!(relue.applications[0].herite && !relue.sites[0].herite);
+        assert_eq!(serde_json::to_value(&relue).unwrap()["application"][0]["element"][1]["action"]["touche"], "cmd+shift+4");
+        assert_eq!(serde_json::to_value(&relue).unwrap()["site"][0]["element"][0]["action"]["url"], "https://www.youtube.com/feed/subscriptions");
+        // Rouvert puis réenregistré sans rien toucher : identique.
+        enregistrer(&chemin, serde_json::to_value(&relue).unwrap()).unwrap();
+        assert_eq!(config::lire(&std::fs::read_to_string(&chemin).unwrap()).unwrap(), relue);
+        // Une barre d'app vide est refusée avec un message qui dit laquelle.
+        let mut vide = json.clone();
+        vide["application"][0]["element"] = json!([]);
+        assert!(enregistrer(&chemin, vide).unwrap_err().contains("Google Chrome"));
+        std::fs::remove_dir_all(&dossier).unwrap();
     }
 
     /// Ce que l'éditeur ne sait pas régler (image, keycode, [[application]]…) doit traverser JSON → Barre → TOML sans se perdre.

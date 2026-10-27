@@ -6,6 +6,9 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ### Added
 
+- Editor: a "Bars" section in the sidebar lists the main bar, every `[[application]]` and every `[[site]]`; each one is previewed and edited like the main bar (inherited items of the main bar are dimmed), with "New app bar…" and "New site bar…" (an `inherit` switch) and a confirmed delete.
+- Editor: "Web link…" turns an address (or one of ten common sites) into a `{ url }` button. Tactile reads the page title and its `apple-touch-icon`, then favicon, once and directly from the site (https or `http://localhost`, 10 s, 1 MB, the image is checked like any logo, no third-party service), and keeps the icon in `icones/`. No icon found: the `globe` symbol.
+- Editor: on a `touche` action, "Record a shortcut" captures the combination you type and writes it (`cmd+shift+4`); Esc cancels.
 - Free-standing sliders: a `slider` (also `curseur`) can drive anything a command can set, with `set` (`regler`, `{valeur}` becomes the number, run at most every 0.1 s while dragging and once more on release) and `read` (`lire`, run when the slider opens and every `every` seconds while open), `min`, `max`, `step`. `{valeur}` is always a number formatted by Tactile. Templates in `exemples/curseurs.toml`: Spotify and Music volume (AppleScript), an external display through `m1ddc`.
 - Slider styles for every slider (brightness, volume, free): `classic` (Apple's), and six drawn by Tactile that follow the finger without rebuilding the bar: `grid`, `gauge`, `dots`, `equalizer`, `stepper` (big digits, − and +, long press repeats), `dial` (compact ring). Per-level `colors` with `thresholds`, `notches`, `haptic` feedback at each notch.
 - `choice` element (`choix`): a segmented picker; the tapped option replaces `{valeur}` in the action, single-quoted for the shell or double-quoted for AppleScript; optional `read` selects the current option.

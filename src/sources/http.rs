@@ -30,7 +30,7 @@ impl Reponse {
 }
 
 /// Une valeur entre guillemets pour le fichier de config de curl.
-fn guillemets(texte: &str) -> String {
+pub(crate) fn guillemets(texte: &str) -> String {
     format!("\"{}\"", texte.replace('\\', "\\\\").replace('"', "\\\""))
 }
 

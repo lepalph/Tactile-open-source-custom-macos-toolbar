@@ -8,10 +8,10 @@ use objc2_foundation::NSString;
 use std::path::{Path, PathBuf};
 
 /// Ce que le sélecteur propose et ce que la copie accepte.
-pub(super) const FORMATS: [&str; 10] = ["png", "jpg", "jpeg", "heic", "gif", "tif", "tiff", "svg", "pdf", "icns"];
+pub(super) const FORMATS: [&str; 11] = ["png", "jpg", "jpeg", "heic", "gif", "tif", "tiff", "svg", "pdf", "icns", "ico"];
 
 /// Lus par `NSImage` mais pas affichés tels quels par la barre : convertis en PNG 2× (40 px de haut) à la copie.
-const A_CONVERTIR: [&str; 3] = ["svg", "pdf", "icns"];
+const A_CONVERTIR: [&str; 4] = ["svg", "pdf", "icns", "ico"];
 
 /// `icones/` à côté du fichier de config : `~/.config/tactile/icones`, ou le voisin de `TACTILE_CONFIG`.
 pub(super) fn dossier(config: &Path) -> PathBuf {

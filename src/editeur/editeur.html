@@ -309,6 +309,22 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
 .face.segments span { padding: 0 10px; border-radius: 4px; }
 .face.segments span:first-child { background: #5a5a5e; }
 
+/* Barres par app et par site, lien web, enregistreur de raccourci */
+.palette .liste button[aria-current="true"] { background: var(--accent-plein); color: var(--accent-texte); }
+.palette .liste button[aria-current="true"] .tuile:not(.app) { background: rgb(255 255 255 / 0.25); }
+.palette .liste button { min-width: 0; }
+.palette .liste .nom-barre { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.titre-barre { margin: 0 0 8px 2px; font-weight: 600; }
+.titre-barre .legende { display: inline; margin-left: 6px; font-weight: 400; }
+.el.heritee { opacity: 0.4; pointer-events: none; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips button { min-height: 26px; padding: 0 10px; }
+dialog.formulaire { width: min(480px, calc(100vw - 32px)); }
+dialog.formulaire .encart { margin-top: 14px; }
+dialog.formulaire .etat { margin-top: 12px; }
+dialog.formulaire .etat[hidden] { display: none; }
+button[aria-pressed="true"].enregistreur { background: var(--accent-plein); color: var(--accent-texte); border-color: transparent; }
+
 @media (prefers-reduced-motion: no-preference) {
   .face, button, select, input.interrupteur, input.interrupteur::after, .segmente button { transition: background-color var(--vite), transform var(--vite), box-shadow var(--vite); }
 }
@@ -337,6 +353,7 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
 </header>
 
 <section class="apercu">
+  <p class="titre-barre" id="barre-titre"></p>
   <div class="encart">
     <div class="scene">
       <div class="touchbar" id="barre" role="listbox" aria-label="Touch Bar" aria-orientation="horizontal" aria-describedby="aide-clavier" tabindex="-1"></div>
@@ -351,6 +368,8 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
 
 <main>
   <aside class="palette">
+    <h2 data-i18n="barres"></h2>
+    <div class="liste" id="barres"></div>
     <h2 data-i18n="ajouter"></h2>
     <div class="liste" id="ajouts"></div>
     <h2 data-i18n="donnees"></h2>
@@ -365,6 +384,32 @@ dialog.import .avis { margin: 6px 0 0; padding-left: 18px; color: var(--texte2);
   <h2 id="conf-titre"></h2>
   <p id="conf-texte"></p>
   <div class="choix" id="conf-choix"></div>
+</dialog>
+
+<dialog id="nouvelle" class="formulaire" aria-labelledby="nv-titre">
+  <form id="nv-form" novalidate>
+    <h2 id="nv-titre"></h2>
+    <p id="nv-texte"></p>
+    <div class="encart">
+      <div class="ligne"><label class="nom" for="nv-nom" id="nv-label"></label><div class="ctrl"><div class="cote"><input type="text" class="moyen" id="nv-nom" spellcheck="false" autocomplete="off"><button type="button" id="nv-choisir" data-i18n="choisir"></button></div></div></div>
+      <div class="ligne"><label class="nom" for="nv-herite"><span data-i18n="herite"></span><span class="legende" data-i18n="heriteAide"></span></label><div class="ctrl"><input type="checkbox" class="interrupteur" role="switch" id="nv-herite" checked></div></div>
+    </div>
+    <p class="etat erreur" id="nv-erreur" role="alert" hidden></p>
+    <div class="choix"><button type="button" id="nv-annuler" data-i18n="annuler"></button><button type="submit" class="primaire" data-i18n="creer"></button></div>
+  </form>
+</dialog>
+
+<dialog id="lien" class="formulaire" aria-labelledby="ln-titre">
+  <form id="ln-form" novalidate>
+    <h2 id="ln-titre" data-i18n="lnTitre"></h2>
+    <p data-i18n="lnTexte"></p>
+    <div class="encart">
+      <div class="ligne"><label class="nom" for="ln-adresse" data-i18n="adresse"></label><div class="ctrl"><input type="text" class="moyen" id="ln-adresse" placeholder="youtube.com" spellcheck="false" autocomplete="off"></div></div>
+      <div class="ligne pleine"><div class="ctrl"><div class="chips" id="ln-courants" role="group" data-i18n-label="lnCourants"></div></div></div>
+    </div>
+    <p class="etat" id="ln-etat" role="status" aria-live="polite"></p>
+    <div class="choix"><button type="button" id="ln-annuler" data-i18n="annuler"></button><button type="submit" class="primaire" id="ln-ajouter" data-i18n="ajouter"></button></div>
+  </form>
 </dialog>
 
 <dialog id="import" class="import" aria-labelledby="imp-titre" aria-describedby="imp-texte">
@@ -474,6 +519,20 @@ const T = {
     aPartirDe: 'à partir de', niveauAjouter: 'Ajouter un niveau', niveauRetirer: 'Retirer un niveau',
     options: 'Options', optionAjouter: 'Ajouter une option', optionRetirer: 'Retirer', optionNom: 'Option {n}',
     choixAide: 'L’option touchée remplace {valeur} dans l’action, entre apostrophes.', choixLire: 'Commande qui lit l’option actuelle',
+    barres: 'Barres', principale: 'Principale', barrePrincipale: 'Barre principale', nouvelleApp: 'Nouvelle barre d’app…', nouvelleSite: 'Nouvelle barre de site…',
+    barreDe: 'Barre de {n}', barreSupprimer: 'Supprimer cette barre', confSupprBarre: 'Supprimer la barre de « {n} » ?',
+    confSupprBarreTexte: 'Ses éléments sont supprimés. Ta Touch Bar ne change qu’à l’enregistrement.', barreSupprimee: 'Barre de « {n} » supprimée.',
+    barreAppAide: 'Elle s’affiche quand cette app est devant les autres.',
+    barreSiteAide: 'Elle s’affiche quand l’onglet actif d’un navigateur est sur ce site. Un domaine (youtube.com), éventuellement avec un début de chemin (github.com/lepalph), ou un motif avec * (*.google.com/maps*). Sans https://.',
+    herite: 'Garder la barre principale autour', heriteAide: 'Tes éléments remplacent seulement la zone entre les deux espaces souples de la principale.',
+    heriteApercu: 'Les éléments grisés viennent de la principale.', videBarre: 'Cette barre est vide. Ajoute un élément à gauche.',
+    barreVidePasEnreg: 'La barre de « {n} » est vide : ajoute-lui un élément ou supprime-la.',
+    nvTitreApp: 'Nouvelle barre d’app', nvTitreSite: 'Nouvelle barre de site', creer: 'Créer',
+    nvAppVide: 'Écris le nom d’une app, ou choisis-la avec Choisir…', nvSiteVide: 'Écris le site, par exemple youtube.com.', nvSiteInvalide: 'Écris le site sans espace, sans ? ni #.',
+    barreExiste: 'Cette barre existe déjà, la voici.',
+    lien: 'Lien web…', lnTitre: 'Ajouter un lien', lnTexte: 'Tactile lit le titre et l’icône sur le site lui-même, une seule fois, et garde l’icône sur ton Mac.',
+    lnCourants: 'Sites courants', lnLecture: 'Lecture du site…', lnRefus: 'Lien impossible : {m}', lnAjoute: 'Lien « {t} » ajouté.', lnSansIcone: 'Lien « {t} » ajouté. Le site n’a pas d’icône lisible, le symbole globe la remplace.',
+    racEnregistrer: 'Enregistrer un raccourci', racAttente: 'Tape ta combinaison…', racAide: 'Tape la combinaison sur ton clavier. Échap pour annuler.', racFait: 'Raccourci enregistré : {r}.',
   },
   en: {
     titre: 'Customize my bar', sousTitre: 'Click an item to edit it, drag it to move it. Save updates your Touch Bar right away.',
@@ -560,6 +619,20 @@ const T = {
     aPartirDe: 'from', niveauAjouter: 'Add a level', niveauRetirer: 'Remove a level',
     options: 'Options', optionAjouter: 'Add an option', optionRetirer: 'Remove', optionNom: 'Option {n}',
     choixAide: 'The option you tap replaces {valeur} in the action, quoted.', choixLire: 'Command that reads the current option',
+    barres: 'Bars', principale: 'Main', barrePrincipale: 'Main bar', nouvelleApp: 'New app bar…', nouvelleSite: 'New site bar…',
+    barreDe: '{n} bar', barreSupprimer: 'Delete this bar', confSupprBarre: 'Delete the bar for “{n}”?',
+    confSupprBarreTexte: 'Its items are deleted. Your Touch Bar only changes when you save.', barreSupprimee: 'Bar for “{n}” deleted.',
+    barreAppAide: 'It shows when this app is in front.',
+    barreSiteAide: 'It shows when the active tab of a browser is on this site. A domain (youtube.com), optionally with the start of a path (github.com/lepalph), or a pattern with * (*.google.com/maps*). No https://.',
+    herite: 'Keep the main bar around it', heriteAide: 'Your items only replace the area between the main bar’s two flexible spaces.',
+    heriteApercu: 'Dimmed items come from the main bar.', videBarre: 'This bar is empty. Add an item on the left.',
+    barreVidePasEnreg: 'The bar for “{n}” is empty: add an item to it or delete it.',
+    nvTitreApp: 'New app bar', nvTitreSite: 'New site bar', creer: 'Create',
+    nvAppVide: 'Type an app name, or pick one with Choose…', nvSiteVide: 'Type the site, for example youtube.com.', nvSiteInvalide: 'Type the site without spaces, ? or #.',
+    barreExiste: 'This bar already exists, here it is.',
+    lien: 'Web link…', lnTitre: 'Add a link', lnTexte: 'Tactile reads the title and icon from the site itself, once, and keeps the icon on your Mac.',
+    lnCourants: 'Common sites', lnLecture: 'Reading the site…', lnRefus: 'Link failed: {m}', lnAjoute: 'Link “{t}” added.', lnSansIcone: 'Link “{t}” added. The site has no readable icon, so the globe symbol stands in.',
+    racEnregistrer: 'Record a shortcut', racAttente: 'Press your combination…', racAide: 'Press the combination on your keyboard. Esc to cancel.', racFait: 'Shortcut recorded: {r}.',
   },
 };
 let langue = 'fr';
@@ -591,9 +664,9 @@ const CLE_ACTION = { luminosite_plus: 'actLuminositePlus', luminosite_moins: 'ac
 const ACTIONS_SYSTEME = { mission_control: 'actMissionControl', fenetres_app: 'actFenetresApp', launchpad: 'actLaunchpad', bureau: 'actBureau', spotlight: 'actSpotlight',
   capture_ecran: 'actCaptureEcran', capture_zone: 'actCaptureZone', capture_options: 'actCaptureOptions', verrouiller: 'actVerrouiller', emojis: 'actEmojis', forcer_quitter: 'actForcerQuitter' };
 // Les types qu'on peut ajouter depuis la barre latérale ; `meteo` pose un `texte` et sa [[source]] (panneau Météo).
-const ICONES = { bouton: '▢', lanceur: '◰', texte: 'T', meteo: '☀', slider: '⇆', choix: '◫', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
+const ICONES = { bouton: '▢', lanceur: '◰', lien: '⌁', texte: 'T', meteo: '☀', slider: '⇆', choix: '◫', heure: '◴', en_cours: '♪', script: '›_', batterie: '▮', espace: '⎵', souple: '⟷', groupe: '▣' };
 /* Les mêmes en symboles SF (rendus par Rust) ; les caractères ci-dessus servent tant qu'ils ne sont pas arrivés. */
-const ICONES_SF = { bouton: 'hand.tap.fill', lanceur: 'app.fill', slider: 'slider.horizontal.3', choix: 'rectangle.split.3x1.fill', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', texte: 'text.bubble.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
+const ICONES_SF = { principale: 'menubar.rectangle', site: 'globe', plus: 'plus', lien: 'link', bouton: 'hand.tap.fill', lanceur: 'app.fill', slider: 'slider.horizontal.3', choix: 'rectangle.split.3x1.fill', heure: 'clock.fill', en_cours: 'music.note', script: 'terminal.fill', texte: 'text.bubble.fill', batterie: 'battery.75', espace: 'space', souple: 'arrow.left.and.right', groupe: 'square.grid.2x2.fill',
   meteo: 'cloud.sun.fill', sources: 'arrow.triangle.2.circlepath', simple: 'star.fill', musique: 'music.note.list', developpeur: 'chevron.left.forwardslash.chevron.right' };
 /* Actions qui simulent le clavier : sans l'autorisation Accessibilité, elles ne font rien. */
 const ACCES = new Set(['touche', 'echap', 'spotlight', 'capture_ecran', 'capture_zone', 'emojis', 'verrouiller', 'forcer_quitter']);
@@ -601,6 +674,7 @@ const DECOR = new Set([...Object.values(ICONES_SF), 'chevron.left', 'chevron.rig
 
 /* ---------- État ---------- */
 let barre = { masquer_control_strip: true, element: [] };
+let cible = null;          // la barre éditée : null = la principale, sinon { t: 'application' | 'site', k }
 let sel = null;            // { i } ou { i, j } (sous-élément d'un groupe)
 let modifie = false;
 let aPrecedent = false;
@@ -659,9 +733,9 @@ window.tactile = {
     marquer(prereglageAttendu);
     etat(prereglageAttendu ? () => t('charge') : '');
     prereglageAttendu = false;
-    demanderGlyphes(symbolesDe(barre.element));
-    demanderImages(imagesDe(barre.element));
-    demanderIconesApps(appsDe(barre.element));
+    cible = null;
+    const toutes = toutesLesListes();
+    demanderGlyphes(symbolesDe(toutes)); demanderImages(imagesDe(toutes)); demanderIconesApps([...appsDe(toutes), ...(barre.application || []).map(a => a.app)]);
     tout(); mesurer();
   },
   images(map) {
@@ -669,7 +743,7 @@ window.tactile = {
     if (elem()?.image in map) dessinerProprietes(true);
   },
   iconesApps(map) {
-    Object.assign(iconesApps, map); dessinerBarre(); dessinerImport();
+    Object.assign(iconesApps, map); dessinerBarre(); dessinerPalette(); dessinerImport();
     const e = elem();
     if (e?.type === 'groupe') dessinerProprietes(true);
     else if (e?.type === 'lanceur' && $('app-vignette')) $('app-vignette').innerHTML = vignetteApp(e.app);
@@ -689,7 +763,7 @@ window.tactile = {
   },
   /* Le fichier ne se lit pas : pas de barre vide à enregistrer par-dessus, seulement l'erreur et deux issues. */
   illisible(message, extrait, precedent) {
-    illisible = { message, extrait }; aPrecedent = !!precedent; sel = null; prereglageAttendu = false;
+    illisible = { message, extrait }; aPrecedent = !!precedent; sel = null; cible = null; prereglageAttendu = false;
     barre = { masquer_control_strip: true, element: [] };
     marquer(false); etat('');
     tout();
@@ -720,9 +794,9 @@ window.tactile = {
   /* La source Open-Meteo et l'élément texte, construits par Rust d'après exemples/meteo.toml. */
   meteoPrete(source, element) {
     barre.source = [...(barre.source || []), source];
-    barre.element.push(element);
+    els().push(element);
     demanderGlyphes(symbolesDe([element]));
-    sel = { i: barre.element.length - 1 }; vue = null;
+    sel = { i: els().length - 1 }; vue = null;
     changer(); dessinerProprietes(true);
     const v = ville.choisie || '';
     etat(() => t('meteoAjoutee').replace('{v}', v), 'ok');
@@ -787,8 +861,32 @@ window.tactile = {
     const cle = importAjoute ? 'ajoute' : 'importe';
     etat(() => t(cle) + (manuel ? ' ' + t('manuelGarde').replace('{f}', manuel) : ''), 'ok');
   },
+  /* L'élément bouton { url } fait par Rust (titre, icône dans icones/) : posé à la fin de la barre éditée. */
+  lienPret(e) {
+    if (!lienEnCours) return;
+    lienEnCours = false; $('lien').close();
+    Object.keys(e).forEach(k => { if (e[k] === null) delete e[k]; });   // les champs vides de Rust ne sont pas à écrire
+    demanderGlyphes([e.symbole]); if (e.image) demanderImages([e.image]);
+    els().push(e); vue = null; sel = { i: els().length - 1 };
+    changer(); dessinerPalette(); dessinerProprietes(true);
+    etat(() => t(e.image ? 'lnAjoute' : 'lnSansIcone').replace('{t}', e.texte || ''), 'ok');
+    focusApercu(sel.i);
+  },
+  lienRefuse(m) {
+    if (!lienEnCours) return;
+    lienEnCours = false; $('ln-ajouter').disabled = false;
+    const texte = String(m);
+    $('ln-etat').className = 'etat erreur';
+    $('ln-etat').textContent = t('lnRefus').replace('{m}', texte) + (/[.!?]$/.test(texte) ? '' : '.');
+    $('ln-adresse').focus();
+  },
   appVerifiee(nom, trouvee, suggestion, localise) { apps[nom] = { trouvee, suggestion, localise }; ['action', 'appui_long', 'lanceur'].forEach(verifierApp); },
   appChoisie(nom) {
+    if (champActionEnCours === 'nouvelle') { $('nv-nom').value = nom; return $('nv-nom').focus(); }
+    if (champActionEnCours === 'barre') {
+      if (cible?.t === 'application') { courante().app = nom; changer(); dessinerPalette(); dessinerProprietes(true); }
+      return;
+    }
     const e = elem(); if (!e) return;
     const cible = champActionEnCours || 'action';
     if (cible === 'lanceur') e.app = nom; else e[cible] = { app: nom };
@@ -818,12 +916,24 @@ $('import').addEventListener('close', () => {
 });
 
 /* ---------- Modèle ---------- */
+/* La barre éditée et ses éléments : la principale, ou une barre d'app ou de site (même forme : { element }). */
+function courante() { return (cible && barre[cible.t]?.[cible.k]) || barre; }
+function els() { const c = courante(); return c.element || (c.element = []); }
+const toutesLesListes = () => [...(barre.element || []), ...(barre.application || []).flatMap(a => a.element || []), ...(barre.site || []).flatMap(a => a.element || [])];
+/* Ce que la Touch Bar montre pour une barre qui hérite : la principale jusqu'au premier « souple », la barre, puis la principale depuis le dernier (comme config.rs). */
+function heritees() {
+  const c = courante(), p = barre.element || [];
+  if (c === barre || !c.herite) return { avant: [], apres: [] };
+  const s = e => e.type === 'souple', premier = p.findIndex(s), dernier = p.findLastIndex(s);
+  return premier < 0 ? { avant: p, apres: [] } : { avant: p.slice(0, premier + 1), apres: p.slice(dernier) };
+}
+const effectifs = () => { const h = heritees(); return [...h.avant, ...els(), ...h.apres]; };
 function elem(s = sel) {
   if (!s) return null;
-  const e = barre.element[s.i];
+  const e = els()[s.i];
   return s.j == null ? e : e?.element?.[s.j];
 }
-function liste(s = sel) { return s && s.j != null ? barre.element[s.i].element : barre.element; }
+function liste(s = sel) { return s && s.j != null ? els()[s.i].element : els(); }
 function index(s = sel) { return s.j != null ? s.j : s.i; }
 function neuf(type) {
   switch (type) {
@@ -843,7 +953,7 @@ function neuf(type) {
 }
 function changer() { marquer(true); annulable = null; etat(() => t('modifie')); dessinerBarre(); boutons(); mesurer(); }
 /* Rust estime la largeur comme `--verifier` et répond `deborde(caches)` ; la page ne refait pas le calcul. */
-function mesurer() { if (!illisible) envoyer({ type: 'mesurer', barre }); }
+function mesurer() { if (!illisible) envoyer({ type: 'mesurer', barre: { ...barre, element: effectifs() } }); }
 function marquerCaches() {
   const els = [...$('barre').querySelectorAll('.el')];
   els.forEach((el, i) => el.classList.toggle('cachee', i >= els.length - caches));
@@ -858,6 +968,9 @@ function marquer(v) {
 }
 function enregistrer(fermer) {
   if (illisible) return;
+  // Rust refuse une barre sans élément ; la page le dit avec le nom de la barre, sans le vocabulaire du fichier.
+  const vide = [...(barre.application || []).map(b => [nomApp(b.app), b]), ...(barre.site || []).map(b => [b.adresse, b])].find(([, b]) => !(b.element || []).length);
+  if (vide) return etat(() => t('barreVidePasEnreg').replace('{n}', vide[0]), 'erreur');
   envoyer({ type: 'enregistrer', barre, ...(fermer ? { fermer: true } : {}) });
 }
 /* Confirmation dans la page : choix = [[valeur, libellé, classes]] ; Échap ou Annuler renvoient 'annuler'. */
@@ -875,12 +988,14 @@ function confirmer(titre, texte, choix, prudent) {
     d.querySelector(prudent ? 'button[value="annuler"]' : 'button.primaire')?.focus();
   });
 }
+function choisirBarre(c) { cible = c; sel = null; vue = null; annulable = null; tout(); mesurer(); }
 function ajouter(type, dansGroupe) {
+  if (type === 'lien') return ouvrirLien();
   if (type === 'meteo') { sel = null; vue = 'meteo'; dessinerBarre(); dessinerProprietes(true); $('ville')?.focus(); return; }
   const e = neuf(type);
   demanderGlyphes([e.symbole]); demanderIconesApps(appsDe([e]));
   if (dansGroupe) { const g = elem(); g.element.push(e); sel = { i: sel.i, j: g.element.length - 1 }; }
-  else { barre.element.push(e); sel = { i: barre.element.length - 1 }; }
+  else { els().push(e); sel = { i: els().length - 1 }; }
   changer(); dessinerProprietes(true);
 }
 /* Supprimer : annulable (⌘Z ou « Annuler » dans le message) tant que rien d'autre n'a changé ; le focus va au voisin. */
@@ -894,7 +1009,7 @@ function supprimer() {
   const nom = t(e.type) + (e.texte ? ' « ' + e.texte + ' »' : '');
   etat(() => t('supprime').replace('{x}', nom), '', [t('annuler'), annulerSuppression]);
   if (s.j != null) ($('proprietes').querySelector(`[data-sous="${Math.min(k, l.length - 1)}"]`) || $('f-ajout-groupe'))?.focus();
-  else focusApercu(Math.min(k, barre.element.length - 1));
+  else focusApercu(Math.min(k, els().length - 1));
 }
 function annulerSuppression() {
   const a = annulable; if (!a) return;
@@ -1022,9 +1137,12 @@ function dessinerBarre() {
   const avaitFocus = b.contains(document.activeElement);
   b.classList.toggle('courte', !barre.masquer_control_strip);
   $('masquer').checked = barre.masquer_control_strip;
-  if (!barre.element.length) { b.innerHTML = `<div class="vide">${esc(t(illisible ? 'illisibleApercu' : 'vide'))}</div>`; marquerCaches(); if (avaitFocus) b.focus(); return; }
-  const n = barre.element.length;
-  b.innerHTML = barre.element.map((e, i) => `<div class="el${sel && sel.i === i ? ' sel' : ''}" data-i="${i}" data-type="${e.type}" role="option" aria-selected="${!!(sel && sel.i === i)}" tabindex="${sel ? (sel.i === i ? 0 : -1) : (i === 0 ? 0 : -1)}" draggable="true" aria-label="${esc(nomAccessible(e, i, n))}">${face(e)}</div>`).join('');
+  const propres = els(), h = heritees();
+  const nom = !cible ? t('barrePrincipale') : t('barreDe').replace('{n}', cible.t === 'application' ? nomApp(courante().app) : courante().adresse);
+  $('barre-titre').innerHTML = esc(nom) + (h.avant.length || h.apres.length ? `<span class="legende">${esc(t('heriteApercu'))}</span>` : '');
+  if (!propres.length && !h.avant.length) { b.innerHTML = `<div class="vide">${esc(t(illisible ? 'illisibleApercu' : cible ? 'videBarre' : 'vide'))}</div>`; marquerCaches(); if (avaitFocus) b.focus(); return; }
+  const n = propres.length, grise = e => `<div class="el heritee" data-type="${e.type}" aria-hidden="true">${face(e)}</div>`;
+  b.innerHTML = h.avant.map(grise).join('') + propres.map((e, i) => `<div class="el${sel && sel.i === i ? ' sel' : ''}" data-i="${i}" data-type="${e.type}" role="option" aria-selected="${!!(sel && sel.i === i)}" tabindex="${sel ? (sel.i === i ? 0 : -1) : (i === 0 ? 0 : -1)}" draggable="true" aria-label="${esc(nomAccessible(e, i, n))}">${face(e)}</div>`).join('') + h.apres.map(grise).join('');
   marquerCaches();
   if (avaitFocus) focusApercu(sel ? sel.i : 0);
 }
@@ -1034,7 +1152,7 @@ function boutons() {
   $('enregistrer').disabled = !!illisible;
   $('exporter').disabled = !!illisible;
   $('masquer').disabled = !!illisible;
-  document.querySelectorAll('#ajouts button').forEach(b => { b.disabled = !!illisible; });
+  document.querySelectorAll('#ajouts button, #barres button').forEach(b => { b.disabled = !!illisible; });
 }
 /* Icône SF décorative, ou son remplaçant tant que le glyphe n'est pas là (ou s'il n'existe pas sur ce Mac). */
 function ico(nom, repli) { return glyphes[nom] ? `<span class="sf" style="--m:url(${glyphes[nom]})" aria-hidden="true"></span>` : repli; }
@@ -1058,9 +1176,9 @@ function etat(texte, classe, action, forcer) {
 
 /* Souris : clic et glisser-déposer natif */
 let glisse = null;
-$('barre').addEventListener('click', ev => { const el = ev.target.closest('.el'); if (el) selectionner({ i: +el.dataset.i }); });
+$('barre').addEventListener('click', ev => { const el = ev.target.closest('.el[data-i]'); if (el) selectionner({ i: +el.dataset.i }); });
 $('barre').addEventListener('dragstart', ev => {
-  const el = ev.target.closest('.el'); if (!el) return;
+  const el = ev.target.closest('.el[data-i]'); if (!el) return;
   glisse = +el.dataset.i; el.classList.add('glisse');
   ev.dataTransfer.effectAllowed = 'move'; ev.dataTransfer.setData('text/plain', String(glisse));
 });
@@ -1069,31 +1187,31 @@ $('barre').addEventListener('dragover', ev => {
   if (glisse == null) return;
   ev.preventDefault(); ev.dataTransfer.dropEffect = 'move';
   $('barre').querySelectorAll('.el').forEach(el => el.classList.remove('avant', 'apres'));
-  const el = ev.target.closest('.el'); if (!el || +el.dataset.i === glisse) return;
+  const el = ev.target.closest('.el[data-i]'); if (!el || +el.dataset.i === glisse) return;
   const r = el.getBoundingClientRect();
   el.classList.add(ev.clientX < r.left + r.width / 2 ? 'avant' : 'apres');
 });
 $('barre').addEventListener('drop', ev => {
   if (glisse == null) return;
   ev.preventDefault();
-  const el = ev.target.closest('.el');
+  const el = ev.target.closest('.el[data-i]');
   let a;
-  if (!el) a = barre.element.length - 1;
+  if (!el) a = els().length - 1;
   else { const r = el.getBoundingClientRect(); a = +el.dataset.i + (ev.clientX < r.left + r.width / 2 ? 0 : 1); if (a > glisse) a--; }
-  const [e] = barre.element.splice(glisse, 1);
-  barre.element.splice(a, 0, e);
+  const [e] = els().splice(glisse, 1);
+  els().splice(a, 0, e);
   sel = { i: a }; glisse = null;
   changer(); dessinerProprietes(true);
 });
 /* Clavier dans l'aperçu : flèches pour parcourir, ⌥ flèches pour déplacer, suppr pour retirer */
 $('barre').addEventListener('keydown', ev => {
-  const el = ev.target.closest('.el'); if (!el) return;
+  const el = ev.target.closest('.el[data-i]'); if (!el) return;
   const i = +el.dataset.i;
   if (ev.key === 'ArrowLeft' || ev.key === 'ArrowRight') {
     ev.preventDefault();
     const d = ev.key === 'ArrowLeft' ? -1 : 1;
     if (ev.altKey) { sel = { i }; deplacer(d); return; }
-    const n = Math.max(0, Math.min(barre.element.length - 1, i + d));
+    const n = Math.max(0, Math.min(els().length - 1, i + d));
     selectionner({ i: n }); $('barre').querySelector(`.el[data-i="${n}"]`)?.focus();
   } else if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); selectionner({ i }); }
   else if (ev.key === 'Backspace' || ev.key === 'Delete') { ev.preventDefault(); sel = { i }; supprimer(); }
@@ -1101,11 +1219,23 @@ $('barre').addEventListener('keydown', ev => {
 
 /* ---------- Palette ---------- */
 function dessinerPalette() {
+  const bouton = (data, tuile, nom, courant) => `<button type="button" ${data}${courant && !vue ? ' aria-current="true"' : ''}><span class="tuile${tuile.app ? ' app' : ''}" aria-hidden="true">${tuile.html}</span><span class="nom-barre">${esc(nom)}</span></button>`;
+  $('barres').innerHTML = bouton('data-barre="principale"', { html: ico(ICONES_SF.principale, '▭') }, t('principale'), !cible)
+    + (barre.application || []).map((a, k) => bouton(`data-barre="application:${k}"`, { html: vignetteApp(a.app), app: true }, nomApp(a.app), cible?.t === 'application' && cible.k === k)).join('')
+    + (barre.site || []).map((a, k) => bouton(`data-barre="site:${k}"`, { html: ico(ICONES_SF.site, '◍') }, a.adresse, cible?.t === 'site' && cible.k === k)).join('')
+    + ['application', 'site'].map(ty => bouton(`data-nouvelle="${ty}"`, { html: ico(ICONES_SF.plus, '+') }, t(ty === 'site' ? 'nouvelleSite' : 'nouvelleApp'), false)).join('');
   $('ajouts').innerHTML = Object.keys(ICONES).map(ty => `<button type="button" data-ajout="${ty}"><span class="tuile" aria-hidden="true">${ico(ICONES_SF[ty], ICONES[ty])}</span>${esc(t(ty))}</button>`).join('');
   $('preregles').innerHTML = ['simple', 'musique', 'developpeur'].map(n => `<button type="button" data-prereglage="${n}"><span class="tuile" aria-hidden="true">${ico(ICONES_SF[n], '★')}</span>${esc(t(n))}</button>`).join('');
   const n = (barre.source || []).length;
   $('donnees').innerHTML = `<button type="button" id="voir-sources"${vue === 'sources' ? ' aria-current="true"' : ''}><span class="tuile" aria-hidden="true">${ico(ICONES_SF.sources, '⟳')}</span>${esc(t('sources'))}${n ? ` (${n})` : ''}</button>`;
 }
+$('barres').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  if (b.dataset.nouvelle) return ouvrirNouvelle(b.dataset.nouvelle);
+  const [ty, k] = b.dataset.barre.split(':');
+  choisirBarre(ty === 'principale' ? null : { t: ty, k: +k });
+  $('barres').querySelector('[aria-current]')?.focus();
+});
 $('donnees').addEventListener('click', () => { sel = null; vue = 'sources'; dessinerBarre(); dessinerPalette(); dessinerProprietes(true); $('voir-sources').focus(); });
 $('ajouts').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) ajouter(b.dataset.ajout, false); });
 $('preregles').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) prereglage(b.dataset.prereglage); });
@@ -1158,13 +1288,46 @@ function champAction(cle, label) {
   if (ui.mode === 'app') detail = `<div class="cote"><input type="text" class="moyen" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('application')}" aria-describedby="app-${cle}" placeholder="Safari"><button type="button" data-choisir-app="${cle}">${t('choisir')}</button></div><p class="explication" id="app-${cle}" aria-live="polite"></p>`;
   else if (ui.mode === 'url') detail = `<input type="text" class="long" data-action-valeur="${cle}" value="${esc(ui.valeur || 'https://')}" aria-label="${t('adresse')}" placeholder="https://">`;
   else if (ui.mode === 'shell') detail = `<input type="text" class="long" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('actShell')}" placeholder="open -a Safari" spellcheck="false">`;
-  else if (ui.mode === 'touche') detail = `<input type="text" class="moyen" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('raccourci')}" placeholder="cmd+shift+4" spellcheck="false"><p class="explication">${esc(t('raccourciAide'))}</p>`;
+  else if (ui.mode === 'touche') {
+    const ecoute = enregistrementRac === cle;
+    detail = `<div class="cote"><input type="text" class="moyen" data-action-valeur="${cle}" value="${esc(ui.valeur || '')}" aria-label="${t('raccourci')}" placeholder="cmd+shift+4" spellcheck="false"><button type="button" class="enregistreur" id="rac-${cle}" data-rac="${cle}" aria-pressed="${ecoute}">${esc(t(ecoute ? 'racAttente' : 'racEnregistrer'))}</button></div><p class="explication" aria-live="polite">${esc(t(ecoute ? 'racAide' : 'raccourciAide'))}</p>`;
+  }
   else if (ui.mode === 'applescript') detail = `<textarea data-action-valeur="${cle}" rows="2" aria-label="${t('actApplescript')}" placeholder='tell application "Music" to playpause' spellcheck="false">${esc(ui.valeur || '')}</textarea>`;
   else if (ui.mode === 'autre') detail = `<p class="explication">${esc(JSON.stringify(ui.valeur))}</p>`;
   if (ACCES.has(ui.mode)) detail += noteAcces();
   if (ui.mode === 'luminosite_fixe' || ui.mode === 'volume_fixe') detail = `<div class="cote"><input type="range" min="0" max="100" step="5" data-action-valeur="${cle}" value="${Math.round((ui.valeur ?? 0.5) * 100)}" aria-label="${t('niveau')}"><span class="valeur">${Math.round((ui.valeur ?? 0.5) * 100)} %</span></div>`;
   return ligne(label, `<select id="act-${cle}" data-action-mode="${cle}">${options.map(o => Array.isArray(o[1]) ? `<optgroup label="${esc(o[0])}">${o[1].map(option).join('')}</optgroup>` : option(o)).join('')}</select>${detail}`, `act-${cle}`, { haute: !!detail });
 }
+/* Enregistreur : le prochain appui (modificateurs compris) s'écrit dans le champ au format du fichier (cmd+shift+4). Échap annule.
+   La touche principale vient de `code` pour les chiffres (le fichier les vise par position) et du caractère tapé pour les lettres. */
+let enregistrementRac = null;   // 'action' ou 'appui_long' pendant l'écoute
+const TOUCHES_RAC = { Space: 'space', Enter: 'return', NumpadEnter: 'return', Tab: 'tab', Backspace: 'delete', Delete: 'forwarddelete', Home: 'home', End: 'end', PageUp: 'pageup', PageDown: 'pagedown',
+  ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'up', ArrowDown: 'down', Escape: 'esc', Minus: '-', Equal: '=', BracketLeft: '[', BracketRight: ']', Semicolon: ';', Quote: "'", Backquote: '`', Backslash: '\\', Comma: ',', Period: '.', Slash: '/' };
+function raccourciDe(ev) {
+  const code = ev.code || '';
+  let touche = TOUCHES_RAC[code];
+  if (/^F\d{1,2}$/.test(code)) touche = code.toLowerCase();
+  else if (/^(Digit|Numpad)\d$/.test(code)) touche = code.slice(-1);
+  else if (/^Key[A-Z]$/.test(code)) touche = ev.altKey || ev.key.length !== 1 ? code.slice(3).toLowerCase() : ev.key.toLowerCase();
+  if (!touche) return null;
+  const mods = [ev.metaKey && 'cmd', ev.shiftKey && 'shift', ev.ctrlKey && 'ctrl', ev.altKey && 'alt'].filter(Boolean);
+  return [...mods, touche].join('+');
+}
+function enregistrerRaccourci(cle) {
+  enregistrementRac = enregistrementRac === cle ? null : cle;
+  dessinerProprietes(true);
+}
+document.addEventListener('keydown', ev => {
+  if (!enregistrementRac) return;
+  if (['Meta', 'Control', 'Alt', 'Shift', 'Fn', 'CapsLock'].includes(ev.key)) return;
+  ev.preventDefault(); ev.stopPropagation();
+  const cle = enregistrementRac, combo = ev.key === 'Escape' && !(ev.metaKey || ev.ctrlKey || ev.altKey || ev.shiftKey) ? null : raccourciDe(ev);
+  enregistrementRac = null;
+  const e = elem();
+  if (combo && e && actionUI(e[cle]).mode === 'touche') { e[cle] = { touche: combo }; changer(); etat(() => t('racFait').replace('{r}', combo), 'ok'); }
+  dessinerProprietes(true);
+  $(`rac-${cle}`)?.focus();
+}, true);
 /* Une frappe simulée ne marche qu'avec l'autorisation Accessibilité : le dire, et ouvrir le bon panneau de Réglages. */
 function noteAcces() {
   return `<p class="explication"><span class="attention-texte">${esc(t('accessibilite'))}</span> <button type="button" class="lien" data-reglages>${esc(t('ouvrirReglages'))}</button></p>`;
@@ -1187,6 +1350,28 @@ function verifierApp(cle) {
     : `<span class="alerte">${esc(t('appIntrouvable').replace('{a}', nom))}</span> `
       + (r.suggestion ? `${esc(t('appProche'))} ${utiliser} ` : '')
       + esc(t('appConseil'));
+}
+/* Une barre d'app ou de site sans élément choisi : son nom, `herite`, et la supprimer. */
+function panneauBarre() {
+  const c = courante(), app = cible.t === 'application';
+  const champ = app
+    ? `<div class="cote"><input type="text" class="moyen" id="barre-nom-champ" data-barre-champ="app" value="${esc(c.app)}" placeholder="Safari" spellcheck="false"><button type="button" data-choisir-app="barre">${t('choisir')}</button></div>`
+    : `<input type="text" class="moyen" id="barre-nom-champ" data-barre-champ="adresse" value="${esc(c.adresse)}" placeholder="youtube.com" spellcheck="false">`;
+  return `<div class="entete"><h2>${esc(t('barreDe').replace('{n}', app ? nomApp(c.app) : c.adresse))}</h2><div class="actions"><button type="button" id="barre-supprimer">${esc(t('barreSupprimer'))}</button></div></div>`
+    + encart(ligne(t(app ? 'application' : 'adresse'), champ, 'barre-nom-champ', { aide: t(app ? 'barreAppAide' : 'barreSiteAide'), haute: true })
+      + ligne(t('herite'), `<input type="checkbox" class="interrupteur" role="switch" id="barre-herite" ${c.herite ? 'checked' : ''}>`, 'barre-herite', { aide: t('heriteAide') }))
+    + `<p class="explication" style="margin-top:14px">${esc(t('rien'))}</p>`;
+}
+async function supprimerBarre() {
+  const c = courante(), nom = cible.t === 'application' ? nomApp(c.app) : c.adresse;
+  const r = await confirmer(t('confSupprBarre').replace('{n}', nom), t('confSupprBarreTexte'), [['annuler', t('annuler')], ['oui', t('supprimer'), 'primaire']], true);
+  if (r !== 'oui') return;
+  const liste = barre[cible.t]; liste.splice(cible.k, 1);
+  if (!liste.length) delete barre[cible.t];
+  cible = null; sel = null;
+  changer(); tout(); mesurer();
+  etat(() => t('barreSupprimee').replace('{n}', nom));
+  $('barres').querySelector('[aria-current]')?.focus();
 }
 function panneauIllisible() {
   return `<div class="illisible"><div class="titre">${ico('exclamationmark.triangle.fill', '')}<h2>${esc(t('illisibleTitre'))}</h2></div>
@@ -1397,6 +1582,7 @@ function dessinerProprietes(reconstruire) {
   const focus = p.contains(document.activeElement) ? cleFocus(document.activeElement) : null;
   if (!e && vue === 'sources') { if (reconstruire) { p.innerHTML = panneauSources(); rendreFocus(focus); } return; }
   if (!e && vue === 'meteo') { if (reconstruire) { p.innerHTML = panneauMeteo(); rendreFocus(focus); } return; }
+  if (!e && cible) { if (reconstruire) { p.innerHTML = panneauBarre(); rendreFocus(focus); } return; }
   if (!e) { p.innerHTML = `<div class="vide-props">${ico('hand.point.up.left', '')}<p>${esc(t('rien'))}</p></div>`; return; }
   if (!reconstruire && !p.querySelector('.grille')) return; // seule la grille de symboles dépend des glyphes
   const l = liste(), k = index();
@@ -1486,7 +1672,7 @@ function rendreFocus(cle) {
 /* ---------- Sources ([[source]]) et météo ---------- */
 function utilisations(nom) {
   const compter = l => (l || []).reduce((n, e) => n + (e.source === nom ? 1 : 0) + compter(e.element), 0);
-  return compter(barre.element) + (barre.application || []).reduce((n, a) => n + compter(a.element), 0);
+  return compter(barre.element) + [...(barre.application || []), ...(barre.site || [])].reduce((n, a) => n + compter(a.element), 0);
 }
 function panneauSources() {
   const sources = barre.source || [];
@@ -1528,7 +1714,7 @@ function nomSourceLibre(nom) {
 /* Renommer une source : chaque élément qui la cite suit (principale, groupes, barres d'application). */
 function renommerSource(ancien, nouveau) {
   const suivre = l => (l || []).forEach(e => { if (e.source === ancien) e.source = nouveau; suivre(e.element); });
-  suivre(barre.element); (barre.application || []).forEach(a => suivre(a.element));
+  suivre(barre.element); [...(barre.application || []), ...(barre.site || [])].forEach(a => suivre(a.element));
 }
 $('proprietes').addEventListener('submit', ev => {
   if (ev.target.id !== 'form-ville') return;
@@ -1547,6 +1733,8 @@ $('proprietes').addEventListener('input', ev => {
     changer(); return;
   }
   if (c.id === 'ville') { ville.requete = c.value; return; }
+  if (c.dataset.barreChamp) { courante()[c.dataset.barreChamp] = c.value; changer(); dessinerPalette(); return; }
+  if (c.id === 'barre-herite') { courante().herite = c.checked; changer(); return; }
   const e = elem(); if (!e) return;
   if (c.id === 'f-mode') {
     ['reglage', 'regler', 'lire', 'min', 'max', 'pas', 'toutes_les'].forEach(k => delete e[k]);
@@ -1609,6 +1797,9 @@ $('proprietes').addEventListener('click', ev => {
     const v = ville.liste[+b.dataset.ville]; ville.choisie = v.nom;
     envoyer({ type: 'meteo', nom: nomSourceLibre(`${langue === 'fr' ? 'Météo' : 'Weather'} ${v.nom}`), latitude: v.latitude, longitude: v.longitude }); return;
   }
+  if (b.id === 'barre-supprimer') return supprimerBarre();
+  if (b.dataset.choisirApp === 'barre') { champActionEnCours = 'barre'; return envoyer({ type: 'choisirApp' }); }
+  if (b.dataset.rac) return enregistrerRaccourci(b.dataset.rac);
   if (b.id === 'i-relire') return envoyer({ type: 'relire' });
   if (b.id === 'i-repartir') return prereglage('musique');
   const e = elem(); if (!e) return;
@@ -1671,7 +1862,7 @@ $('proprietes').addEventListener('keydown', ev => {
    Partout ailleurs, le dépôt est refusé : sans ça, la WKWebView ouvrirait le fichier à la place de la page. */
 const MAX_DEPOT = 10 * 1024 * 1024;   // comme icones::DEPOT_MAX côté Rust
 const avecFichiers = ev => [...(ev.dataTransfer?.types || [])].includes('Files');
-const cibleDepot = ev => illisible ? null : ev.target.closest?.('.cible-image, #barre .el[data-type="bouton"]');
+const cibleDepot = ev => illisible ? null : ev.target.closest?.('.cible-image, #barre .el[data-i][data-type="bouton"]');
 const finDepot = () => document.querySelectorAll('.depot').forEach(n => n.classList.remove('depot'));
 /* Un .toml ou un .zip glissé n'importe où dans la fenêtre : import de barre (aperçu, puis confirmation). Le nom
    n'est connu qu'au dépôt : le survol accepte tout fichier, et seules les cibles d'image sont soulignées. */
@@ -1702,6 +1893,59 @@ document.addEventListener('drop', ev => {
   const lecteur = new FileReader();
   lecteur.onload = () => envoyer({ type: 'deposerImage', nom: f.name, donnees: String(lecteur.result).split(',')[1] || '' });
   lecteur.readAsDataURL(f);
+});
+
+/* ---------- Nouvelle barre d'app ou de site ---------- */
+let nouvelleType = null;
+function ouvrirNouvelle(ty) {
+  nouvelleType = ty;
+  $('nv-titre').textContent = t(ty === 'site' ? 'nvTitreSite' : 'nvTitreApp');
+  $('nv-texte').textContent = t(ty === 'site' ? 'barreSiteAide' : 'barreAppAide');
+  $('nv-label').textContent = t(ty === 'site' ? 'adresse' : 'application');
+  $('nv-nom').value = ''; $('nv-nom').placeholder = ty === 'site' ? 'youtube.com' : 'Safari';
+  $('nv-choisir').hidden = ty === 'site'; $('nv-herite').checked = true; $('nv-erreur').hidden = true;
+  $('nouvelle').showModal(); $('nv-nom').focus();
+}
+$('nv-choisir').addEventListener('click', () => { champActionEnCours = 'nouvelle'; envoyer({ type: 'choisirApp' }); });
+$('nv-annuler').addEventListener('click', () => $('nouvelle').close());
+$('nv-form').addEventListener('submit', ev => {
+  ev.preventDefault();
+  const ty = nouvelleType, cle = ty === 'site' ? 'adresse' : 'app';
+  let nom = $('nv-nom').value.trim();
+  if (ty === 'site') nom = nom.replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '');
+  const erreur = !nom ? t(ty === 'site' ? 'nvSiteVide' : 'nvAppVide') : ty === 'site' && /[\s?#]/.test(nom) ? t('nvSiteInvalide') : '';
+  if (erreur) { $('nv-erreur').textContent = erreur; $('nv-erreur').hidden = false; $('nv-nom').focus(); return; }
+  const liste = barre[ty] || (barre[ty] = []);
+  let k = liste.findIndex(b => String(b[cle]).trim().toLowerCase() === nom.toLowerCase());
+  $('nouvelle').close();
+  if (k >= 0) { choisirBarre({ t: ty, k }); etat(() => t('barreExiste')); }
+  else {
+    liste.push({ [cle]: nom, herite: $('nv-herite').checked, element: [] });
+    if (ty === 'application') demanderIconesApps([nom]);
+    changer(); choisirBarre({ t: ty, k: liste.length - 1 });
+  }
+  $('barres').querySelector('[aria-current]')?.focus();
+});
+
+/* ---------- Ajouter un lien ---------- */
+const SITES_COURANTS = [['YouTube', 'youtube.com'], ['Gmail', 'mail.google.com'], ['Google Agenda', 'calendar.google.com'], ['Google Drive', 'drive.google.com'], ['GitHub', 'github.com'],
+  ['Notion', 'notion.so'], ['Figma', 'figma.com'], ['LinkedIn', 'linkedin.com'], ['ChatGPT', 'chatgpt.com'], ['Claude', 'claude.ai']];
+let lienEnCours = false;
+function ouvrirLien() {
+  $('ln-courants').innerHTML = SITES_COURANTS.map(([nom, a]) => `<button type="button" data-adresse="${a}">${esc(nom)}</button>`).join('');
+  $('ln-adresse').value = ''; $('ln-etat').textContent = ''; $('ln-etat').className = 'etat'; $('ln-ajouter').disabled = false; lienEnCours = false;
+  $('lien').showModal(); $('ln-adresse').focus();
+}
+$('ln-courants').addEventListener('click', ev => { const b = ev.target.closest('button'); if (b) { $('ln-adresse').value = b.dataset.adresse; $('ln-adresse').focus(); } });
+$('ln-annuler').addEventListener('click', () => $('lien').close());
+$('lien').addEventListener('close', () => { lienEnCours = false; });
+$('ln-form').addEventListener('submit', ev => {
+  ev.preventDefault();
+  const adresse = $('ln-adresse').value.trim();
+  if (!adresse || lienEnCours) return;
+  lienEnCours = true; $('ln-ajouter').disabled = true;
+  $('ln-etat').className = 'etat'; $('ln-etat').textContent = t('lnLecture');
+  envoyer({ type: 'ajouterLien', adresse });
 });
 
 /* ---------- Haut de page ---------- */
@@ -1763,7 +2007,7 @@ addEventListener('resize', ajusterApercu);
 ajusterApercu();
 // L'heure vit sans redessiner la barre : un redessin ferait perdre le focus et le glisser en cours.
 setInterval(() => {
-  barre.element.forEach((e, i) => { if (e.type === 'heure') { const f = $('barre').querySelector(`.el[data-i="${i}"] .face`); if (f) f.textContent = heure(e.format || 'HH:mm'); } });
+  els().forEach((e, i) => { if (e.type === 'heure') { const f = $('barre').querySelector(`.el[data-i="${i}"] .face`); if (f) f.textContent = heure(e.format || 'HH:mm'); } });
 }, 1000);
 
 traduire();
