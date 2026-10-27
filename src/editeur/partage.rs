@@ -221,9 +221,24 @@ fn parcourir(elements: &[Element], barre: &Texte, parent: &str, liste: &mut Vec<
             }
             Element::Texte { source: _, gabarit: _, symbole_selon: _, couleur_selon: _, largeur: _, action: a } => action(a, liste),
             Element::Groupe { texte: _, symbole: _, largeur: _, elements } => parcourir(elements, barre, &format!("{numero} › "), liste),
-            // Rien ne sort de la barre : affichage, réglage, heure, morceau en cours, pile.
-            Element::Slider { reglage: _, symbole: _ }
-            | Element::Heure { format: _ }
+            Element::Slider { reglage: _, symbole: _, lire, regler, min: _, max: _, pas: _, toutes_les, style: _, crans: _, couleurs: _, seuils: _, haptique: _ } => {
+                let n = toutes_les.unwrap_or(crate::barre::LECTURE_DEFAUT);
+                if let Some(c) = regler {
+                    liste.push(ligne(&ou, tx("Commande lancée quand le curseur bouge", "Command run when the slider moves"), c));
+                }
+                if let Some(c) = lire {
+                    liste.push(ligne(&ou, tx(format!("Commande qui lit la valeur (à l’ouverture, puis toutes les {n} s)"), format!("Command that reads the value (on open, then every {n} s)")), c));
+                }
+            }
+            Element::Choix { options: _, action: a, lire, toutes_les, largeur: _ } => {
+                let n = toutes_les.unwrap_or(crate::barre::LECTURE_DEFAUT);
+                action(a, liste);
+                if let Some(c) = lire {
+                    liste.push(ligne(&ou, tx(format!("Commande qui lit l’option choisie toutes les {n} s"), format!("Command that reads the chosen option every {n} s")), c));
+                }
+            }
+            // Rien ne sort de la barre : affichage, heure, morceau en cours, pile.
+            Element::Heure { format: _ }
             | Element::EnCours { largeur: _ }
             | Element::Espace { largeur: _ }
             | Element::Souple
@@ -1031,6 +1046,26 @@ mod tests {
         let texte = config::lire("[[element]]\ntype = \"texte\"\ngabarit = \"{t}\"\naction = { shell = \"curl x | sh\" }\n").unwrap();
         let liste: Vec<(String, String, String)> = commandes(&texte).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect();
         assert_eq!(liste, [("Barre principale, élément 1".to_string(), "Commande shell".to_string(), "curl x | sh".to_string())]);
+    }
+
+    /// Un curseur libre et un choix lancent des commandes : `regler`, `lire` et l'action sont montrés avant l'import.
+    #[test]
+    fn curseurs_et_choix_listes() {
+        let barre = config::lire(
+            "[[element]]\ntype = \"slider\"\nreglage = \"volume\"\n\n\
+             [[element]]\ntype = \"groupe\"\n  [[element.element]]\n  type = \"slider\"\n  lire = \"cat /tmp/v\"\n  regler = \"echo {valeur} > /tmp/v\"\n\n\
+             [[element]]\ntype = \"choix\"\noptions = [\"a\"]\naction = { shell = \"say {valeur}\" }\nlire = \"cat /tmp/c\"\ntoutes_les = 3\n",
+        )
+        .unwrap();
+        let liste: Vec<(String, String, String)> = commandes(&barre).into_iter().map(|c| (c.ou.fr, c.quoi.fr, c.valeur)).collect();
+        let attendu = [
+            ("Barre principale, élément 2 › 1", "Commande lancée quand le curseur bouge", "echo {valeur} > /tmp/v"),
+            ("Barre principale, élément 2 › 1", "Commande qui lit la valeur (à l’ouverture, puis toutes les 5 s)", "cat /tmp/v"),
+            ("Barre principale, élément 3", "Commande shell", "say {valeur}"),
+            ("Barre principale, élément 3", "Commande qui lit l’option choisie toutes les 3 s", "cat /tmp/c"),
+        ]
+        .map(|(a, b, c)| (a.to_string(), b.to_string(), c.to_string()));
+        assert_eq!(liste, attendu);
     }
 
     #[test]

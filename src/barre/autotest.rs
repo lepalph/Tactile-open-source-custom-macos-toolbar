@@ -66,6 +66,72 @@ texte = "Quit"
 action = { applescript = 'tell application "TextEdit" to quit' }
 "##;
 
+/// Styles des étapes 43-58, chacun avec son symbole (le nom de son bouton).
+const STYLES: [(&str, &str); 7] = [
+    ("classique", "slider.horizontal.3"),
+    ("grille", "square.grid.3x1.below.line.grid.1x2"),
+    ("jauge", "gauge.with.dots.needle.50percent"),
+    ("points", "circle.grid.3x3.fill"),
+    ("egaliseur", "chart.bar.fill"),
+    ("pas_a_pas", "plusminus"),
+    ("cadran", "dial.medium"),
+];
+
+/// Barre des étapes 43-59 : le script vert en tête, un curseur libre par style (`regler` écrit sa valeur dans un
+/// fichier, `lire` la relit) et un choix dont l'action écrit l'option touchée.
+fn barre_curseurs(dossier: &std::path::Path) -> String {
+    let d = dossier.display();
+    let mut texte = String::from("[[element]]\ntype = \"script\"\ncommande = '''echo '{\"texte\":\"ok\",\"couleur\":\"#00AA00\"}' '''\nintervalle = 5\nlargeur = 60\n");
+    for (style, symbole) in STYLES {
+        texte += &format!(
+            "\n[[element]]\ntype = \"slider\"\nsymbole = \"{symbole}\"\nstyle = \"{style}\"\nlire = \"cat '{d}/curseur-{style}'\"\nregler = \"echo {{valeur}} > '{d}/curseur-{style}'\"\ncouleurs = [\"#30D158\", \"#FFD60A\", \"#FF453A\"]\nseuils = [60, 85]\nhaptique = true\n"
+        );
+    }
+    texte + &format!("\n[[element]]\ntype = \"choix\"\noptions = [\"1×\", \"1,5×\", \"2×\"]\naction = {{ shell = \"printf %s {{valeur}} > '{d}/choix'\" }}\nlire = \"cat '{d}/choix'\"\ntoutes_les = 1\n")
+}
+
+/// La valeur que le glissé de `glisser_style` donne au style `k` (partie de 40).
+fn attendu_style(k: usize) -> &'static str {
+    if STYLES[k].0 == "pas_a_pas" { "41" } else { "80" }
+}
+
+/// Un doigt sur le curseur, par le même chemin qu'un vrai toucher : de 40 à 80 (pas à pas : un appui sur +).
+fn glisser_style(style: &str, vue: Id) {
+    use super::curseurs::{abscisse_pour, toucher, Phase};
+    match style {
+        "classique" => unsafe {
+            let slider: Id = msg_send![vue, slider];
+            let _: () = msg_send![slider, setDoubleValue: 80.0f64];
+            let _: () = msg_send![cible(), glisse: vue];
+        },
+        "pas_a_pas" => {
+            let largeur = unsafe { let b: objc2_foundation::NSRect = msg_send![vue, bounds]; b.size.width };
+            toucher(vue, largeur - 20.0, Phase::Debut);
+            toucher(vue, largeur - 20.0, Phase::Fin);
+        }
+        "cadran" => {
+            toucher(vue, 50.0, Phase::Debut);
+            for i in 1..=8 {
+                toucher(vue, 50.0 + i as f64 * super::curseurs::COURSE_CADRAN * 0.05, Phase::Glisse);
+            }
+            toucher(vue, 50.0 + super::curseurs::COURSE_CADRAN * 0.4, Phase::Fin);
+        }
+        _ => {
+            toucher(vue, abscisse_pour(vue, 0.4), Phase::Debut);
+            for i in 1..=8 {
+                toucher(vue, abscisse_pour(vue, 0.4 + i as f64 * 0.05), Phase::Glisse);
+            }
+            toucher(vue, abscisse_pour(vue, 0.8), Phase::Fin);
+        }
+    }
+}
+
+/// Le fichier écrit par `regler` du style donne la valeur glissée.
+fn verifier_fichier(n: usize, style: &str, attendu: &str) {
+    let ecrit = std::fs::read_to_string(dossier_essai().join(format!("curseur-{style}"))).unwrap_or_default();
+    noter(n, ecrit.trim() == attendu, &format!("{style} : regler a écrit « {} » ({attendu} attendu)", ecrit.trim()));
+}
+
 /// Barre d'application des étapes 26-30 : un bouton bleu en tête (ce que verifier.sh reconnaît). Le nom
 /// affiché en minuscules : la casse ne compte pas.
 const BARRE_APPLI: &str = r##"
@@ -250,7 +316,8 @@ fn glisser(nom: &str, valeur: f32) -> bool {
     let Some(item) = controle(nom) else { return false };
     unsafe {
         let slider: Id = msg_send![item, slider];
-        let _: () = msg_send![slider, setDoubleValue: valeur as f64];
+        // Luminosité et volume vont de 0 à 100 sur le curseur.
+        let _: () = msg_send![slider, setDoubleValue: valeur as f64 * 100.0];
         let _: () = msg_send![cible(), glisse: item];
     }
     true
@@ -339,6 +406,8 @@ fn attendu(n: usize) -> &'static str {
         28 | 29 => "erreur",
         31..=38 => "riche",
         39 => "importee",
+        43 | 58 | 59 => "riche",
+        44..=57 => "sous",
         _ => "principale",
     }
 }
@@ -616,6 +685,59 @@ pub(super) fn etape() {
             noter(n, controle("texte mcp").is_none() && COURANTE.get() == principale(), "barre de l'utilisateur rétablie");
             let restants = std::process::Command::new("/usr/bin/pgrep").args(["-P", &std::process::id().to_string(), "-f", "horloge-mcp|http.server"]).output().map(|s| s.stdout.is_empty()).unwrap_or(false);
             noter(n, restants, "serveurs MCP et HTTP arrêtés");
+            true
+        }
+        43 => {
+            let dossier = dossier_essai();
+            let _ = std::fs::create_dir_all(&dossier);
+            // Valeur que chaque `lire` doit trouver à l'ouverture, et option déjà choisie.
+            let ecrit = STYLES.iter().all(|(style, _)| std::fs::write(dossier.join(format!("curseur-{style}")), "40").is_ok())
+                && std::fs::write(dossier.join("choix"), "2×").is_ok();
+            super::installer(&crate::config::lire(&barre_curseurs(&dossier)).expect("barre des curseurs invalide"));
+            let manquants: Vec<String> = STYLES.iter().map(|(_, s)| format!("curseur {s}")).chain(["choix".to_string()]).filter(|c| controle(c).is_none()).collect();
+            noter(n, ecrit && manquants.is_empty(), &format!("barre des curseurs installée (manquants : {manquants:?})"));
+            true
+        }
+        // Pour chaque style : ouvrir sa sous-barre (le fichier du style précédent est relu), puis glisser.
+        44..=57 if (n - 44).is_multiple_of(2) => {
+            let k = (n - 44) / 2;
+            if k > 0 {
+                verifier_fichier(n, STYLES[k - 1].0, attendu_style(k - 1));
+                cliquer(n, "fermer");
+            }
+            cliquer(n, &format!("ouvrir {}", STYLES[k].1))
+        }
+        44..=57 => {
+            let k = (n - 45) / 2;
+            let (style, symbole) = STYLES[k];
+            let Some(vue) = controle(&format!("curseur {symbole}")) else { noter(n, false, "curseur introuvable"); return programmer() };
+            let lu = super::curseurs::valeur(vue);
+            if !patienter(n, lu == Some(40.0), 3.0) { return; }
+            noter(n, COURANTE.get() != principale() && lu == Some(40.0), &format!("{style} : sous-barre ouverte, lire a donné {lu:?}"));
+            glisser_style(style, vue);
+            true
+        }
+        58 => {
+            verifier_fichier(n, STYLES[6].0, attendu_style(6));
+            cliquer(n, "fermer");
+            let Some(choix) = controle("choix") else { noter(n, false, "choix introuvable"); return programmer() };
+            let k: isize = unsafe { msg_send![choix, selectedSegment] };
+            noter(n, k == 2, &format!("choix : lire a sélectionné l'option {k} (2× attendu)"));
+            unsafe {
+                let _: () = msg_send![choix, setSelectedSegment: 1isize];
+                let _: () = msg_send![cible(), choix: choix];
+            }
+            true
+        }
+        59 => {
+            let ecrit = std::fs::read_to_string(dossier_essai().join("choix")).unwrap_or_default();
+            noter(n, ecrit == "1,5×", &format!("choix : l'option touchée est écrite par l'action (« {ecrit} »)"));
+            true
+        }
+        60 => {
+            let config = ETAT.with_borrow(|e| e.as_ref().map(|e| e.config.clone()));
+            super::installer(&crate::config::charger().unwrap_or_else(|_| config.unwrap()));
+            noter(n, controle("choix").is_none() && COURANTE.get() == principale(), "barre de l'utilisateur rétablie");
             eprintln!("AUTOTEST fin {} échec(s)", ECHECS.get());
             false
         }

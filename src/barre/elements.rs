@@ -8,7 +8,7 @@ use super::rafraichi::{self, Lien, Rafraichi};
 use super::vues::{barre_touch, couleur, icone_app, image, item_vue, lacher, largeur_fixe, largeur_max, styler, symbole, texte};
 use super::{cible, Commande, Etat, Id, PREFIXE};
 use crate::actions::{self, Action};
-use crate::config::{Affichage, Element, Reglage};
+use crate::config::{Affichage, Element};
 
 /// Ce qui illustre un bouton : un symbole SF, ou un fichier image (gabarit ou non).
 #[derive(Clone, Copy)]
@@ -107,36 +107,6 @@ pub(super) fn depliable(identifiant: &str, nom: Option<&str>, libelle: Option<&s
     item_vue(identifiant, b)
 }
 
-pub(super) fn slider(identifiant: &str, reglage: Reglage, nom: &str, etat: &mut Etat) -> Id {
-    let (valeur, tag, petit, grand) = match reglage {
-        Reglage::Luminosite => (actions::luminosite::lire(), 0isize, "sun.min.fill", "sun.max.fill"),
-        Reglage::Volume => (actions::volume::lire(), 1, "speaker.fill", "speaker.wave.3.fill"),
-    };
-    let item = unsafe {
-        let item: Id = msg_send![class!(NSSliderTouchBarItem), alloc];
-        let item: Id = msg_send![item, initWithIdentifier: &*texte(&format!("{identifiant}.slider"))];
-        let s: Id = msg_send![item, slider];
-        let _: () = msg_send![s, setMinValue: 0.0f64];
-        let _: () = msg_send![s, setMaxValue: 1.0f64];
-        let _: () = msg_send![s, setDoubleValue: valeur.unwrap_or(0.5) as f64];
-        let _: () = msg_send![s, setTag: tag];
-        let _: () = msg_send![s, setContinuous: Bool::YES];
-        if let (Some(petit), Some(grand)) = (symbole(petit), symbole(grand)) {
-            let acc_min: Id = msg_send![class!(NSSliderAccessory), accessoryWithImage: petit];
-            let acc_max: Id = msg_send![class!(NSSliderAccessory), accessoryWithImage: grand];
-            let _: () = msg_send![item, setMinimumValueAccessory: acc_min];
-            let _: () = msg_send![item, setMaximumValueAccessory: acc_max];
-        }
-        let _: () = msg_send![item, setMinimumSliderWidth: 600.0f64];
-        let _: () = msg_send![item, setTarget: cible()];
-        let _: () = msg_send![item, setAction: sel!(glisse:)];
-        item
-    };
-    let nom_reglage = if tag == 0 { "luminosite" } else { "volume" };
-    etat.controles.push((format!("slider {nom_reglage}"), item));
-    depliable(identifiant, Some(nom), None, None, vec![item], etat)
-}
-
 pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -> Vec<Id> {
     let mut items = Vec::new();
     for (i, element) in elements.iter().enumerate() {
@@ -180,10 +150,8 @@ pub(super) fn construire(elements: &[Element], prefixe: &str, etat: &mut Etat) -
                 rafraichi::lier(etat, b, source.as_deref().unwrap_or(""), lien);
                 item_vue(&ident, b)
             }
-            Element::Slider { reglage, symbole: s } => {
-                let defaut = if *reglage == Reglage::Luminosite { "sun.max.fill" } else { "speaker.wave.2.fill" };
-                slider(&ident, *reglage, s.as_deref().unwrap_or(defaut), etat)
-            }
+            Element::Slider { .. } => super::curseurs::curseur(&ident, element, etat),
+            Element::Choix { .. } => super::curseurs::choix(&ident, element, etat),
             Element::Heure { format } => {
                 let b = bouton_texte(etat, None);
                 let formateur: Id = unsafe { msg_send![class!(NSDateFormatter), new] };
@@ -328,6 +296,8 @@ fn largeur_estimee(element: &Element) -> f64 {
         Element::Script { largeur, .. } | Element::Texte { largeur, .. } => largeur_script(*largeur),
         Element::Batterie { largeur, .. } => largeur.unwrap_or(LARGEUR_BATTERIE),
         Element::Slider { .. } | Element::Groupe { .. } => LARGEUR_GROUPE,
+        Element::Choix { largeur: Some(l), .. } => *l,
+        Element::Choix { options, .. } => options.iter().map(|o| o.chars().count() as f64 * 9.0 + 20.0).sum::<f64>().max(LARGEUR_GROUPE),
         Element::Souple => 0.0,
     }
 }

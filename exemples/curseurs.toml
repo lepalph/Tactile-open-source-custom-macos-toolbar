@@ -1,0 +1,55 @@
+# Curseurs et sélecteurs : régler autre chose que la luminosité et le volume du Mac.
+# Un curseur libre a deux commandes zsh : `regler`, où {valeur} devient le nombre choisi (lancée au plus toutes les
+# 0,1 s pendant le glissé, puis au lâcher), et `lire`, qui affiche la valeur actuelle (relue à l'ouverture, puis toutes
+# les `toutes_les` secondes tant que le curseur est ouvert). {valeur} est toujours un nombre : rien d'autre n'entre dans la commande.
+# Styles : classique (le curseur d'Apple), grille, jauge, points, egaliseur, pas_a_pas, cadran.
+# La première fois, macOS demande d'autoriser Tactile à piloter Spotify ou Music (Réglages Système → Confidentialité → Automatisation).
+
+# Luminosité de l'écran intégré, en barres qui passent du vert au rouge.
+[[element]]
+type = "slider"
+reglage = "luminosite"
+style = "grille"
+crans = 16
+couleurs = ["#30D158", "#FFD60A", "#FF453A"]
+seuils = [60, 85]
+haptique = true
+
+# Volume de Spotify, sans toucher au volume du Mac. Rien ne se passe si Spotify n'est pas ouvert.
+[[element]]
+type = "slider"
+symbole = "music.note"
+lire = "osascript -e 'if application \"Spotify\" is running then tell application \"Spotify\" to get sound volume'"
+regler = "osascript -e 'if application \"Spotify\" is running then tell application \"Spotify\" to set sound volume to {valeur}'"
+min = 0
+max = 100
+pas = 5
+style = "egaliseur"
+couleurs = ["#30D158", "#FFD60A", "#FF453A"]
+seuils = [60, 85]
+
+# Volume de Music (l'app d'Apple), en jauge.
+[[element]]
+type = "slider"
+symbole = "music.note.list"
+lire = "osascript -e 'if application \"Music\" is running then tell application \"Music\" to get sound volume'"
+regler = "osascript -e 'if application \"Music\" is running then tell application \"Music\" to set sound volume to {valeur}'"
+style = "jauge"
+toutes_les = 2
+
+# Luminosité d'un écran externe par DDC, avec m1ddc (brew install m1ddc), en gros chiffres − / +.
+# m1ddc n'est pas installé sur ce Mac de test : décommente ces lignes après l'avoir installé.
+# [[element]]
+# type = "slider"
+# symbole = "display"
+# lire = "m1ddc get luminance"
+# regler = "m1ddc set luminance {valeur}"
+# pas = 5
+# style = "pas_a_pas"
+
+# Vitesse de lecture d'une vidéo : l'option touchée remplace {valeur}, entre apostrophes pour le shell.
+[[element]]
+type = "choix"
+options = ["1×", "1,5×", "2×"]
+action = { shell = "printf %s {valeur} > /tmp/tactile-vitesse" }
+lire = "cat /tmp/tactile-vitesse 2>/dev/null || echo 1×"
