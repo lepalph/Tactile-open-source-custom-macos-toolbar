@@ -27,6 +27,9 @@ Tactile replaces your MacBook Pro's Touch Bar with the bar you want: buttons, br
 - The editor window (`tactile --customize`) shows the Touch Bar at real size. You drag items around, pick symbols and colors, and it writes that same file.
 - A `type = "script"` item runs any shell command every `interval` seconds and shows what it prints. If the command prints JSON, it also picks its own symbol and colors.
 - An `[[application]]` table gives an app its own bar while it is in front. With `inherit = true`, the edges of your main bar (sliders, clock) stay put. A `[[site]]` table does the same for a website: on YouTube, your own play and skip buttons.
+- Sliders come in seven styles (`grid`, `gauge`, `dots`, `equalizer`, `stepper`, `dial` and Apple's `classic`), with per-level colors and haptics, and can drive any command; a `choice` is a segmented picker.
+
+  ![The seven slider styles](docs/curseurs/grille.png)
 - A button can send a shortcut (`action = { key = "cmd+shift+4" }`, resolved on your keyboard layout, AZERTY included), open an app or a URL, or run AppleScript or a shell command. `long_press` gives it a second action.
 - A `launcher` shows an app's real icon, with a dot while the app runs; put a few in a `group` and you have an app drawer. A `[[source]]` feeds live text from a URL, a command or an MCP tool (the weather, a build status), and API keys stay in the macOS keychain.
 
@@ -61,9 +64,10 @@ Tactile is built for its author's own use first, so the order below follows what
 | Import and export a bar (`.toml`, or `.zip` with its logos) | Done (0.3.0) |
 | Your own logos on buttons | Done (0.3.0) |
 | Data sources for live items: HTTP, commands, MCP servers | Done (0.3.0) |
-| Slider styles, free-standing slider and choice picker | Done (unreleased) |
-| A bar per website | Planned |
-| Edit per-app bars in the editor | Planned |
+| Slider styles, free-standing slider and choice picker | Done (0.4.0) |
+| A bar per website | Done (0.4.0) |
+| Edit per-app and per-site bars in the editor | Done (0.4.0) |
+| Web link with its logo and shortcut recorder in the editor | Done (0.4.0) |
 | Modules: a widget is a program in any language that talks JSON with Tactile | Planned |
 | A community gallery of bars and modules, checked in CI by `tactile --check` | Planned, after the building blocks |
 
@@ -498,7 +502,7 @@ action = { key = "cmd+t" }
 - Each `[[application.item]]` is written like an `[[item]]`; a group takes its children as `[[application.item.item]]`. An `[[application]]` without `app` or without items is rejected, with its line number. An `[[item]]` written after an `[[application]]` still goes to the main bar: `tactile --check` warns about it, since you probably meant `[[application.item]]`. It also warns when two `[[application]]` tables name the same app (only the first one is used) and when an app's bar overflows.
 - An open sub-bar (slider, group) stays put when you switch apps; its ✕ brings back the bar of the frontmost app. The ✳ icon also brings back the current app's bar.
 
-Full example: [exemples/par-application.toml](exemples/par-application.toml). The "Customize my bar" window only edits the main bar, but it keeps your `[[application]]` tables when it saves.
+Full example: [exemples/par-application.toml](exemples/par-application.toml). The "Customize my bar" window edits these bars too, in its **Bars** section.
 
 ## A bar per website
 
@@ -521,7 +525,7 @@ action = { key = "k" }
 - Privacy: Tactile keeps only "domain/path" of the active tab, in memory. The address is never logged (only the domain of a refused or unreadable browser is named), never written to disk and never sent anywhere. An imported bar lists each of its `[[site]]` tables before you accept it ("changes the bar on youtube.com; reads the address of your browsers' active tab").
 - An open sub-bar stays put when the tab changes; its ✕ brings back the current site's bar.
 
-Full example (YouTube: play/pause `k`, forward `l`, back `j`, full screen `f`; Gmail: new message `c`): [exemples/par-site.toml](exemples/par-site.toml). The editor keeps your `[[site]]` tables when it saves; editing them there will come later.
+Full example (YouTube: play/pause `k`, forward `l`, back `j`, full screen `f`; Gmail: new message `c`): [exemples/par-site.toml](exemples/par-site.toml). The editor edits your `[[site]]` tables in its **Bars** section.
 
 ## Claude voice extra
 

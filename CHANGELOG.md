@@ -4,6 +4,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-27
+
 ### Added
 
 - Editor: a "Bars" section in the sidebar lists the main bar, every `[[application]]` and every `[[site]]`; each one is previewed and edited like the main bar (inherited items of the main bar are dimmed), with "New app bar…" and "New site bar…" (an `inherit` switch) and a confirmed delete.
@@ -122,7 +124,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 - `Tactile.app` universal bundle (Apple Silicon and Intel), ad hoc signed, built by `scripts/empaqueter.sh`; `scripts/verifier.sh` drives every control and checks the result.
 - README, MIT license, contribution guide and CI.
 
-[Unreleased]: https://github.com/lepalph/tactile-touch-bar/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/lepalph/tactile-touch-bar/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/lepalph/tactile-touch-bar/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lepalph/tactile-touch-bar/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lepalph/tactile-touch-bar/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/lepalph/tactile-touch-bar/releases/tag/v0.1.0

@@ -27,6 +27,9 @@ Tactile remplace la Touch Bar de ton MacBook Pro par la barre que tu décris : b
 - La fenêtre de l'éditeur (`tactile --personnaliser`) montre la Touch Bar à sa vraie taille. Tu y déplaces les éléments, tu choisis symboles et couleurs, et elle écrit ce même fichier.
 - Un élément `type = "script"` lance n'importe quelle commande toutes les `intervalle` secondes et affiche ce qu'elle écrit. Si la commande sort du JSON, elle choisit aussi son symbole et ses couleurs.
 - Une table `[[application]]` donne sa propre barre à une app tant qu'elle est au premier plan. Avec `herite = true`, les bords de ta barre principale (curseurs, heure) ne bougent pas. Une table `[[site]]` fait de même pour un site web : sur YouTube, tes propres boutons lecture et avance.
+- Les curseurs ont sept styles (`grille`, `jauge`, `points`, `egaliseur`, `pas_a_pas`, `cadran` et le `classique` d'Apple), des couleurs par niveau et un retour haptique, et pilotent n'importe quelle commande ; un `choix` est un sélecteur segmenté.
+
+  ![Les sept styles de curseur](docs/curseurs/grille.png)
 - Un bouton envoie un raccourci (`action = { touche = "cmd+shift+4" }`, lu sur ta disposition de clavier, AZERTY compris), ouvre une app ou une adresse, lance un AppleScript ou une commande. `appui_long` lui donne une seconde action.
 - Un `lanceur` montre la vraie icône d'une app, avec un point tant qu'elle tourne ; quelques-uns dans un `groupe` font un tiroir d'apps. Une `[[source]]` alimente un texte vivant depuis une adresse, une commande ou un outil MCP (la météo, l'état d'un build), et les clés d'API restent dans le trousseau macOS.
 
@@ -61,9 +64,10 @@ Tactile est d'abord fait pour l'usage de son auteur : l'ordre ci-dessous suit se
 | Importer et exporter une barre (`.toml`, ou `.zip` avec ses logos) | Fait (0.3.0) |
 | Tes propres logos sur les boutons | Fait (0.3.0) |
 | Sources de données pour les éléments vivants : HTTP, commandes, serveurs MCP | Fait (0.3.0) |
-| Styles de curseur, curseur libre et sélecteur à choix | Fait (non publié) |
-| Une barre par site web | Prévu |
-| Régler les barres par app dans l'éditeur | Prévu |
+| Styles de curseur, curseur libre et sélecteur à choix | Fait (0.4.0) |
+| Une barre par site web | Fait (0.4.0) |
+| Régler les barres par app et par site dans l'éditeur | Fait (0.4.0) |
+| Lien web avec son logo et enregistreur de raccourci dans l'éditeur | Fait (0.4.0) |
 | Modules : un widget est un programme, dans n'importe quel langage, qui parle JSON avec Tactile | Prévu |
 | Une galerie communautaire de barres et de modules, vérifiés en CI par `tactile --verifier` | Prévu, après les briques |
 
@@ -444,7 +448,7 @@ action = { touche = "cmd+t" }
 - Chaque `[[application.element]]` s'écrit comme un `[[element]]` ; un groupe y prend ses sous-éléments en `[[application.element.element]]`. Une `[[application]]` sans `app` ou sans élément est refusée, avec sa ligne. Un `[[element]]` écrit après une `[[application]]` va quand même dans la barre principale : `tactile --verifier` le signale, car tu voulais sans doute `[[application.element]]`. Il signale aussi deux `[[application]]` pour la même app (seule la première compte) et une barre d'app qui déborde.
 - Une sous-barre ouverte (curseur, groupe) reste en place quand tu changes d'app ; son ✕ ramène la barre de l'app au premier plan. L'icône ✳ ramène aussi la barre de l'app en cours.
 
-Exemple complet : [exemples/par-application.toml](exemples/par-application.toml). La fenêtre « Personnaliser ma barre » ne règle que la barre principale, mais garde tes `[[application]]` à l'enregistrement.
+Exemple complet : [exemples/par-application.toml](exemples/par-application.toml). La fenêtre « Personnaliser ma barre » règle aussi ces barres, dans sa section **Barres**.
 
 ## Une barre par site
 
@@ -467,7 +471,7 @@ action = { touche = "k" }
 - Vie privée : Tactile ne garde que « domaine/chemin » de l'onglet actif, en mémoire. L'adresse n'est jamais écrite au journal (seul le nom d'un navigateur refusé ou illisible y figure), jamais sur le disque, jamais envoyée nulle part. Une barre importée liste chacun de ses `[[site]]` avant que tu l'acceptes (« change la barre sur youtube.com ; lit l'adresse de l'onglet actif de tes navigateurs »).
 - Une sous-barre ouverte reste en place quand l'onglet change ; son ✕ ramène la barre du site en cours.
 
-Exemple complet (YouTube : lecture/pause `k`, avance `l`, recul `j`, plein écran `f` ; Gmail : nouveau message `c`) : [exemples/par-site.toml](exemples/par-site.toml). L'éditeur garde tes `[[site]]` à l'enregistrement ; leur réglage dans la fenêtre viendra plus tard.
+Exemple complet (YouTube : lecture/pause `k`, avance `l`, recul `j`, plein écran `f` ; Gmail : nouveau message `c`) : [exemples/par-site.toml](exemples/par-site.toml). L'éditeur garde tes `[[site]]` à l'enregistrement ; tu les règles aussi dans la section **Barres** de la fenêtre.
 
 ## Extra : Claude vocal
 

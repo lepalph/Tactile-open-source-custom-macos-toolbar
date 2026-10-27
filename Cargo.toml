@@ -1,6 +1,6 @@
 [package]
 name = "tactile"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 description = "A customizable Touch Bar for macOS, described in a TOML file (MTMR / BetterTouchTool alternative)"
 license = "MIT"
