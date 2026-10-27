@@ -4,6 +4,8 @@ All notable changes to Tactile are documented here. The format follows [Keep a C
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-27
+
 ### Added
 
 - Animated GIFs on the bar: `image = "~/x.gif"` (also a script's `image`) animates at the file's own pace (frames reduced to 20 pt × 2, at most 60 frames and 2 MB, checked by `controler_image`; about 0.6 % CPU at 12 frames/s). The editor keeps the GIF as is in `icones/` and its preview animates.
