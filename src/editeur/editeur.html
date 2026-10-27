@@ -1325,7 +1325,9 @@ function peindreCurseur(cv, e, style, f) {
       g.strokeStyle = eteint; g.beginPath(); g.arc(cx, cy, rayon, 0, Math.PI * 2); g.stroke();
       if (frac > 0) { g.strokeStyle = actuelle; g.beginPath(); g.arc(cx, cy, rayon, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * Math.min(frac, 0.9999)); g.stroke(); }
       ecrire(texte, 38, 14, 600, actuelle, 'left');
-      ecrire('‹ ›', W - 6, 11, 400, 'rgb(245 245 247 / 0.4)', 'right');
+      ecrire('↔', 66, 13, 400, 'rgb(245 245 247 / 0.6)', 'left');
+      plein('rgb(245 245 247 / 0.3)', 84, H / 2 - 1, W - 92, 2, 1);
+      plein(actuelle, 84 + (W - 92) * frac - 3, H / 2 - 3, 6, 6, 3);
       break;
     }
     case 'pas_a_pas': {
@@ -1349,6 +1351,9 @@ function peindreCurseur(cv, e, style, f) {
 let animation = null;
 const calme = matchMedia('(prefers-reduced-motion: reduce)');
 function animerStyles() {
+  // Une première image tout de suite : fenêtre cachée ou en arrière-plan, WebKit ne rappelle pas requestAnimationFrame.
+  const e = elem();
+  if (e?.type === 'slider') document.querySelectorAll('canvas[data-apercu]').forEach(cv => peindreCurseur(cv, e, cv.dataset.apercu, 0.7));
   if (animation) return;
   const tic = ts => {
     const cvs = document.querySelectorAll('canvas[data-apercu]'), e = elem();

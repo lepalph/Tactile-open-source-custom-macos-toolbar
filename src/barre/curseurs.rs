@@ -163,12 +163,12 @@ fn lire_reglage(reglage: Reglage) -> Option<f64> {
     lu.ok().map(|v| (v as f64 * 100.0).clamp(0.0, 100.0))
 }
 
-/// Largeur de la vue dessinée selon le style.
-fn largeur(style: StyleCurseur) -> f64 {
+/// Largeur de la vue dessinée : toute la sous-barre après le ✕ (64 pt et les espacements de 8 pt), comme le curseur
+/// d'Apple ; le pas à pas reste compact.
+fn largeur(style: StyleCurseur, masquer_control_strip: bool) -> f64 {
     match style {
-        StyleCurseur::Cadran => 150.0,
         StyleCurseur::PasAPas => 260.0,
-        _ => 560.0,
+        _ => super::largeur_barre(masquer_control_strip) - 64.0 - 3.0 * 8.0,
     }
 }
 
@@ -182,15 +182,16 @@ pub(super) fn curseur(identifiant: &str, element: &Element, etat: &mut Etat) -> 
     let style = style.unwrap_or_default();
     let native = style == StyleCurseur::Classique;
     let couleurs: Vec<u32> = couleurs.iter().filter_map(|c| rgb(c)).collect();
+    let large = largeur(style, etat.config.masquer_control_strip);
     let item = if native {
         native_item(identifiant, *reglage, min, max, valeur)
     } else {
         let vue: Id = unsafe {
             let v: Id = msg_send![classe(), alloc];
-            msg_send![v, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(largeur(style), 30.0))]
+            msg_send![v, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(large, 30.0))]
         };
         unsafe { let _: () = msg_send![vue, setAllowedTouchTypes: 1usize]; }
-        largeur_fixe(vue, largeur(style));
+        largeur_fixe(vue, large);
         let item = item_vue(&format!("{identifiant}.slider"), vue);
         lacher(vue);
         item
@@ -745,7 +746,13 @@ fn peindre_curseur(d: &Dessin, l: f64, h: f64) {
                 anneau(actuelle, 1.0, 90.0 - 360.0 * d.fraction.min(0.9999));
             }
             ecrire_texte(&d.texte, 44.0, h, (16.0, 0.4), (actuelle, 1.0), 0.0);
-            ecrire_texte("‹ ›", l - 8.0, h, (13.0, 0.0), (BLANC, 0.4), 1.0);
+            // La piste de glisse : ↔ puis un rail fin où un point suit la valeur (gris clair, contraste > 3:1 sur le noir).
+            ecrire_texte("↔", 104.0, h, (15.0, 0.3), (BLANC, 0.6), 0.0);
+            let (r0, r1) = (132.0, l - 12.0);
+            peindre(BLANC, 0.3);
+            arrondi(r0, h / 2.0 - 1.0, r1 - r0, 2.0, 1.0);
+            peindre(actuelle, 1.0);
+            arrondi(r0 + (r1 - r0) * d.fraction - 4.0, h / 2.0 - 4.0, 8.0, 8.0, 4.0);
         },
         StyleCurseur::PasAPas => {
             for (signe, x, appuye) in [("−", 4.0, d.appui < 0), ("+", l - 68.0, d.appui > 0)] {
